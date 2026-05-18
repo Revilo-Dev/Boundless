@@ -12,9 +12,9 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.Item;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.loading.FMLEnvironment;
-import net.minecraftforge.fml.loading.FMLPaths;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.fml.loading.FMLPaths;
 import net.revilodev.boundless.Config;
 
 import java.io.BufferedReader;
@@ -444,7 +444,7 @@ public final class QuestData {
             for (Path packRoot : packs) {
                 if (!Files.isDirectory(packRoot)) continue;
                 if (!isInstancePackEnabled(packRoot)) continue;
-                loadModQuestPackData(packRoot);
+                loadSingleModQuestPack(packRoot);
             }
         } catch (Exception ignored) {
         }
@@ -452,30 +452,24 @@ public final class QuestData {
 
     private static boolean isInstancePackEnabled(Path packRoot) {
         if (packRoot == null) return false;
-        Boolean enabledFromPackJson = readEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"));
-        if (enabledFromPackJson != null) return enabledFromPackJson;
-        Boolean enabledFromMcmeta = readEnabledFlag(packRoot.resolve("pack.mcmeta"));
-        return enabledFromMcmeta == null ? true : enabledFromMcmeta;
-    }
-
-    private static Boolean readEnabledFlag(Path metaPath) {
-        if (metaPath == null || !Files.exists(metaPath)) return null;
-        try (Reader reader = Files.newBufferedReader(metaPath, StandardCharsets.UTF_8)) {
+        Path packMeta = packRoot.resolve("pack.mcmeta");
+        if (!Files.exists(packMeta)) return true;
+        try (Reader reader = Files.newBufferedReader(packMeta, StandardCharsets.UTF_8)) {
             JsonObject root = safeObject(reader);
-            if (root == null || !root.has("boundless") || !root.get("boundless").isJsonObject()) return null;
+            if (root == null || !root.has("boundless") || !root.get("boundless").isJsonObject()) return true;
             JsonObject boundless = root.getAsJsonObject("boundless");
-            if (!boundless.has("enabled")) return null;
+            if (!boundless.has("enabled")) return true;
             JsonElement enabled = boundless.get("enabled");
-            if (enabled == null || !enabled.isJsonPrimitive()) return null;
+            if (enabled == null || !enabled.isJsonPrimitive()) return true;
             JsonPrimitive p = enabled.getAsJsonPrimitive();
             if (p.isBoolean()) return p.getAsBoolean();
             return Boolean.parseBoolean(p.getAsString());
         } catch (Exception ignored) {
-            return null;
+            return true;
         }
     }
 
-    private static void loadModQuestPackData(Path packRoot) {
+    private static void loadSingleModQuestPack(Path packRoot) {
         Path dataRoot = packRoot.resolve("data");
         if (!Files.isDirectory(dataRoot)) return;
 
