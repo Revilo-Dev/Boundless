@@ -9,8 +9,8 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.QuestPanelClient;
@@ -65,8 +65,6 @@ public final class QuestSettingsScreen extends Screen {
 
     private ConfigRow uiPinnedRow;
     private ConfigRow uiHideInventoryRow;
-    private ConfigRow uiInventoryButtonPositionRow;
-    private ConfigRow uiCenterInventoryWithPanelRow;
     private ConfigRow uiHideHeaderRow;
     private ConfigRow uiFilterDisplayRow;
     private ConfigRow uiDisableCategoriesRow;
@@ -92,8 +90,6 @@ public final class QuestSettingsScreen extends Screen {
     private int gameplayHeaderBaseY;
     private int uiPinnedBaseY;
     private int uiHideInventoryBaseY;
-    private int uiInventoryButtonPositionBaseY;
-    private int uiCenterInventoryWithPanelBaseY;
     private int uiHideHeaderBaseY;
     private int uiFilterDisplayBaseY;
     private int uiDisableCategoriesBaseY;
@@ -109,8 +105,6 @@ public final class QuestSettingsScreen extends Screen {
 
     private String pinnedHudPos;
     private boolean hideQuestBookInInventory;
-    private String questBookInventoryButtonPosition;
-    private boolean centerInventoryWithQuestPanel;
     private boolean hideCategoryHeader;
     private String filterDisplayMode;
     private boolean disableCategories;
@@ -129,7 +123,8 @@ public final class QuestSettingsScreen extends Screen {
         this.parent = parent;
     }
 
-        protected void init() {
+    @Override
+    protected void init() {
         var mc = Minecraft.getInstance();
         if (mc.player == null || !mc.player.hasPermissions(2)) {
             mc.setScreen(parent);
@@ -167,16 +162,14 @@ public final class QuestSettingsScreen extends Screen {
         uiHeaderBaseY = uiHeaderY;
         uiPinnedBaseY = uiRow1;
         uiHideInventoryBaseY = uiRow1 + rowGap;
-        uiInventoryButtonPositionBaseY = uiRow1 + rowGap * 2;
-        uiCenterInventoryWithPanelBaseY = uiRow1 + rowGap * 3;
-        uiHideHeaderBaseY = uiRow1 + rowGap * 4;
-        uiFilterDisplayBaseY = uiRow1 + rowGap * 5;
-        uiDisableCategoriesBaseY = uiRow1 + rowGap * 6;
-        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 7;
-        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 8;
-        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 9;
-        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 10;
-        functionalityHeaderBaseY = uiRow1 + rowGap * 11 + 4;
+        uiHideHeaderBaseY = uiRow1 + rowGap * 2;
+        uiFilterDisplayBaseY = uiRow1 + rowGap * 3;
+        uiDisableCategoriesBaseY = uiRow1 + rowGap * 4;
+        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 5;
+        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 6;
+        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 7;
+        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 8;
+        functionalityHeaderBaseY = uiRow1 + rowGap * 9 + 4;
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
         functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
@@ -194,14 +187,6 @@ public final class QuestSettingsScreen extends Screen {
                     hideQuestBookInInventory = !hideQuestBookInInventory;
                     if (hideQuestBookInInventory) disableQuestBook = false;
                 });
-        uiInventoryButtonPositionRow = new ConfigRow(px, uiInventoryButtonPositionBaseY, pw, "Quest Book Inventory Button Position",
-                "Choose where the inventory quest-book button appears.",
-                this::formatQuestBookInventoryButtonPosition,
-                this::cycleQuestBookInventoryButtonPosition);
-        uiCenterInventoryWithPanelRow = new ConfigRow(px, uiCenterInventoryWithPanelBaseY, pw, "Center Inventory With Quest Panel",
-                "Center inventory and quest panel together when the panel is open.",
-                () -> centerInventoryWithQuestPanel ? "Enabled" : "Disabled",
-                () -> centerInventoryWithQuestPanel = !centerInventoryWithQuestPanel);
         uiHideHeaderRow = new ConfigRow(px, uiHideHeaderBaseY, pw, "Hide Category Header",
                 "Hide the category header above the quest list.",
                 () -> hideCategoryHeader ? "On" : "Off",
@@ -258,8 +243,6 @@ public final class QuestSettingsScreen extends Screen {
 
         addRenderableWidget(uiPinnedRow);
         addRenderableWidget(uiHideInventoryRow);
-        addRenderableWidget(uiInventoryButtonPositionRow);
-        addRenderableWidget(uiCenterInventoryWithPanelRow);
         addRenderableWidget(uiHideHeaderRow);
         addRenderableWidget(uiFilterDisplayRow);
         addRenderableWidget(uiDisableCategoriesRow);
@@ -313,10 +296,6 @@ public final class QuestSettingsScreen extends Screen {
         uiPinnedRow.active = config;
         uiHideInventoryRow.visible = config;
         uiHideInventoryRow.active = config;
-        uiInventoryButtonPositionRow.visible = config;
-        uiInventoryButtonPositionRow.active = config;
-        uiCenterInventoryWithPanelRow.visible = config;
-        uiCenterInventoryWithPanelRow.active = config;
         uiHideHeaderRow.visible = config;
         uiHideHeaderRow.active = config;
         uiFilterDisplayRow.visible = config;
@@ -361,8 +340,6 @@ public final class QuestSettingsScreen extends Screen {
     private void refreshConfigFields() {
         pinnedHudPos = normalizeHudPos(Config.pinnedQuestHudPosition());
         hideQuestBookInInventory = Config.hideQuestBookInInventory();
-        questBookInventoryButtonPosition = normalizeQuestBookInventoryButtonPosition(Config.questBookInventoryButtonPosition());
-        centerInventoryWithQuestPanel = Config.centerInventoryWithQuestPanel();
         hideCategoryHeader = Config.hideCategoryHeader();
         filterDisplayMode = Config.filterDisplayMode();
         disableCategories = Config.disableCategories();
@@ -399,18 +376,6 @@ public final class QuestSettingsScreen extends Screen {
         };
     }
 
-    private void cycleQuestBookInventoryButtonPosition() {
-        questBookInventoryButtonPosition = "above_offhand_slot".equals(questBookInventoryButtonPosition)
-                ? "beside_recipe_book"
-                : "above_offhand_slot";
-    }
-
-    private String formatQuestBookInventoryButtonPosition() {
-        return "above_offhand_slot".equals(questBookInventoryButtonPosition)
-                ? "Above Offhand Slot"
-                : "Beside Recipe Book";
-    }
-
     private void saveConfig() {
         if (disableQuestBook && hideQuestBookInInventory) {
             hideQuestBookInInventory = false;
@@ -418,8 +383,6 @@ public final class QuestSettingsScreen extends Screen {
 
         Config.PINNED_QUEST_HUD_POSITION.set(pinnedHudPos);
         Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
-        Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
-        Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
         Config.HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
         Config.FILTER_DISPLAY_MODE.set(filterDisplayMode);
         Config.DISABLE_CATEGORIES.set(disableCategories);
@@ -472,18 +435,12 @@ public final class QuestSettingsScreen extends Screen {
         return HUD_POSITIONS.contains(lower) ? lower : HUD_POSITIONS.get(0);
     }
 
-    private String normalizeQuestBookInventoryButtonPosition(String raw) {
-        if (raw == null) return "beside_recipe_book";
-        String lower = raw.trim().toLowerCase();
-        return ("beside_recipe_book".equals(lower) || "above_offhand_slot".equals(lower))
-                ? lower
-                : "beside_recipe_book";
+    @Override
+    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
     }
 
-        public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-    }
-
-        public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    @Override
+    public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         pendingTooltip = List.of();
         gg.fill(0, 0, this.width, this.height, 0xA0000000);
         gg.blit(PANEL_TEX, leftX, topY, 0, 0, PANEL_W, PANEL_H, PANEL_W, PANEL_H);
@@ -581,8 +538,6 @@ public final class QuestSettingsScreen extends Screen {
 
         layoutRow(uiPinnedRow, uiPinnedBaseY, top, bottom);
         layoutRow(uiHideInventoryRow, uiHideInventoryBaseY, top, bottom);
-        layoutRow(uiInventoryButtonPositionRow, uiInventoryButtonPositionBaseY, top, bottom);
-        layoutRow(uiCenterInventoryWithPanelRow, uiCenterInventoryWithPanelBaseY, top, bottom);
         layoutRow(uiHideHeaderRow, uiHideHeaderBaseY, top, bottom);
         layoutRow(uiFilterDisplayRow, uiFilterDisplayBaseY, top, bottom);
         layoutRow(uiDisableCategoriesRow, uiDisableCategoriesBaseY, top, bottom);
@@ -622,28 +577,31 @@ public final class QuestSettingsScreen extends Screen {
         gg.fill(trackX1, thumbY, trackX2, thumbY + thumbH, 0xFF909090);
     }
 
-        public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (page == Page.CONFIG) {
             int top = configViewportTop();
             int bottom = configViewportBottom();
             if (mouseX < px || mouseX > px + pw || mouseY < top || mouseY > bottom) {
-                return super.mouseScrolled(mouseX, mouseY, scrollDelta);
+                return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
             }
             int max = maxConfigScroll();
             if (max > 0) {
-                configScrollY = Math.max(0f, Math.min(max, configScrollY - (float) (scrollDelta * 12)));
+                configScrollY = Math.max(0f, Math.min(max, configScrollY - (float) (scrollY * 12)));
                 applyConfigScrollLayout();
                 return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollDelta);
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
-        public void onClose() {
+    @Override
+    public void onClose() {
         Minecraft.getInstance().setScreen(parent);
     }
 
-        public boolean isPauseScreen() {
+    @Override
+    public boolean isPauseScreen() {
         return false;
     }
 
@@ -668,11 +626,13 @@ public final class QuestSettingsScreen extends Screen {
             this.onPress = onPress;
         }
 
-                public void onPress() {
+        @Override
+        public void onPress() {
             if (onPress != null) onPress.run();
         }
 
-                protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        @Override
+        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             RenderSystem.enableBlend();
             gg.blit(ROW_TEX, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
 
@@ -718,7 +678,8 @@ public final class QuestSettingsScreen extends Screen {
             gg.pose().popPose();
         }
 
-                protected void updateWidgetNarration(NarrationElementOutput narration) {}
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
     private static final class ActionButton extends AbstractButton {
@@ -729,11 +690,13 @@ public final class QuestSettingsScreen extends Screen {
             this.onPress = onPress;
         }
 
-                public void onPress() {
+        @Override
+        public void onPress() {
             if (onPress != null) onPress.run();
         }
 
-                protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        @Override
+        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
             ResourceLocation tex = !this.active ? BTN_TEX_DISABLED : (hovered ? BTN_TEX_HOVER : BTN_TEX);
             gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
@@ -746,7 +709,8 @@ public final class QuestSettingsScreen extends Screen {
             gg.drawString(font, getMessage(), textX, textY, color, false);
         }
 
-                protected void updateWidgetNarration(NarrationElementOutput narration) {}
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
     private static final class BackButton extends AbstractButton {
@@ -757,16 +721,19 @@ public final class QuestSettingsScreen extends Screen {
             this.onPress = onPress;
         }
 
-                public void onPress() {
+        @Override
+        public void onPress() {
             if (onPress != null) onPress.run();
         }
 
-                protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        @Override
+        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.isMouseOver(mouseX, mouseY);
             ResourceLocation tex = hovered ? BTN_BACK_TEX_HOVER : BTN_BACK_TEX;
             gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
         }
 
-                protected void updateWidgetNarration(NarrationElementOutput narration) {}
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 }
