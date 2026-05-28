@@ -7,21 +7,21 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.entity.living.LivingDeathEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.client.QuestBookKeybinds;
 import net.revilodev.boundless.client.ClientQuestEvents;
 import net.revilodev.boundless.client.QuestPanelClient;
@@ -41,22 +41,21 @@ public final class BoundlessMod {
     public static final String MOD_ID = "boundless";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public BoundlessMod() {
-        IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
-        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, Config.SPEC, MOD_ID + "-common.toml");
+    public BoundlessMod(ModContainer modContainer, IEventBus modBus) {
+        modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC, MOD_ID + "-common.toml");
         ModItems.register(modBus);
         modBus.addListener(this::commonSetup);
         modBus.addListener(this::addCreative);
-        if (net.minecraftforge.fml.loading.FMLEnvironment.dist == Dist.CLIENT) {
+        if (net.neoforged.fml.loading.FMLEnvironment.dist == Dist.CLIENT) {
             modBus.addListener(this::clientSetup);
             modBus.addListener(QuestBookKeybinds::onRegisterKeyMappings);
-            MinecraftForge.EVENT_BUS.addListener(QuestBookKeybinds::onClientTick);
+            NeoForge.EVENT_BUS.addListener(QuestBookKeybinds::onClientTick);
         }
         BoundlessNetwork.bootstrap(modBus);
-        MinecraftForge.EVENT_BUS.register(this);
-        MinecraftForge.EVENT_BUS.addListener(QuestEvents::onPlayerTick);
-        MinecraftForge.EVENT_BUS.addListener(ServerQuestEvents::onLogout);
-        MinecraftForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.ServerQuestTicker::onPlayerTick);
+        NeoForge.EVENT_BUS.register(this);
+        NeoForge.EVENT_BUS.addListener(QuestEvents::onPlayerTick);
+        NeoForge.EVENT_BUS.addListener(ServerQuestEvents::onLogout);
+        NeoForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.ServerQuestTicker::onPlayerTick);
 
     }
 
@@ -65,14 +64,13 @@ public final class BoundlessMod {
     }
 
     private void clientSetup(final FMLClientSetupEvent event) {
-        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenInit);
-        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenClosing);
-        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
-        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseScrolled);
-        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseButtonPressed);
-        MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogin);
-        MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogout);
-        MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLevelUnload);
+        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenInit);
+        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenClosing);
+        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
+        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onMouseScrolled);
+        NeoForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogin);
+        NeoForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogout);
+        NeoForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLevelUnload);
 
     }
 
@@ -120,7 +118,7 @@ public final class BoundlessMod {
 
     @SubscribeEvent
     public void onLivingDeath(LivingDeathEvent event) {
-        LivingEntity victim = event.getEntity();
+        if (!(event.getEntity() instanceof LivingEntity victim)) return;
         if (!(event.getSource().getEntity() instanceof ServerPlayer sp)) return;
         if (!(sp.level() instanceof ServerLevel server)) return;
         ResourceLocation rl = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(victim.getType());
@@ -128,6 +126,7 @@ public final class BoundlessMod {
         KillCounterState.get(server).inc(sp.getUUID(), rl.toString());
         int count = KillCounterState.get(server).get(sp.getUUID(), rl.toString());
         BoundlessNetwork.KillEntry entry = new BoundlessNetwork.KillEntry(rl.toString(), count);
-        BoundlessNetwork.sendKills(sp, List.of(entry));
+        BoundlessNetwork.SyncKills payload = new BoundlessNetwork.SyncKills(List.of(entry));
+        PacketDistributor.sendToPlayer(sp, payload);
     }
 }
