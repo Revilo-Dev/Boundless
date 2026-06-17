@@ -56,6 +56,12 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> HIDE_QUEST_WIDGET_ICONS =
             BUILDER.comment("If true, hides icons in quest list widgets.")
                     .define("hideQuestWidgetIcons", false);
+    public static final ModConfigSpec.DoubleValue QUEST_TEXT_SCALE =
+            BUILDER.comment("Scales quest list widget titles and quest detail description, task, and reward text. Range: 0.5 to 1.0.")
+                    .defineInRange("questTextScale", 1.0D, 0.5D, 1.0D);
+    public static final ModConfigSpec.DoubleValue QUEST_ICON_SCALE =
+            BUILDER.comment("Scales quest widget icons and quest detail panel icons. Range: 0.5 to 1.0.")
+                    .defineInRange("questIconScale", 1.0D, 0.5D, 1.0D);
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
                     .define("enableQuestSearchBox", false);
@@ -155,6 +161,18 @@ public final class Config {
         return HIDE_QUEST_WIDGET_ICONS.get();
     }
 
+    public static float questTextScale() {
+        Double value = QUEST_TEXT_SCALE.get();
+        if (value == null) return 1.0f;
+        return (float) Math.max(0.5D, Math.min(1.0D, value));
+    }
+
+    public static float questIconScale() {
+        Double value = QUEST_ICON_SCALE.get();
+        if (value == null) return 1.0f;
+        return (float) Math.max(0.5D, Math.min(1.0D, value));
+    }
+
     public static boolean enableBuiltinQuestPack() {
         return ENABLE_BUILTIN_QUEST_PACK.get();
     }
@@ -195,7 +213,7 @@ public final class Config {
     @SubscribeEvent
     public static void onLoad(ModConfigEvent.Loading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -206,6 +224,8 @@ public final class Config {
                     disableCategories(),
                     enableBuiltinQuestPack(),
                     hideQuestWidgetIcons(),
+                    questTextScale(),
+                    questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
                     enableQuestToasts(),
@@ -219,7 +239,7 @@ public final class Config {
     @SubscribeEvent
     public static void onReload(ModConfigEvent.Reloading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -230,6 +250,8 @@ public final class Config {
                     disableCategories(),
                     enableBuiltinQuestPack(),
                     hideQuestWidgetIcons(),
+                    questTextScale(),
+                    questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
                     enableQuestToasts(),

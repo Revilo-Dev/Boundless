@@ -235,16 +235,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         int maxScroll = Math.max(0, measuredContentHeight + BOTTOM_PADDING - viewportH);
         scrollY = Mth.clamp(scrollY, 0f, maxScroll);
 
-        quest.iconItem().ifPresent(item -> {
-            float iconScale = 1f / 1.2f;
-            int iconX = x + 4;
-            int iconY = y + 2;
-            gg.pose().pushPose();
-            gg.pose().translate(iconX, iconY, 0);
-            gg.pose().scale(iconScale, iconScale, 1f);
-            gg.renderItem(new ItemStack(item), 0, 0);
-            gg.pose().popPose();
-        });
+        quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x + 4, y + 2));
 
         String title = quest.name;
         int nameWidth = w - 32 - 18;
@@ -297,29 +288,29 @@ public final class QuestDetailsPanel extends AbstractWidget {
             }
 
             Component shownComponent = formatColorCodes(shown, 0xCFCFCF);
-            gg.drawWordWrap(mc.font, shownComponent, x + 4, curY[0], w - 8, 0xCFCFCF);
+            drawScaledWordWrap(gg, shownComponent, x + 4, curY[0], w - 8, 0xCFCFCF);
             addDescriptionItemRegions(stripColorTokens(shown), x + 4, curY[0], w - 8);
-            int wrapHeight = wrappedHeight(shownComponent, w - 8);
+            int wrapHeight = scaledWrappedHeight(shownComponent, w - 8);
 
             if (needsMore) {
                 int toggleY = curY[0] + wrapHeight + 2;
                 String toggleText = descExpanded
                         ? Component.translatable("ui.boundless.questbook.read_less").getString()
                         : Component.translatable("ui.boundless.questbook.read_more").getString();
-                int toggleW = mc.font.width(toggleText);
+                int toggleW = scaledTextWidth(toggleText);
                 int toggleX = x + (w - toggleW) / 2;
 
-                gg.drawString(mc.font, toggleText, toggleX, toggleY, 0x55AAFF, false);
+                drawScaledString(gg, toggleText, toggleX, toggleY, 0x55AAFF);
 
                 depRegions.add(new DepClickRegion(
                         toggleX,
                         toggleY,
                         toggleW,
-                        mc.font.lineHeight,
+                        scaledLineHeight(),
                         "__desc_toggle__"
                 ));
 
-                curY[0] += wrapHeight + mc.font.lineHeight + 6;
+                curY[0] += wrapHeight + scaledLineHeight() + 6;
             } else {
                 curY[0] += wrapHeight + 8;
             }
@@ -345,9 +336,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
 
                 if (depQuest != null) {
-                    depQuest.iconItem().ifPresent(icon ->
-                            gg.renderItem(new ItemStack(icon), x + 4, lineY)
-                    );
+                    depQuest.iconItem().ifPresent(icon -> renderScaledItem(gg, new ItemStack(icon), x + 4, lineY));
                 }
 
                 gg.drawString(mc.font, depName, textX, lineY + 4, color, false);
@@ -374,8 +363,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
                 if (t.isXp()) {
                     if (!printedSubmitHeader) {
-                        gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.submit"), x + 4, curY[0], 0x1d9633, false);
-                        curY[0] += mc.font.lineHeight + 2;
+                        drawScaledString(gg, Component.translatable("ui.boundless.questbook.submit"), x + 4, curY[0], 0x1d9633);
+                        curY[0] += scaledLineHeight() + 2;
                         printedSubmitHeader = true;
                     }
                     int have = Math.min(QuestTracker.getXpAmount(mc.player, t.id), t.count);
@@ -383,29 +372,29 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     String label = "levels".equals(QuestTracker.normalizeXpType(t.id))
                             ? Component.translatable("ui.boundless.questbook.levels").getString()
                             : Component.translatable("ui.boundless.questbook.xp").getString();
-                    gg.renderItem(new ItemStack(Items.EXPERIENCE_BOTTLE), x + 4, curY[0]);
-                    gg.drawString(mc.font, label + ": " + have + "/" + t.count, x + 24, curY[0] + 4, color, false);
-                    curY[0] += LINE_ITEM_ROW;
+                    renderScaledItem(gg, new ItemStack(Items.EXPERIENCE_BOTTLE), x + 4, curY[0]);
+                    drawScaledString(gg, label + ": " + have + "/" + t.count, x + 24, curY[0] + 4, color);
+                    curY[0] += scaledRowHeight();
                     continue;
                 }
 
                 if (t.isLevelUpLevel()) {
                     if (!printedSubmitHeader) {
-                        gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.submit"), x + 4, curY[0], 0x1d9633, false);
-                        curY[0] += mc.font.lineHeight + 2;
+                        drawScaledString(gg, Component.translatable("ui.boundless.questbook.submit"), x + 4, curY[0], 0x1d9633);
+                        curY[0] += scaledLineHeight() + 2;
                         printedSubmitHeader = true;
                     }
                     int have = Math.min(LevelUpCompat.getLevel(mc.player), t.count);
                     int color = have >= t.count ? 0x55FF55 : 0xFF5555;
-                    gg.renderItem(new ItemStack(Items.EXPERIENCE_BOTTLE), x + 4, curY[0]);
-                    gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.levelup_level_progress", have, t.count), x + 24, curY[0] + 4, color, false);
-                    curY[0] += LINE_ITEM_ROW;
+                    renderScaledItem(gg, new ItemStack(Items.EXPERIENCE_BOTTLE), x + 4, curY[0]);
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.levelup_level_progress", have, t.count), x + 24, curY[0] + 4, color);
+                    curY[0] += scaledRowHeight();
                     continue;
                 }
 
                 if (t.isFieldInput()) {
-                    gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.input"), x + 4, curY[0], 0x1d9633, false);
-                    curY[0] += mc.font.lineHeight + 2;
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.input"), x + 4, curY[0], 0x1d9633);
+                    curY[0] += scaledLineHeight() + 2;
                     String key = quest.id + ":field:" + t.id;
                     EditBox box = inputBoxes.computeIfAbsent(key, ignored -> createInputBox());
                     if (!box.isFocused()) {
@@ -431,14 +420,14 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
                     if (isSubmitTarget) {
                         if (!printedSubmitHeader) {
-                            gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.submit"), x + 4, curY[0], 0x1d9633, false);
-                            curY[0] += mc.font.lineHeight + 2;
+                            drawScaledString(gg, Component.translatable("ui.boundless.questbook.submit"), x + 4, curY[0], 0x1d9633);
+                            curY[0] += scaledLineHeight() + 2;
                             printedSubmitHeader = true;
                         }
                     } else {
                         if (!printedCollectHeader) {
-                            gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.collect"), x + 4, curY[0], 0x1d9633, false);
-                            curY[0] += mc.font.lineHeight + 2;
+                            drawScaledString(gg, Component.translatable("ui.boundless.questbook.collect"), x + 4, curY[0], 0x1d9633);
+                            curY[0] += scaledLineHeight() + 2;
                             printedCollectHeader = true;
                         }
                     }
@@ -448,8 +437,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     String key = isTagSyntax ? raw.substring(1) : raw;
                     ResourceLocation rl = safeParse(key);
                     if (rl == null) {
-                        gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.invalid_item_target"), x + 4, curY[0] + 4, 0xFF5555, false);
-                        curY[0] += LINE_ITEM_ROW;
+                        drawScaledString(gg, Component.translatable("ui.boundless.questbook.invalid_item_target"), x + 4, curY[0] + 4, 0xFF5555);
+                        curY[0] += scaledRowHeight();
                         continue;
                     }
                     Item direct = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
@@ -478,7 +467,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
                     if (iconItem != null) {
                         ItemStack st = new ItemStack(iconItem);
-                        gg.renderItem(st, px, curY[0]);
+                        renderScaledItem(gg, st, px, curY[0]);
                         itemRegions.add(new ItemClickRegion(px, curY[0], 16, 16, st.copy()));
                         if (mouseX >= px && mouseX <= px + 16 && mouseY >= curY[0] && mouseY <= curY[0] + 16) {
                             hoveredTooltips.add(st.getHoverName());
@@ -486,20 +475,20 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         px += 20;
                     }
 
-                    gg.drawString(mc.font, shownCount + "/" + need, px, curY[0] + 4, color, false);
-                    curY[0] += LINE_ITEM_ROW;
+                    drawScaledString(gg, shownCount + "/" + need, px, curY[0] + 4, color);
+                    curY[0] += scaledRowHeight();
                     continue;
                 } else if (t.isEntity()) {
                     if (!printedKillHeader) {
-                    gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.kill"), x + 4, curY[0], 0x1d9633, false);
-                        curY[0] += mc.font.lineHeight + 2;
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.kill"), x + 4, curY[0], 0x1d9633);
+                        curY[0] += scaledLineHeight() + 2;
                         printedKillHeader = true;
                     }
 
                     ResourceLocation rl = safeParse(t.id);
                     if (rl == null) {
-                        gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.invalid_entity_target"), x + 4, curY[0] + 4, 0xFF5555, false);
-                        curY[0] += LINE_ITEM_ROW;
+                        drawScaledString(gg, Component.translatable("ui.boundless.questbook.invalid_entity_target"), x + 4, curY[0] + 4, 0xFF5555);
+                        curY[0] += scaledRowHeight();
                         continue;
                     }
                     EntityType<?> et = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
@@ -518,22 +507,22 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     }
 
                     ItemStack icon = new ItemStack(iconItem);
-                    gg.renderItem(icon, x + 4, curY[0]);
+                    renderScaledItem(gg, icon, x + 4, curY[0]);
 
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
                         hoveredTooltips.add(Component.literal(eName));
                     }
 
-                    gg.drawString(mc.font, have + "/" + t.count, x + 24, curY[0] + 4, color, false);
-                    curY[0] += LINE_ITEM_ROW;
+                    drawScaledString(gg, have + "/" + t.count, x + 24, curY[0] + 4, color);
+                    curY[0] += scaledRowHeight();
                 } else if (t.isEffect()) {
-                    gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.have_effect"), x + 4, curY[0], 0x55FFFF, false);
-                    curY[0] += mc.font.lineHeight + 2;
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.have_effect"), x + 4, curY[0], 0x55FFFF);
+                    curY[0] += scaledLineHeight() + 2;
 
                     ResourceLocation rl = safeParse(t.id);
                     if (rl == null) {
-                        gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.invalid_effect_target"), x + 4, curY[0] + 4, 0xFF5555, false);
-                        curY[0] += LINE_ITEM_ROW;
+                        drawScaledString(gg, Component.translatable("ui.boundless.questbook.invalid_effect_target"), x + 4, curY[0] + 4, 0xFF5555);
+                        curY[0] += scaledRowHeight();
                         continue;
                     }
                     MobEffect eff = BuiltInRegistries.MOB_EFFECT.getOptional(rl).orElse(null);
@@ -542,22 +531,22 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     int color = has ? 0x55FF55 : 0xFF5555;
 
                     ResourceLocation tex = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
-                    gg.blit(tex, x + 4, curY[0], 0, 0, 16, 16, 16, 16);
-                    gg.drawString(mc.font, eName, x + 26, curY[0] + 6, color, false);
+                    renderScaledTextureIcon(gg, tex, x + 4, curY[0]);
+                    drawScaledString(gg, eName, x + 26, curY[0] + 6, color);
 
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
                         hoveredTooltips.add(Component.literal(eName));
                     }
 
-                    curY[0] += LINE_ITEM_ROW;
+                    curY[0] += scaledRowHeight();
                 } else if (t.isAdvancement()) {
-                    gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.achieve"), x + 4, curY[0], 0x55FFFF, false);
-                    curY[0] += mc.font.lineHeight + 2;
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.achieve"), x + 4, curY[0], 0x55FFFF);
+                    curY[0] += scaledLineHeight() + 2;
 
                     ResourceLocation rl = safeParse(t.id);
                     if (rl == null) {
-                        gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.invalid_advancement_target"), x + 4, curY[0] + 4, 0xFF5555, false);
-                        curY[0] += LINE_ITEM_ROW;
+                        drawScaledString(gg, Component.translatable("ui.boundless.questbook.invalid_advancement_target"), x + 4, curY[0] + 4, 0xFF5555);
+                        curY[0] += scaledRowHeight();
                         continue;
                     }
                     ItemStack icon = new ItemStack(Items.MOJANG_BANNER_PATTERN);
@@ -586,28 +575,28 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     boolean done = QuestTracker.hasAdvancement(mc.player, t.id);
                     int color = done ? 0x55FF55 : 0xFF5555;
 
-                    gg.renderItem(icon, x + 4, curY[0]);
-                    gg.drawString(mc.font, advName, x + 26, curY[0] + 6, color, false);
+                    renderScaledItem(gg, icon, x + 4, curY[0]);
+                    drawScaledString(gg, advName, x + 26, curY[0] + 6, color);
 
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
                         hoveredTooltips.add(Component.literal(advName));
                     }
 
-                    curY[0] += LINE_ITEM_ROW;
+                    curY[0] += scaledRowHeight();
                 } else if (t.isStat()) {
-                    gg.drawString(mc.font, Component.translatable("ui.boundless.questbook.stat"), x + 4, curY[0], 0x1d9633, false);
-                    curY[0] += mc.font.lineHeight + 2;
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.stat"), x + 4, curY[0], 0x1d9633);
+                    curY[0] += scaledLineHeight() + 2;
 
                     int have = QuestTracker.getStatCount(mc.player, t.id);
                     int color = have >= t.count ? 0x55FF55 : 0xFF5555;
 
                     ItemStack icon = new ItemStack(Items.PAPER);
-                    gg.renderItem(icon, x + 4, curY[0]);
-                    gg.drawString(mc.font, have + "/" + t.count, x + 24, curY[0] + 4, color, false);
+                    renderScaledItem(gg, icon, x + 4, curY[0]);
+                    drawScaledString(gg, have + "/" + t.count, x + 24, curY[0] + 4, color);
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
                         hoveredTooltips.add(Component.literal(t.id));
                     }
-                    curY[0] += LINE_ITEM_ROW;
+                    curY[0] += scaledRowHeight();
                 }
             }
 
@@ -636,8 +625,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
 
             Component rewardLabel = Component.translatable("ui.boundless.questbook.reward");
-            gg.drawWordWrap(mc.font, rewardLabel, x + 4, curY[0], w - 8, 0xA8FFA8);
-            curY[0] += mc.font.wordWrapHeight(rewardLabel, w - 8) + 4;
+            drawScaledWordWrap(gg, rewardLabel, x + 4, curY[0], w - 8, 0xA8FFA8);
+            curY[0] += scaledWrappedHeight(rewardLabel, w - 8) + 4;
 
         if (hasItemRewards) {
             for (QuestData.RewardEntry re : quest.rewards.items) {
@@ -645,18 +634,18 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 int lineY = curY[0];
                 if (item != null) {
                     ItemStack st = new ItemStack(item, Math.max(1, re.count));
-                    gg.renderItem(st, x + 4, lineY);
+                    renderScaledItem(gg, st, x + 4, lineY);
                     itemRegions.add(new ItemClickRegion(x + 4, lineY, 16, 16, st.copy()));
-                    gg.drawString(mc.font, "x" + st.getCount(), x + 24, lineY + 6, 0xA8FFA8, false);
+                    drawScaledString(gg, "x" + st.getCount(), x + 24, lineY + 6, 0xA8FFA8);
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
                         hoveredTooltips.add(st.getHoverName());
                     }
                 } else {
-                    gg.drawWordWrap(mc.font,
+                    drawScaledWordWrap(gg,
                             Component.literal("- " + re.item + " x" + Math.max(1, re.count)),
                             x + 4, lineY, w - 8, 0xA8FFA8);
                 }
-                curY[0] += LINE_ITEM_ROW;
+                curY[0] += scaledRowHeight();
             }
         }
 
@@ -673,15 +662,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
 
                 String display = (cr.title != null && !cr.title.isBlank()) ? cr.title : cr.command;
+                Component displayComponent = Component.literal(display);
 
-                gg.renderItem(icon, x + 4, lineY);
-                gg.drawWordWrap(mc.font, Component.literal(display), x + 24, lineY + 4, w - 30, 0xA8FFA8);
+                renderScaledItem(gg, icon, x + 4, lineY);
+                drawScaledWordWrap(gg, displayComponent, x + 24, lineY + 4, w - 30, 0xA8FFA8);
 
                 if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
                     hoveredTooltips.add(Component.literal(cr.command));
                 }
 
-                curY[0] += LINE_ITEM_ROW;
+                curY[0] += Math.max(scaledRowHeight(), scaledWrappedHeight(displayComponent, w - 30) + 8);
             }
         }
 
@@ -696,15 +686,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
 
                 String display = (fr.title != null && !fr.title.isBlank()) ? fr.title : fr.function;
+                Component displayComponent = Component.literal(display);
 
-                gg.renderItem(icon, x + 4, lineY);
-                gg.drawWordWrap(mc.font, Component.literal(display), x + 24, lineY + 4, w - 30, 0xA8FFA8);
+                renderScaledItem(gg, icon, x + 4, lineY);
+                drawScaledWordWrap(gg, displayComponent, x + 24, lineY + 4, w - 30, 0xA8FFA8);
 
                 if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
                     hoveredTooltips.add(Component.literal(fr.function));
                 }
 
-                curY[0] += LINE_ITEM_ROW;
+                curY[0] += Math.max(scaledRowHeight(), scaledWrappedHeight(displayComponent, w - 30) + 8);
             }
         }
 
@@ -717,15 +708,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     ItemStack icon = lootTableIcon(lootTableId);
                     String pretty = prettyLootTableName(lootTableId);
                     String display = Component.translatable("ui.boundless.questbook.loot_table", pretty).getString();
+                    Component displayComponent = Component.literal(display);
 
-                    gg.renderItem(icon, x + 4, lineY);
-                    gg.drawWordWrap(mc.font, Component.literal(display), x + 24, lineY + 4, w - 30, 0xA8FFA8);
+                    renderScaledItem(gg, icon, x + 4, lineY);
+                    drawScaledWordWrap(gg, displayComponent, x + 24, lineY + 4, w - 30, 0xA8FFA8);
 
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
                         hoveredTooltips.add(Component.literal(pretty));
                     }
 
-                    curY[0] += LINE_ITEM_ROW;
+                    curY[0] += Math.max(scaledRowHeight(), scaledWrappedHeight(displayComponent, w - 30) + 8);
                 }
             }
             for (QuestData.LootTableReward lr : quest.rewards.lootTables) {
@@ -739,31 +731,32 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
                 String pretty = (lr.title != null && !lr.title.isBlank()) ? lr.title : prettyLootTableName(lr.lootTable);
                 String display = Component.translatable("ui.boundless.questbook.loot_table", pretty).getString();
+                Component displayComponent = Component.literal(display);
 
-                gg.renderItem(icon, x + 4, lineY);
-                gg.drawWordWrap(mc.font, Component.literal(display), x + 24, lineY + 4, w - 30, 0xA8FFA8);
+                renderScaledItem(gg, icon, x + 4, lineY);
+                drawScaledWordWrap(gg, displayComponent, x + 24, lineY + 4, w - 30, 0xA8FFA8);
 
                 if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
                     hoveredTooltips.add(Component.literal(pretty));
                 }
 
-                curY[0] += LINE_ITEM_ROW;
+                curY[0] += Math.max(scaledRowHeight(), scaledWrappedHeight(displayComponent, w - 30) + 8);
             }
         }
 
         if (hasExpReward) {
             int lineY = curY[0];
-            gg.renderItem(new ItemStack(Items.EXPERIENCE_BOTTLE), x + 4, lineY);
+            renderScaledItem(gg, new ItemStack(Items.EXPERIENCE_BOTTLE), x + 4, lineY);
             String txt = switch (quest.rewards.expType) {
                 case "levels" -> Component.translatable("ui.boundless.questbook.levels_amount", quest.rewards.expAmount).getString();
                 case "levelup" -> Component.translatable("ui.boundless.questbook.levelup_xp_amount", quest.rewards.expAmount).getString();
                 default -> Component.translatable("ui.boundless.questbook.xp_amount", quest.rewards.expAmount).getString();
             };
-            gg.drawString(mc.font, txt, x + 24, lineY + 6, 0xA8FFA8, false);
+            drawScaledString(gg, txt, x + 24, lineY + 6, 0xA8FFA8);
             if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
                 hoveredTooltips.add(Component.literal(txt));
             }
-            curY[0] += LINE_ITEM_ROW;
+            curY[0] += scaledRowHeight();
         }
 
         curY[0] += 2;
@@ -821,8 +814,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 shown = full.substring(0, cut) + "...";
             }
 
-            int wrapH = wrappedHeight(formatColorCodes(shown, 0xCFCFCF), w - 8);
-            if (needsMore) y += wrapH + mc.font.lineHeight + 6;
+            int wrapH = scaledWrappedHeight(formatColorCodes(shown, 0xCFCFCF), w - 8);
+            if (needsMore) y += wrapH + scaledLineHeight() + 6;
             else y += wrapH + 8;
         }
 
@@ -832,11 +825,34 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
 
         if (quest.completion != null && !quest.completion.targets.isEmpty()) {
+            boolean printedCollectHeader = false;
+            boolean printedSubmitHeader = false;
+            boolean printedKillHeader = false;
             for (QuestData.Target target : quest.completion.targets) {
-                if (target != null && target.isFieldInput()) {
-                    y += mc.font.lineHeight + 2 + 20;
+                if (target == null) continue;
+                if (target.isXp() || target.isLevelUpLevel() || target.isSubmit() || target.isFieldInput()) {
+                    if (!printedSubmitHeader) {
+                        y += scaledLineHeight() + 2;
+                        printedSubmitHeader = true;
+                    }
+                } else if (target.isItem()) {
+                    if (!printedCollectHeader) {
+                        y += scaledLineHeight() + 2;
+                        printedCollectHeader = true;
+                    }
+                } else if (target.isEntity()) {
+                    if (!printedKillHeader) {
+                        y += scaledLineHeight() + 2;
+                        printedKillHeader = true;
+                    }
+                } else if (target.isEffect() || target.isAdvancement() || target.isStat()) {
+                    y += scaledLineHeight() + 2;
+                }
+
+                if (target.isFieldInput()) {
+                    y += 20 + 4;
                 } else {
-                    y += LINE_ITEM_ROW;
+                    y += scaledRowHeight();
                 }
             }
             y += 2;
@@ -850,12 +866,38 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean hasExpReward = quest.rewards != null && quest.rewards.hasExp();
 
         if (hasItemRewards || hasCommandRewards || hasFunctionRewards || hasLootTableRewards || hasExpReward) {
-            y += mc.font.wordWrapHeight(Component.translatable("ui.boundless.questbook.reward"), w - 8) + 4;
-            if (hasItemRewards) y += quest.rewards.items.size() * LINE_ITEM_ROW;
-            if (hasCommandRewards) y += Math.max(0, quest.rewards.commands.size() - lootCommandCount) * LINE_ITEM_ROW;
-            if (hasFunctionRewards) y += quest.rewards.functions.size() * LINE_ITEM_ROW;
-            if (hasLootTableRewards) y += (quest.rewards.lootTables.size() + lootCommandCount) * LINE_ITEM_ROW;
-            if (hasExpReward) y += LINE_ITEM_ROW;
+            y += scaledWrappedHeight(Component.translatable("ui.boundless.questbook.reward"), w - 8) + 4;
+            if (hasItemRewards) y += quest.rewards.items.size() * scaledRowHeight();
+            if (hasCommandRewards) {
+                for (QuestData.CommandReward cr : quest.rewards.commands) {
+                    if (!lootTableIdFromCommand(cr.command).isBlank()) continue;
+                    String display = (cr.title != null && !cr.title.isBlank()) ? cr.title : cr.command;
+                    y += Math.max(scaledRowHeight(), scaledWrappedHeight(Component.literal(display), w - 30) + 8);
+                }
+            }
+            if (hasFunctionRewards) {
+                for (QuestData.FunctionReward fr : quest.rewards.functions) {
+                    String display = (fr.title != null && !fr.title.isBlank()) ? fr.title : fr.function;
+                    y += Math.max(scaledRowHeight(), scaledWrappedHeight(Component.literal(display), w - 30) + 8);
+                }
+            }
+            if (hasLootTableRewards) {
+                if (quest.rewards.commands != null) {
+                    for (QuestData.CommandReward cr : quest.rewards.commands) {
+                        String lootTableId = lootTableIdFromCommand(cr.command);
+                        if (lootTableId.isBlank()) continue;
+                        String pretty = prettyLootTableName(lootTableId);
+                        String display = Component.translatable("ui.boundless.questbook.loot_table", pretty).getString();
+                        y += Math.max(scaledRowHeight(), scaledWrappedHeight(Component.literal(display), w - 30) + 8);
+                    }
+                }
+                for (QuestData.LootTableReward lr : quest.rewards.lootTables) {
+                    String pretty = (lr.title != null && !lr.title.isBlank()) ? lr.title : prettyLootTableName(lr.lootTable);
+                    String display = Component.translatable("ui.boundless.questbook.loot_table", pretty).getString();
+                    y += Math.max(scaledRowHeight(), scaledWrappedHeight(Component.literal(display), w - 30) + 8);
+                }
+            }
+            if (hasExpReward) y += scaledRowHeight();
             y += 2;
         }
 
@@ -867,9 +909,94 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return mc.font.split(component, maxWidth).size() * mc.font.lineHeight;
     }
 
+    private float textScale() {
+        return Config.questTextScale();
+    }
+
+    private int scaledLineHeight() {
+        return Math.max(1, Math.round(mc.font.lineHeight * textScale()));
+    }
+
+    private int scaledRowHeight() {
+        return Math.max(LINE_ITEM_ROW, scaledLineHeight() + 10);
+    }
+
+    private int scaledWrapWidth(int physicalWidth) {
+        float scale = textScale();
+        return Math.max(1, (int) Math.floor(physicalWidth / scale));
+    }
+
+    private int scaledWrappedHeight(Component component, int physicalWidth) {
+        if (component == null || physicalWidth <= 0) return 0;
+        int wrapWidth = scaledWrapWidth(physicalWidth);
+        return Math.max(1, Math.round(mc.font.split(component, wrapWidth).size() * mc.font.lineHeight * textScale()));
+    }
+
+    private int scaledTextWidth(String text) {
+        if (text == null || text.isEmpty()) return 0;
+        return Math.round(mc.font.width(text) * textScale());
+    }
+
+    private void drawScaledString(GuiGraphics gg, Component text, int x, int y, int color) {
+        if (text == null) return;
+        float scale = textScale();
+        gg.pose().pushPose();
+        gg.pose().scale(scale, scale, 1f);
+        float inv = 1f / scale;
+        gg.drawString(mc.font, text, (int) (x * inv), (int) (y * inv), color, false);
+        gg.pose().popPose();
+    }
+
+    private void drawScaledString(GuiGraphics gg, String text, int x, int y, int color) {
+        if (text == null || text.isEmpty()) return;
+        float scale = textScale();
+        gg.pose().pushPose();
+        gg.pose().scale(scale, scale, 1f);
+        float inv = 1f / scale;
+        gg.drawString(mc.font, text, (int) (x * inv), (int) (y * inv), color, false);
+        gg.pose().popPose();
+    }
+
+    private void drawScaledWordWrap(GuiGraphics gg, Component text, int x, int y, int physicalWidth, int color) {
+        if (text == null || physicalWidth <= 0) return;
+        float scale = textScale();
+        gg.pose().pushPose();
+        gg.pose().scale(scale, scale, 1f);
+        float inv = 1f / scale;
+        gg.drawWordWrap(mc.font, text, (int) (x * inv), (int) (y * inv), scaledWrapWidth(physicalWidth), color);
+        gg.pose().popPose();
+    }
+
+    private void renderScaledItem(GuiGraphics gg, ItemStack stack, int x, int y) {
+        if (stack == null || stack.isEmpty()) return;
+        float scale = Config.questIconScale();
+        int size = Math.max(1, Math.round(16 * scale));
+        int dx = x + (16 - size) / 2;
+        int dy = y + (16 - size) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(dx, dy, 0);
+        gg.pose().scale(scale, scale, 1f);
+        gg.renderItem(stack, 0, 0);
+        gg.pose().popPose();
+    }
+
+    private void renderScaledTextureIcon(GuiGraphics gg, ResourceLocation texture, int x, int y) {
+        if (texture == null) return;
+        float scale = Config.questIconScale();
+        int size = Math.max(1, Math.round(16 * scale));
+        int dx = x + (16 - size) / 2;
+        int dy = y + (16 - size) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(dx, dy, 0);
+        gg.pose().scale(scale, scale, 1f);
+        gg.blit(texture, 0, 0, 0, 0, 16, 16, 16, 16);
+        gg.pose().popPose();
+    }
+
     private void addDescriptionItemRegions(String text, int x, int y, int maxWidth) {
         if (text == null || text.isBlank() || maxWidth <= 0) return;
-        List<String> lines = wrapPlainText(text, maxWidth);
+        float scale = textScale();
+        List<String> lines = wrapPlainText(text, scaledWrapWidth(maxWidth));
         int lineY = y;
         for (String line : lines) {
             Matcher matcher = ITEM_ID_PATTERN.matcher(line);
@@ -877,11 +1004,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 String token = matcher.group();
                 Item item = resolveItem(token);
                 if (item == null) continue;
-                int startX = x + mc.font.width(line.substring(0, matcher.start()));
-                int width = mc.font.width(token);
-                itemRegions.add(new ItemClickRegion(startX, lineY, width, mc.font.lineHeight, new ItemStack(item)));
+                int startX = x + Math.round(mc.font.width(line.substring(0, matcher.start())) * scale);
+                int width = Math.round(mc.font.width(token) * scale);
+                itemRegions.add(new ItemClickRegion(startX, lineY, width, scaledLineHeight(), new ItemStack(item)));
             }
-            lineY += mc.font.lineHeight;
+            lineY += scaledLineHeight();
         }
     }
 
