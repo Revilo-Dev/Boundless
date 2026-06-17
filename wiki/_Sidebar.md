@@ -3,6 +3,7 @@
 - [Quest Book Guide](Quest-Book-Guide)
 - [Objectives and Rewards](Objectives-and-Rewards)
 - [Quest Packs](Quest-Packs)
+- [Using Questpacks on Servers](Server-Questpack-Deployment)
 - [Settings Guide](Settings-Guide)
 - [Commands](Commands)
 - [Operator Tools](Operator-Tools)

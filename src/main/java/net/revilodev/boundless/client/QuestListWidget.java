@@ -373,7 +373,7 @@ public final class QuestListWidget extends AbstractWidget {
                 QuestData.SubCategory sc = row.subCategory;
                 boolean open = isSubOpen(sc);
 
-                float iconScale = 0.45f;
+                float iconScale = 0.45f * Config.questIconScale();
                 int iconSize = (int) (16 * iconScale);
                 int iconX = getX() + 2;
                 int iconY = top + (h - iconSize) / 2;
@@ -408,6 +408,10 @@ public final class QuestListWidget extends AbstractWidget {
                 drawScaledString(gg, sym, textScale, symX, textY, 0xFFFFFF);
             } else {
                 QuestData.Quest q = row.quest;
+                if (q != null && q.id != null && q.id.startsWith("settings_spacer_")) {
+                    yCursor += rowHeight(row);
+                    continue;
+                }
                 QuestTracker.Status st = QuestTracker.getStatus(q, mc.player);
                 boolean deps = QuestTracker.dependenciesMet(q, mc.player);
                 boolean ready = deps && QuestTracker.isReady(q, mc.player);
@@ -429,20 +433,22 @@ public final class QuestListWidget extends AbstractWidget {
 
                 int textX = getX() + 23;
                 if (!hideIcons) {
-                    q.iconItem().ifPresent(item ->
-                            gg.renderItem(new ItemStack(item), getX() + 6, top + 5)
-                    );
+                    renderQuestIcon(gg, q, getX() + 6, top + 5);
                 } else {
                     textX = getX() + 6;
                 }
 
-                String name = q.name;
-                if (name.length() > 18) {
-                    name = name.substring(0, 18) + "...";
+                float textScale = Config.questTextScale();
+                String name = q.name == null ? "" : q.name;
+                int maxW = getX() + width - textX - 4;
+                int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
+                if (mc.font.width(name) > maxWUnscaled) {
+                    name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - mc.font.width("..."))) + "...";
                 }
-
-                gg.drawString(mc.font, name, textX, top + 9,
-                        deps ? 0xFFFFFF : 0xA0A0A0, false);
+                int textH = Math.round(mc.font.lineHeight * textScale);
+                int textY = top + (h - textH) / 2 + 1;
+                drawScaledString(gg, name, textScale, textX, textY,
+                        deps ? 0xFFFFFF : 0xA0A0A0);
             }
 
             yCursor += rowHeight(row);
@@ -459,6 +465,51 @@ public final class QuestListWidget extends AbstractWidget {
             int barY = contentTop + (int) ((viewportHeight - barH) * scrollRatio);
             gg.fill(getX() + width + 4, barY, getX() + width + 6, barY + barH, 0xFF808080);
         }
+    }
+
+    private void renderScaledItem(GuiGraphics gg, ItemStack stack, int x, int y) {
+        if (stack == null || stack.isEmpty()) return;
+        float scale = Config.questIconScale();
+        int size = Math.max(1, Math.round(16 * scale));
+        int dx = x + (16 - size) / 2;
+        int dy = y + (16 - size) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(dx, dy, 0);
+        gg.pose().scale(scale, scale, 1f);
+        gg.renderItem(stack, 0, 0);
+        gg.pose().popPose();
+    }
+
+    private void renderQuestIcon(GuiGraphics gg, QuestData.Quest quest, int x, int y) {
+        if (quest == null) return;
+        ResourceLocation texture = textureIcon(quest.icon);
+        if (texture != null) {
+            renderScaledTextureIcon(gg, texture, x, y);
+            return;
+        }
+        quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x, y));
+    }
+
+    private ResourceLocation textureIcon(String icon) {
+        if (icon == null || icon.isBlank()) return null;
+        try {
+            ResourceLocation rl = ResourceLocation.parse(icon);
+            return rl.getPath().startsWith("textures/") ? rl : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void renderScaledTextureIcon(GuiGraphics gg, ResourceLocation texture, int x, int y) {
+        float scale = Config.questIconScale();
+        int size = Math.max(1, Math.round(16 * scale));
+        int dx = x + (16 - size) / 2;
+        int dy = y + (16 - size) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(dx, dy, 0);
+        gg.pose().scale(scale, scale, 1f);
+        gg.blit(texture, 0, 0, 0, 0, 16, 16, 16, 16);
+        gg.pose().popPose();
     }
 
     @Override

@@ -10,6 +10,7 @@ This wiki is focused on **how to use the mod in normal gameplay** first, then mo
 - [Quest Book Guide](Quest-Book-Guide)
 - [Objectives and Rewards](Objectives-and-Rewards)
 - [Quest Packs](Quest-Packs)
+- [Using Questpacks on Servers](Server-Questpack-Deployment)
 - [Settings Guide](Settings-Guide)
 - [Commands](Commands)
 - [Operator Tools](Operator-Tools)

@@ -21,7 +21,6 @@ import net.minecraft.client.gui.components.Whence;
 import net.minecraft.client.gui.narration.NarratedElementType;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
@@ -36,8 +35,6 @@ import net.minecraft.util.StringUtil;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
@@ -133,6 +130,16 @@ public final class QuestEditorScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
+    private static final ResourceLocation BROWSER_GUI_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/browser-gui.png");
+    private static final ResourceLocation BROWSER_SLOT_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/slot.png");
+    private static final ResourceLocation BROWSER_TAB_INVENTORY_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/inventory.png");
+    private static final ResourceLocation BROWSER_TAB_SEARCH_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/search.png");
+    private static final ResourceLocation X_BUTTON_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_reject.png");
     private static final ResourceLocation QUEST_TAB_SCROLL_ICON_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
     private static final ResourceLocation BUILTIN_PACK_ENABLED_TEX =
@@ -205,6 +212,7 @@ public final class QuestEditorScreen extends Screen {
     private static final int ID_SUGGESTION_SCROLL_TRACK_COLOR = 0xFF2C2C2C;
     private static final int ID_SUGGESTION_SCROLL_THUMB_COLOR = 0xFFFFFFFF;
     private static final int ID_SUGGESTION_SCROLL_W = 3;
+    private static final long DELETE_HOLD_MS = 2000L;
     private static final int ENTRY_ROW_H = 12;
     private static final int ENTRY_ROW_GAP = 2;
     private static final float ENTRY_INPUT_TEXT_SCALE = 0.4f;
@@ -216,6 +224,19 @@ public final class QuestEditorScreen extends Screen {
     private static final int ITEM_PICKER_CELL = 18;
     private static final int ITEM_PICKER_W = 172;
     private static final int ITEM_PICKER_H = 112;
+    private static final int ITEM_PICKER_GRID_X = 5;
+    private static final int ITEM_PICKER_GRID_Y = 19;
+    private static final int ITEM_PICKER_GRID_RIGHT = 163;
+    private static final int ITEM_PICKER_GRID_BOTTOM = 95;
+    private static final int ITEM_PICKER_SEARCH_X = 19;
+    private static final int ITEM_PICKER_SEARCH_Y = 94;
+    private static final int ITEM_PICKER_SEARCH_W = 146;
+    private static final int ITEM_PICKER_SEARCH_H = 12;
+    private static final int ITEM_PICKER_CLOSE_SIZE = 13;
+    private static final int ITEM_PICKER_CLOSE_OFFSET = 4;
+    private static final int ITEM_PICKER_SIDE_TAB_X = -TAB_W + 4;
+    private static final int ITEM_PICKER_SIDE_TAB_Y = 17;
+    private static final int ITEM_PICKER_SIDE_TAB_ICON_SIZE = 16;
     private static final float ENTRY_TYPE_TEXT_SCALE = 0.5f;
     private static final int EDITOR_SUBHEADER_H = 12;
     private static final int EDITOR_SUBHEADER_GAP = 3;
@@ -227,7 +248,7 @@ public final class QuestEditorScreen extends Screen {
     private static final String ENTRY_SUBCATEGORIES = "__subcategories__";
     private static final String ENTRY_QUESTS = "__quests__";
     private static final String FOOTER_PREFIX =
-            "Welcome to the Quest editor BETA, if you require assistance head over to ";
+            "Welcome to the Quest editor, if you require assistance head over to ";
     private static final String FOOTER_LINK = "https://discord.gg/DARzByw6VW";
     private static final int FOOTER_TEXT_COLOR = 0xFF5555;
     private static final int FOOTER_LINK_COLOR = 0x3B82F6;
@@ -270,6 +291,8 @@ public final class QuestEditorScreen extends Screen {
     private String statusMessage = "";
     private int statusColor = 0xA0A0A0;
     private boolean deleteConfirmArmed = false;
+    private boolean deleteHoldActive = false;
+    private long deleteHoldStartMs = 0L;
     private ScreenState pendingState;
     private final List<FormattedCharSequence> footerLines = new ArrayList<>();
     private final List<Integer> footerLineX = new ArrayList<>();
@@ -348,6 +371,8 @@ public final class QuestEditorScreen extends Screen {
     private final Set<String> stagedDeletedPackNames = new LinkedHashSet<>();
     private final Set<String> collapsedQuestCategories = new HashSet<>();
     private final Set<String> collapsedQuestSubCategories = new HashSet<>();
+    private QuestListIndex questListIndexCache;
+    private Path questListIndexPackRoot;
     private final List<String> activeIdSuggestions = new ArrayList<>();
     private EditBox idSuggestionField;
     private ScaledMultiLineEditBox idSuggestionMultiLineField;
@@ -616,7 +641,7 @@ public final class QuestEditorScreen extends Screen {
             leftList.setScrollY(previousScroll);
         }
         leftList.setSelectedId(selectedEntryId);
-        refreshPackIdCaches();
+        refreshPackIdCaches(mode == Mode.QUEST_LIST ? questListIndex() : null);
     }
 
     private List<EditorEntry> buildPackEntries() {
@@ -686,31 +711,21 @@ public final class QuestEditorScreen extends Screen {
         List<EditorEntry> out = new ArrayList<>();
         out.add(new EditorEntry(ENTRY_NEW, trs("create_new_quest"), "", ""));
         if (currentPack == null) return out;
-        Map<String, String> categoryNames = new HashMap<>();
-        for (NamedEntry category : listCategoryEntries(currentPack)) {
-            categoryNames.put(safe(category.id), safe(category.name));
-        }
-        Map<String, String> subCategoryNames = new HashMap<>();
-        for (NamedEntry subCategory : listSubCategoryEntries(currentPack)) {
-            SubCategoryData data = loadSubCategory(currentPack, subCategory.id);
-            String parent = data == null ? "" : safe(data.category);
-            subCategoryNames.put(parent + "::" + safe(subCategory.id), safe(subCategory.name));
-        }
-
+        QuestListIndex index = questListIndex();
         Map<String, Map<String, List<NamedEntry>>> grouped = new LinkedHashMap<>();
-        for (NamedEntry entry : listQuestEntries(currentPack)) {
-            if (!matchesQuestSearch(entry)) continue;
-            QuestEntryData data = loadQuest(currentPack, entry.id);
+        for (QuestListItem item : index.items) {
+            if (!matchesQuestSearch(item.entry)) continue;
+            QuestEntryData data = item.data;
             String categoryId = data == null ? "" : safe(data.category);
             String subCategoryId = data == null ? "" : safe(data.subCategory);
             grouped.computeIfAbsent(categoryId, k -> new LinkedHashMap<>())
                     .computeIfAbsent(subCategoryId, k -> new ArrayList<>())
-                    .add(entry);
+                    .add(item.entry);
         }
 
         for (Map.Entry<String, Map<String, List<NamedEntry>>> categoryEntry : grouped.entrySet()) {
             String categoryId = safe(categoryEntry.getKey());
-            String categoryName = categoryNames.getOrDefault(categoryId, categoryId.isBlank() ? trs("unassigned") : categoryId);
+            String categoryName = index.categoryNames.getOrDefault(categoryId, categoryId.isBlank() ? trs("unassigned") : categoryId);
             boolean categoryCollapsed = collapsedQuestCategories.contains(categoryId);
             out.add(EditorEntry.categoryHeader(categoryId, categoryName, categoryCollapsed));
             if (categoryCollapsed) continue;
@@ -718,13 +733,13 @@ public final class QuestEditorScreen extends Screen {
             for (Map.Entry<String, List<NamedEntry>> subEntry : categoryEntry.getValue().entrySet()) {
                 String subId = safe(subEntry.getKey());
                 String subKey = categoryId + "::" + subId;
-                String subName = subCategoryNames.getOrDefault(subKey, subId.isBlank() ? trs("no_subcategory") : subId);
+                String subName = index.subCategoryNames.getOrDefault(subKey, subId.isBlank() ? trs("no_subcategory") : subId);
                 boolean subCollapsed = collapsedQuestSubCategories.contains(subKey);
                 out.add(EditorEntry.subCategoryHeader(subKey, subName, subCollapsed));
                 if (subCollapsed) continue;
                 for (NamedEntry quest : subEntry.getValue()) {
-                    QuestEntryData questData = loadQuest(currentPack, quest.id);
-                    String invalidReason = questEntryInvalidReason(questData);
+                    QuestEntryData questData = index.questDataByEntryId.get(safe(quest.id));
+                    String invalidReason = questEntryInvalidReason(questData, index.categoryIds, index.subCategoryIds, index.questIds, index.duplicateQuestIds);
                     boolean invalid = invalidReason != null;
                     out.add(invalid
                             ? EditorEntry.quest(quest.id, quest.name, quest.id, quest.icon, PACK_ACTION_NEEDED_TEX, invalidReason)
@@ -735,30 +750,98 @@ public final class QuestEditorScreen extends Screen {
         return out;
     }
 
+    private QuestListIndex questListIndex() {
+        if (currentPack == null) return QuestListIndex.EMPTY;
+        if (questListIndexCache != null && Objects.equals(questListIndexPackRoot, currentPack.root)) {
+            return questListIndexCache;
+        }
+
+        QuestListIndex index = new QuestListIndex();
+        for (NamedEntry category : listCategoryEntries(currentPack)) {
+            String id = safe(category.id);
+            index.categoryNames.put(id, safe(category.name));
+            if (!id.isBlank() && !"all".equalsIgnoreCase(id)) index.categoryIds.add(id);
+        }
+        for (NamedEntry subCategory : listSubCategoryEntries(currentPack)) {
+            SubCategoryData data = loadSubCategory(subCategory.path, subCategory.id);
+            String parent = data == null ? "" : safe(data.category);
+            String id = safe(subCategory.id);
+            index.subCategoryNames.put(parent + "::" + id, safe(subCategory.name));
+            if (!id.isBlank()) {
+                index.subCategoryIds.add(id);
+                if (!parent.isBlank()) index.subCategoryIds.add(parent + "::" + id);
+            }
+        }
+
+        for (QuestListItem item : listQuestListItems(currentPack)) {
+            QuestEntryData data = item.data;
+            if (data == null) continue;
+            String id = safe(data.id).trim();
+            if (!id.isBlank() && !index.questIds.add(id)) index.duplicateQuestIds.add(id);
+            index.questDataByEntryId.put(safe(item.entry.id), data);
+            index.items.add(item);
+        }
+
+        questListIndexCache = index;
+        questListIndexPackRoot = currentPack.root;
+        return index;
+    }
+
+    private List<QuestListItem> listQuestListItems(QuestPack pack) {
+        List<QuestListItem> items = new ArrayList<>();
+        if (pack == null || pack.questsDir == null || !Files.isDirectory(pack.questsDir)) return items;
+
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(pack.questsDir, "*.json")) {
+            for (Path path : stream) {
+                JsonObject obj = readJson(path);
+                if (obj == null) continue;
+                String fallbackId = fileId(path);
+                QuestEntryData data = loadQuest(path, fallbackId, obj);
+                if (data == null) continue;
+                int order = parseIntFlexible(obj, "order", 0);
+                String sortKey = String.format(Locale.ROOT, "%06d_%s", order, fallbackId);
+                NamedEntry entry = new NamedEntry(data.id, data.name, data.icon, path, sortKey);
+                items.add(new QuestListItem(entry, data));
+            }
+        } catch (IOException ignored) {
+        }
+        items.sort(Comparator.comparing(item -> safe(item.entry.sortKey).toLowerCase(Locale.ROOT)));
+        return items;
+    }
+
+    private void invalidateQuestListIndex() {
+        questListIndexCache = null;
+        questListIndexPackRoot = null;
+    }
+
     private boolean isQuestEntryInvalid(QuestEntryData data) {
         return questEntryInvalidReason(data) != null;
     }
 
     private String questEntryInvalidReason(QuestEntryData data) {
+        return questEntryInvalidReason(data, categoryIdCache, subCategoryIdCache, questIdCache, Set.of());
+    }
+
+    private String questEntryInvalidReason(QuestEntryData data, Set<String> categoryIds, Set<String> subCategoryIds, Set<String> questIds, Set<String> duplicateQuestIds) {
         if (data == null) return null;
         String id = safe(data.id).trim();
         if (id.isBlank()) return "Missing quest id";
-        if (isDuplicateQuestIdAcrossPack(id)) return "Duplicate quest id";
+        if (duplicateQuestIds != null && duplicateQuestIds.contains(id)) return "Duplicate quest id";
         String name = safe(data.name).trim();
         if (name.isBlank()) return "Missing quest name";
         String category = safe(data.category).trim();
         if (category.isBlank()) return "Missing quest category";
-        if (!categoryIdCache.contains(category)) return "Invalid quest category";
+        if (categoryIds == null || !categoryIds.contains(category)) return "Invalid quest category";
 
         String subCategory = safe(data.subCategory).trim();
         if (!subCategory.isBlank()) {
-            boolean hasExact = subCategoryIdCache.contains(category + "::" + subCategory);
-            boolean hasWildcard = subCategoryIdCache.contains("::" + subCategory);
+            boolean hasExact = subCategoryIds != null && subCategoryIds.contains(category + "::" + subCategory);
+            boolean hasWildcard = subCategoryIds != null && subCategoryIds.contains("::" + subCategory);
             if (!hasExact && !hasWildcard) return "Invalid quest sub-category";
         }
 
         for (String dep : extractEntryLines(safe(data.dependencies))) {
-            if (!questIdCache.contains(dep)) return "Invalid quest dependency";
+            if (questIds == null || !questIds.contains(dep)) return "Invalid quest dependency";
         }
         return null;
     }
@@ -803,6 +886,7 @@ public final class QuestEditorScreen extends Screen {
             return;
         }
         currentPack = pack;
+        invalidateQuestListIndex();
         selectedEntryId = pack.name;
         leftList.setSelectedId(selectedEntryId);
         showPackOptions(pack);
@@ -878,7 +962,7 @@ public final class QuestEditorScreen extends Screen {
         List<NamedEntry> all = listQuestEntries(currentPack);
         List<QuestMoveEntry> group = new ArrayList<>();
         for (NamedEntry entry : all) {
-            QuestEntryData data = loadQuest(currentPack, entry.id);
+            QuestEntryData data = loadQuest(entry.path, entry.id);
             if (data == null) continue;
             group.add(new QuestMoveEntry(entry.id, entry.path, safe(data.category), safe(data.subCategory)));
         }
@@ -920,6 +1004,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void applyQuestOrder(List<QuestMoveEntry> orderedEntries) throws IOException {
         if (currentPack == null || orderedEntries == null || orderedEntries.isEmpty()) return;
+        invalidateQuestListIndex();
         Map<Path, Path> stagedMoves = new LinkedHashMap<>();
         for (int i = 0; i < orderedEntries.size(); i++) {
             QuestMoveEntry entry = orderedEntries.get(i);
@@ -979,6 +1064,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void applyExplicitOrder(List<NamedEntry> orderedEntries, String key) throws IOException {
         if (orderedEntries == null || orderedEntries.isEmpty() || key == null || key.isBlank()) return;
+        invalidateQuestListIndex();
         for (int i = 0; i < orderedEntries.size(); i++) {
             NamedEntry entry = orderedEntries.get(i);
             if (entry == null || entry.path == null) continue;
@@ -1004,6 +1090,7 @@ public final class QuestEditorScreen extends Screen {
         }
 
         currentPack = findPackByName(entry.id);
+        invalidateQuestListIndex();
         if (currentPack == null) {
             statusMessage = trs("status.pack_not_found");
             statusColor = 0xFF8080;
@@ -1020,6 +1107,7 @@ public final class QuestEditorScreen extends Screen {
         if (refreshedNamespace != null && !refreshedNamespace.isBlank()
                 && !refreshedNamespace.equals(currentPack.namespace)) {
         currentPack = new QuestPack(currentPack.name, refreshedNamespace, currentPack.root, currentPack.legacy, currentPack.enabled);
+        invalidateQuestListIndex();
         }
         setMode(Mode.CATEGORY_LIST);
     }
@@ -1346,6 +1434,7 @@ public final class QuestEditorScreen extends Screen {
             String iconPath = normalizePackIconId(packIconPathBox.getValue());
             writePackMeta(newRoot, requestedName, description, iconPath, currentPack.enabled);
             currentPack = new QuestPack(requestedName, requestedNamespace, newRoot, currentPack.legacy, currentPack.enabled);
+            invalidateQuestListIndex();
             currentPack.ensureDirs();
             selectedEntryId = currentPack.name;
             leftList.setSelectedId(selectedEntryId);
@@ -1559,6 +1648,7 @@ public final class QuestEditorScreen extends Screen {
         QuestPack duplicated = new QuestPack(duplicateName, currentPack.namespace, target, false, currentPack.enabled);
             duplicated.ensureDirs();
             currentPack = duplicated;
+            invalidateQuestListIndex();
             selectedEntryId = duplicated.name;
             stagePackChange(duplicated, "Pack duplicated");
             refreshLeftList();
@@ -1781,16 +1871,18 @@ public final class QuestEditorScreen extends Screen {
         }
         if (!deleteConfirmArmed) {
             deleteConfirmArmed = true;
+            deleteHoldActive = false;
             updateDeleteButtonTexture();
-            statusMessage = trs("status.confirm_delete");
+            statusMessage = "Are you sure? Hold delete to confirm";
             statusColor = 0xFFD080;
             return;
         }
-        disarmDeleteConfirm();
-        deleteCurrent();
+        deleteHoldActive = true;
+        deleteHoldStartMs = Util.getMillis();
     }
 
     private void disarmDeleteConfirm() {
+        deleteHoldActive = false;
         if (!deleteConfirmArmed) return;
         deleteConfirmArmed = false;
         updateDeleteButtonTexture();
@@ -1804,6 +1896,32 @@ public final class QuestEditorScreen extends Screen {
                 deleteQuestButton.setTextures(DELETE_TEX, DELETE_CONFIRM_TEX_HOVER);
             }
         }
+    }
+
+    private void updateDeleteHold(double mouseX, double mouseY) {
+        if (!deleteHoldActive) return;
+        if (deleteQuestButton == null || !deleteQuestButton.visible || !deleteQuestButton.active || !deleteQuestButton.isMouseOver(mouseX, mouseY)) {
+            deleteHoldActive = false;
+            return;
+        }
+        if (Util.getMillis() - deleteHoldStartMs >= DELETE_HOLD_MS) {
+            disarmDeleteConfirm();
+            deleteCurrent();
+        }
+    }
+
+    private float deleteHoldProgress() {
+        if (!deleteHoldActive) return 0f;
+        return Math.min(1f, (Util.getMillis() - deleteHoldStartMs) / (float) DELETE_HOLD_MS);
+    }
+
+    private void renderDeleteHoldProgress(GuiGraphics gg) {
+        float progress = deleteHoldProgress();
+        if (progress <= 0f || deleteQuestButton == null || !deleteQuestButton.visible) return;
+        int x0 = deleteQuestButton.getX() + 2;
+        int y0 = deleteQuestButton.getY() + deleteQuestButton.getHeight() - 4;
+        int w = Math.round((deleteQuestButton.getWidth() - 4) * progress);
+        gg.fill(x0, y0, x0 + w, y0 + 2, 0xFFFF3030);
     }
 
     private String nextAvailableQuestId(String baseId) {
@@ -1872,6 +1990,7 @@ public final class QuestEditorScreen extends Screen {
                 deleteDirectory(pack.root);
             }
             currentPack = null;
+            invalidateQuestListIndex();
             selectedEntryId = "";
             setMode(Mode.PACK_LIST);
             stagePackDeletion(pack, "Pack deletion staged");
@@ -2376,6 +2495,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void stagePackChange(QuestPack pack, String message) {
         if (pack == null || pack.name == null || pack.name.isBlank()) return;
+        invalidateQuestListIndex();
         stagedDeletedPackNames.remove(pack.name);
         stagedPacks.put(pack.name, pack);
         statusMessage = message;
@@ -2384,6 +2504,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void stagePackDeletion(QuestPack pack, String message) {
         if (pack == null || pack.name == null || pack.name.isBlank()) return;
+        invalidateQuestListIndex();
         stagedPacks.remove(pack.name);
         stagedDeletedPackNames.add(pack.name);
         statusMessage = message;
@@ -3977,6 +4098,10 @@ public final class QuestEditorScreen extends Screen {
                 }
             }
         }
+        return loadSubCategory(path, id);
+    }
+
+    private SubCategoryData loadSubCategory(Path path, String id) {
         JsonObject obj = readJson(path);
         if (obj == null) return null;
 
@@ -4001,7 +4126,15 @@ public final class QuestEditorScreen extends Screen {
                 }
             }
         }
+        return loadQuest(path, id);
+    }
+
+    private QuestEntryData loadQuest(Path path, String id) {
         JsonObject obj = readJson(path);
+        return loadQuest(path, id, obj);
+    }
+
+    private QuestEntryData loadQuest(Path path, String id, JsonObject obj) {
         if (obj == null) return null;
 
         QuestEntryData data = new QuestEntryData();
@@ -4117,6 +4250,7 @@ public final class QuestEditorScreen extends Screen {
         updateLeftPaneLayout();
         if (editorType == EditorType.PACK_CREATE || editorType == EditorType.PACK_OPTIONS) {
         }
+        updateDeleteHold(mouseX, mouseY);
         gg.fill(0, 0, this.width, this.height, 0xA0000000);
         gg.blit(PANEL_TEX, leftX, topY, 0, 0, PANEL_W, PANEL_H, PANEL_W, PANEL_H);
         gg.blit(PANEL_TEX, rightX, topY, 0, 0, PANEL_W, PANEL_H, PANEL_W, PANEL_H);
@@ -4158,6 +4292,7 @@ public final class QuestEditorScreen extends Screen {
         if (exportPackButton != null && exportPackButton.visible) exportPackButton.render(gg, mouseX, mouseY, partialTick);
         if (duplicateButton != null && duplicateButton.visible) duplicateButton.render(gg, mouseX, mouseY, partialTick);
         if (deleteQuestButton != null && deleteQuestButton.visible) deleteQuestButton.render(gg, mouseX, mouseY, partialTick);
+        renderDeleteHoldProgress(gg);
         if (questSearchBox != null && questSearchBox.visible) questSearchBox.render(gg, mouseX, mouseY, partialTick);
         if (createPackButton != null && createPackButton.visible) createPackButton.render(gg, mouseX, mouseY, partialTick);
         if (importQuestPackButton != null && importQuestPackButton.visible) importQuestPackButton.render(gg, mouseX, mouseY, partialTick);
@@ -4242,7 +4377,7 @@ public final class QuestEditorScreen extends Screen {
             return;
         }
         if (deleteQuestButton != null && deleteQuestButton.visible && deleteQuestButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, tr(deleteConfirmArmed ? "tooltip.confirm_delete" : "tooltip.delete"), mouseX, mouseY);
+            gg.renderTooltip(font, deleteConfirmArmed ? Component.literal("Hold to delete") : tr("tooltip.delete"), mouseX, mouseY);
         }
     }
 
@@ -5160,7 +5295,8 @@ public final class QuestEditorScreen extends Screen {
         if (questId.isBlank()) return false;
         int matches = 0;
         boolean matchedEditingPath = false;
-        for (NamedEntry entry : listQuestEntries(currentPack)) {
+        Iterable<NamedEntry> entries = cachedQuestEntriesOrLoad();
+        for (NamedEntry entry : entries) {
             if (entry == null || entry.id == null || !questId.equals(entry.id)) continue;
             matches++;
             if (editingPath != null && entry.path != null && editingPath.equals(entry.path)) {
@@ -5176,7 +5312,7 @@ public final class QuestEditorScreen extends Screen {
         String questId = safe(questIdRaw).trim();
         if (questId.isBlank()) return false;
         int matches = 0;
-        for (NamedEntry entry : listQuestEntries(currentPack)) {
+        for (NamedEntry entry : cachedQuestEntriesOrLoad()) {
             if (entry == null || entry.id == null || !questId.equals(entry.id)) continue;
             matches++;
             if (matches > 1) return true;
@@ -5184,7 +5320,22 @@ public final class QuestEditorScreen extends Screen {
         return false;
     }
 
+    private Iterable<NamedEntry> cachedQuestEntriesOrLoad() {
+        if (currentPack != null && questListIndexCache != null && Objects.equals(questListIndexPackRoot, currentPack.root)) {
+            List<NamedEntry> entries = new ArrayList<>(questListIndexCache.items.size());
+            for (QuestListItem item : questListIndexCache.items) {
+                if (item != null && item.entry != null) entries.add(item.entry);
+            }
+            return entries;
+        }
+        return currentPack == null ? List.of() : listQuestEntries(currentPack);
+    }
+
     private void refreshPackIdCaches() {
+        refreshPackIdCaches(null);
+    }
+
+    private void refreshPackIdCaches(QuestListIndex questIndex) {
         categoryIdCache.clear();
         subCategoryIdCache.clear();
         questIdCache.clear();
@@ -5196,22 +5347,49 @@ public final class QuestEditorScreen extends Screen {
         advancementIdCache.clear();
         lootTableIdCache.clear();
 
-        if (currentPack != null) {
-            for (NamedEntry entry : listCategoryEntries(currentPack)) {
+        if (questIndex != null) {
+            categoryIdCache.addAll(questIndex.categoryIds);
+            subCategoryIdCache.addAll(questIndex.subCategoryIds);
+            questIdCache.addAll(questIndex.questIds);
+            for (QuestListItem item : questIndex.items) {
+                if (item == null || item.entry == null || item.entry.id == null || item.entry.id.isBlank()) continue;
+                if (item.entry.icon != null && !item.entry.icon.isBlank()) {
+                    questIconByIdCache.put(item.entry.id, item.entry.icon);
+                }
+            }
+            for (String id : questIndex.categoryIds) {
+                if (!categorySuggestionCache.contains(id)) categorySuggestionCache.add(id);
+            }
+            for (String key : questIndex.subCategoryNames.keySet()) {
+                int split = key.indexOf("::");
+                String category = split >= 0 ? key.substring(0, split) : "";
+                String id = split >= 0 ? key.substring(split + 2) : key;
+                if (id.isBlank()) continue;
+                addSubCategorySuggestion(id, category);
+            }
+            for (String id : questIndex.questIds) {
+                if (!questSuggestionCache.contains(id)) questSuggestionCache.add(id);
+            }
+        } else if (currentPack != null) {
+            List<NamedEntry> localCategoryEntries = listCategoryEntries(currentPack);
+            List<NamedEntry> localSubCategoryEntries = listSubCategoryEntries(currentPack);
+            List<NamedEntry> localQuestEntries = listQuestEntries(currentPack);
+            for (NamedEntry entry : localCategoryEntries) {
                 if (entry == null || entry.id == null) continue;
                 if ("all".equalsIgnoreCase(entry.id.trim())) continue;
                 if (entry != null && entry.id != null && !entry.id.isBlank()) categoryIdCache.add(entry.id);
             }
-            for (NamedEntry entry : listSubCategoryEntries(currentPack)) {
+            for (NamedEntry entry : localSubCategoryEntries) {
                 if (entry == null || entry.id == null || entry.id.isBlank()) continue;
                 subCategoryIdCache.add(entry.id);
-                SubCategoryData data = loadSubCategory(currentPack, entry.id);
+                SubCategoryData data = loadSubCategory(entry.path, entry.id);
                 String category = data == null ? "" : safe(data.category).trim();
                 if (!category.isBlank()) {
                     subCategoryIdCache.add(category + "::" + entry.id);
                 }
+                addSubCategorySuggestion(entry.id, category);
             }
-            for (NamedEntry entry : listQuestEntries(currentPack)) {
+            for (NamedEntry entry : localQuestEntries) {
                 if (entry != null && entry.id != null && !entry.id.isBlank()) {
                     questIdCache.add(entry.id);
                     if (entry.icon != null && !entry.icon.isBlank()) {
@@ -5227,14 +5405,6 @@ public final class QuestEditorScreen extends Screen {
         categorySuggestionCache.addAll(localCategories);
         questSuggestionCache.addAll(localQuests);
 
-        if (currentPack != null) {
-            for (NamedEntry entry : listSubCategoryEntries(currentPack)) {
-                if (entry == null || entry.id == null || entry.id.isBlank()) continue;
-                SubCategoryData data = loadSubCategory(currentPack, entry.id);
-                String cat = data == null ? "" : safe(data.category).trim();
-                addSubCategorySuggestion(entry.id, cat);
-            }
-        }
         for (String localSub : localSubCategories) {
             if (!subCategorySuggestionCache.contains(localSub)) subCategorySuggestionCache.add(localSub);
         }
@@ -5418,6 +5588,15 @@ public final class QuestEditorScreen extends Screen {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && deleteHoldActive) {
+            deleteHoldActive = false;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     private void clearEntryTextFocus() {
@@ -5875,8 +6054,9 @@ public final class QuestEditorScreen extends Screen {
         pickerMode = mode;
         itemPickerPage = 0;
         if (itemPickerSearchBox == null) {
-            itemPickerSearchBox = new EditBox(font, 0, 0, ITEM_PICKER_W - 12, 14, Component.literal("Search"));
+            itemPickerSearchBox = new EditBox(font, 0, 0, ITEM_PICKER_SEARCH_W, ITEM_PICKER_SEARCH_H, Component.literal("Search"));
             itemPickerSearchBox.setMaxLength(128);
+            itemPickerSearchBox.setBordered(false);
             addRenderableWidget(itemPickerSearchBox);
         }
         itemPickerSearchBox.setValue("");
@@ -5899,28 +6079,26 @@ public final class QuestEditorScreen extends Screen {
         if (!isItemPickerOpen()) return false;
         int x = (width - ITEM_PICKER_W) / 2;
         int y = (height - ITEM_PICKER_H) / 2;
-        int closeX = x + ITEM_PICKER_W - 11;
-        int closeY = y + 3;
-        if (mouseX >= closeX && mouseX <= closeX + 8 && mouseY >= closeY && mouseY <= closeY + 8) {
+        int closeX = pickerCloseX(x);
+        int closeY = pickerCloseY(y);
+        if (mouseX >= closeX && mouseX <= closeX + ITEM_PICKER_CLOSE_SIZE && mouseY >= closeY && mouseY <= closeY + ITEM_PICKER_CLOSE_SIZE) {
             closeItemPicker();
             return true;
         }
         if (itemPickerSearchBox != null && itemPickerSearchBox.isMouseOver(mouseX, mouseY)) {
             return itemPickerSearchBox.mouseClicked(mouseX, mouseY, 0);
         }
+        if (pickerMode == PickerMode.ITEMS && clickPickerSideTab(mouseX, mouseY, x, y)) {
+            return true;
+        }
         if (mouseX < x || mouseX > x + ITEM_PICKER_W || mouseY < y || mouseY > y + ITEM_PICKER_H) {
             closeItemPicker();
             return true;
         }
-        if (pickerMode == PickerMode.ITEMS && mouseY >= y + 18 && mouseY <= y + 30) {
-            itemPickerTab = mouseX < x + ITEM_PICKER_W / 2 ? ItemPickerTab.CREATIVE : ItemPickerTab.INVENTORY;
-            itemPickerPage = 0;
-            return true;
-        }
-        int gridX = x + 5;
-        int gridY = y + 24;
-        if (mouseX >= gridX && mouseX < gridX + ITEM_PICKER_COLS * ITEM_PICKER_CELL
-                && mouseY >= gridY && mouseY < gridY + ITEM_PICKER_ROWS * ITEM_PICKER_CELL) {
+        int gridX = x + ITEM_PICKER_GRID_X;
+        int gridY = y + ITEM_PICKER_GRID_Y;
+        if (mouseX >= gridX && mouseX < x + ITEM_PICKER_GRID_RIGHT
+                && mouseY >= gridY && mouseY < y + ITEM_PICKER_GRID_BOTTOM) {
             int col = (int) ((mouseX - gridX) / ITEM_PICKER_CELL);
             int row = (int) ((mouseY - gridY) / ITEM_PICKER_CELL);
             int idx = row * ITEM_PICKER_COLS + col;
@@ -5956,33 +6134,31 @@ public final class QuestEditorScreen extends Screen {
         if (!isItemPickerOpen()) return;
         int x = (width - ITEM_PICKER_W) / 2;
         int y = (height - ITEM_PICKER_H) / 2;
-        gg.fill(x, y, x + ITEM_PICKER_W, y + ITEM_PICKER_H, 0xFF000000);
-        gg.fill(x, y, x + ITEM_PICKER_W, y + 1, 0xFFFFFFFF);
-        gg.fill(x, y + ITEM_PICKER_H - 1, x + ITEM_PICKER_W, y + ITEM_PICKER_H, 0xFFFFFFFF);
-        gg.fill(x, y, x + 1, y + ITEM_PICKER_H, 0xFFFFFFFF);
-        gg.fill(x + ITEM_PICKER_W - 1, y, x + ITEM_PICKER_W, y + ITEM_PICKER_H, 0xFFFFFFFF);
+        gg.blit(BROWSER_GUI_TEX, x, y, 0, 0, ITEM_PICKER_W, ITEM_PICKER_H, ITEM_PICKER_W, ITEM_PICKER_H);
         String title = switch (pickerMode) {
             case EFFECTS -> "Effect Browser";
             case MOBS -> "Mob Browser";
             default -> "Item Browser";
         };
-        gg.drawString(font, title, x + (ITEM_PICKER_W - font.width(title)) / 2, y + 4, 0xFFFFFFFF, false);
-        gg.drawString(font, "X", x + ITEM_PICKER_W - 10, y + 3, 0xFFFFFF00, false);
+        gg.drawString(font, title, x + (ITEM_PICKER_W - font.width(title)) / 2, y + 4, 0xFF000000, false);
+        int closeX = pickerCloseX(x);
+        int closeY = pickerCloseY(y);
+        gg.blit(X_BUTTON_TEX, closeX, closeY, 0, 0, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE);
         if (pickerMode == PickerMode.ITEMS) {
-            renderPickerTab(gg, mouseX, mouseY, x + 4, y + 12, ITEM_PICKER_W / 2 - 6, "All Items", itemPickerTab == ItemPickerTab.CREATIVE);
-            renderPickerTab(gg, mouseX, mouseY, x + ITEM_PICKER_W / 2 + 1, y + 12, ITEM_PICKER_W / 2 - 5, "Inventory", itemPickerTab == ItemPickerTab.INVENTORY);
+            renderPickerSideTab(gg, mouseX, mouseY, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16);
+            renderPickerSideTab(gg, mouseX, mouseY, x, y, ItemPickerTab.INVENTORY, BROWSER_TAB_INVENTORY_TEX, 16, 16);
         }
         if (itemPickerSearchBox != null) {
-            itemPickerSearchBox.setX(x + 4);
-            itemPickerSearchBox.setY(y + ITEM_PICKER_H - 16);
-            itemPickerSearchBox.setWidth(ITEM_PICKER_W - 10);
-            itemPickerSearchBox.setTextColor(0xFFFFFF00);
+            itemPickerSearchBox.setX(x + ITEM_PICKER_SEARCH_X);
+            itemPickerSearchBox.setY(y + ITEM_PICKER_SEARCH_Y);
+            itemPickerSearchBox.setWidth(ITEM_PICKER_SEARCH_W);
+            itemPickerSearchBox.setTextColor(0xFFFFFFFF);
             itemPickerSearchBox.visible = true;
         }
         List<ItemStack> items = itemPickerDisplayItems();
         List<String> mobIds = pickerMode == PickerMode.MOBS ? mobPickerIds() : List.of();
-        int gridX = x + 5;
-        int gridY = y + 24;
+        int gridX = x + ITEM_PICKER_GRID_X;
+        int gridY = y + ITEM_PICKER_GRID_Y;
         int start = itemPickerPage * (ITEM_PICKER_COLS * ITEM_PICKER_ROWS);
         ItemStack hovered = ItemStack.EMPTY;
         int hoveredIndex = -1;
@@ -5992,17 +6168,14 @@ public final class QuestEditorScreen extends Screen {
             int row = i / ITEM_PICKER_COLS;
             int sx = gridX + col * ITEM_PICKER_CELL;
             int sy = gridY + row * ITEM_PICKER_CELL;
-            boolean cellHover = mouseX >= sx && mouseX <= sx + 16 && mouseY >= sy && mouseY <= sy + 16;
-            gg.fill(sx - 1, sy - 1, sx + 17, sy + 17, cellHover ? 0xFFFFFFFF : 0xFF444444);
-            gg.fill(sx, sy, sx + 16, sy + 16, 0xFF111111);
+            boolean cellHover = mouseX >= sx && mouseX <= sx + ITEM_PICKER_CELL && mouseY >= sy && mouseY <= sy + ITEM_PICKER_CELL;
+            gg.blit(BROWSER_SLOT_TEX, sx, sy, 0, 0, ITEM_PICKER_CELL, ITEM_PICKER_CELL, ITEM_PICKER_CELL, ITEM_PICKER_CELL);
             if (at < items.size()) {
                 ItemStack stack = items.get(at);
                 if (pickerMode == PickerMode.EFFECTS) {
-                    renderEffectPickerIcon(gg, stack, sx, sy);
-                } else if (pickerMode == PickerMode.MOBS && at < mobIds.size()) {
-                    renderMobPreview(gg, mobIds.get(at), sx, sy);
+                    renderEffectPickerIcon(gg, stack, sx + 1, sy + 1);
                 } else {
-                    gg.renderItem(stack, sx, sy);
+                    gg.renderItem(stack, sx + 1, sy + 1);
                 }
                 if (cellHover) {
                     hovered = stack;
@@ -6024,12 +6197,70 @@ public final class QuestEditorScreen extends Screen {
         if (itemPickerSearchBox != null) {
             itemPickerSearchBox.render(gg, mouseX, mouseY, 0f);
         }
+        if (pickerMode == PickerMode.ITEMS) {
+            if (isMouseOverPickerSideTab(mouseX, mouseY, x, y, ItemPickerTab.CREATIVE)) {
+                gg.renderTooltip(font, Component.literal("All Items"), mouseX, mouseY);
+            } else if (isMouseOverPickerSideTab(mouseX, mouseY, x, y, ItemPickerTab.INVENTORY)) {
+                gg.renderTooltip(font, Component.literal("Inventory"), mouseX, mouseY);
+            }
+        }
     }
 
-    private void renderPickerTab(GuiGraphics gg, int mouseX, int mouseY, int x, int y, int w, String label, boolean selected) {
-        gg.fill(x, y, x + w, y + 10, selected ? 0xFF1C1C1C : 0xFF050505);
-        boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + 10;
-        gg.drawString(font, label, x + 2, y + 1, hovered ? 0xFFFFFF00 : 0xFFFFFFFF, false);
+    private boolean clickPickerSideTab(double mouseX, double mouseY, int pickerX, int pickerY) {
+        if (isMouseOverPickerSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE)) {
+            itemPickerTab = ItemPickerTab.CREATIVE;
+            itemPickerPage = 0;
+            return true;
+        }
+        if (isMouseOverPickerSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.INVENTORY)) {
+            itemPickerTab = ItemPickerTab.INVENTORY;
+            itemPickerPage = 0;
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isMouseOverPickerSideTab(double mouseX, double mouseY, int pickerX, int pickerY, ItemPickerTab tab) {
+        int tabX = pickerSideTabX(pickerX, tab);
+        int tabY = pickerSideTabY(pickerY, tab);
+        return mouseX >= tabX && mouseX <= tabX + TAB_W && mouseY >= tabY && mouseY <= tabY + TAB_H;
+    }
+
+    private void renderPickerSideTab(GuiGraphics gg, int mouseX, int mouseY, int pickerX, int pickerY, ItemPickerTab tab,
+                                     ResourceLocation icon, int iconTexW, int iconTexH) {
+        boolean selected = itemPickerTab == tab;
+        int tabX = pickerSideTabX(pickerX, tab);
+        int tabY = pickerSideTabY(pickerY, tab);
+        int renderX = tabX + (selected ? -2 : 0);
+        gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, tabY, 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
+        int iconSize = Math.min(ITEM_PICKER_SIDE_TAB_ICON_SIZE, Math.min(iconTexW, iconTexH));
+        int iconX = renderX + (TAB_W - iconSize) / 2;
+        int iconY = tabY + (TAB_H - iconSize) / 2;
+        blitScaled(gg, icon, iconX, iconY, iconSize, iconSize, iconTexW, iconTexH);
+    }
+
+    private int pickerSideTabX(int pickerX, ItemPickerTab tab) {
+        return pickerX + ITEM_PICKER_SIDE_TAB_X;
+    }
+
+    private int pickerSideTabY(int pickerY, ItemPickerTab tab) {
+        return pickerY + ITEM_PICKER_SIDE_TAB_Y + (tab == ItemPickerTab.INVENTORY ? TAB_H + TAB_GAP : 0);
+    }
+
+    private int pickerCloseX(int pickerX) {
+        return pickerX + ITEM_PICKER_W - ITEM_PICKER_CLOSE_OFFSET - ITEM_PICKER_CLOSE_SIZE;
+    }
+
+    private int pickerCloseY(int pickerY) {
+        return pickerY + ITEM_PICKER_CLOSE_OFFSET;
+    }
+
+    private void blitScaled(GuiGraphics gg, ResourceLocation texture, int x, int y, int width, int height, int texW, int texH) {
+        gg.pose().pushPose();
+        gg.pose().translate(x, y, 0);
+        gg.pose().scale(width / (float) texW, height / (float) texH, 1f);
+        gg.blit(texture, 0, 0, 0, 0, texW, texH, texW, texH);
+        gg.pose().popPose();
     }
 
     private List<ItemStack> itemPickerItems() {
@@ -6072,7 +6303,10 @@ public final class QuestEditorScreen extends Screen {
                 }
             }
             case MOBS -> {
-                for (String ignored : mobPickerIds()) out.add(new ItemStack(net.minecraft.world.item.Items.EGG));
+                for (String mobId : mobPickerIds()) {
+                    ItemStack egg = mobEggIconStack(mobId);
+                    out.add(egg.isEmpty() ? new ItemStack(net.minecraft.world.item.Items.EGG) : egg);
+                }
             }
             default -> {
             }
@@ -6230,15 +6464,6 @@ public final class QuestEditorScreen extends Screen {
         String entityPath = path.substring(0, path.length() - "_spawn_egg".length());
         String id = key.getNamespace() + ":" + entityPath;
         return entityIdCache.contains(id) ? id : "";
-    }
-
-    private void renderMobPreview(GuiGraphics gg, String mobId, int x, int y) {
-        if (minecraft == null || minecraft.level == null) return;
-        ResourceLocation rl = ResourceLocation.tryParse(mobId);
-        if (rl == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(rl)) return;
-        Entity entity = BuiltInRegistries.ENTITY_TYPE.get(rl).create(minecraft.level);
-        if (!(entity instanceof LivingEntity living)) return;
-        InventoryScreen.renderEntityInInventoryFollowsMouse(gg, x, y, x + 16, y + 16, 8, 0f, 0f, 0f, living);
     }
 
     private ItemStack selectedItemForRow(EntryRowKind kind, int row) {
@@ -7645,6 +7870,29 @@ public final class QuestEditorScreen extends Screen {
             this.icon = icon == null ? "" : icon;
             this.sortKey = sortKey == null ? "" : sortKey;
         }
+    }
+
+    private static final class QuestListItem {
+        final NamedEntry entry;
+        final QuestEntryData data;
+
+        QuestListItem(NamedEntry entry, QuestEntryData data) {
+            this.entry = entry;
+            this.data = data;
+        }
+    }
+
+    private static final class QuestListIndex {
+        static final QuestListIndex EMPTY = new QuestListIndex();
+
+        final Map<String, String> categoryNames = new HashMap<>();
+        final Map<String, String> subCategoryNames = new HashMap<>();
+        final Set<String> categoryIds = new HashSet<>();
+        final Set<String> subCategoryIds = new HashSet<>();
+        final Set<String> questIds = new HashSet<>();
+        final Set<String> duplicateQuestIds = new HashSet<>();
+        final Map<String, QuestEntryData> questDataByEntryId = new HashMap<>();
+        final List<QuestListItem> items = new ArrayList<>();
     }
 
     private static final class QuestMoveEntry {
