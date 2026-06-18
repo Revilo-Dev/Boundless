@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "companions:item/illager_golem_spawn_egg"
+  }
+}

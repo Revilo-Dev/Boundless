@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "undergarden:item/greater_dweller_spawn_egg"
+  }
+}

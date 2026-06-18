@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "eternalnether:item/corpor_spawn_egg"
+  }
+}

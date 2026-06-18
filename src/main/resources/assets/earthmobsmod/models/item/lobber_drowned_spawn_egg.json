@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "earthmobsmod:item/lobber_drowned_spawn_egg"
+  }
+}

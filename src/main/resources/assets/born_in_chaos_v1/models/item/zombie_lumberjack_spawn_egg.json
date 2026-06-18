@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "born_in_chaos_v1:item/zombie_lumberjack_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "tropicraft:item/tropibee_spawn_egg"
+  }
+}

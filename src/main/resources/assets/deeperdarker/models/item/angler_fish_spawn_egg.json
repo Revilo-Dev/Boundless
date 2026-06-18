@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "deeperdarker:item/angler_fish_spawn_egg"
+  }
+}

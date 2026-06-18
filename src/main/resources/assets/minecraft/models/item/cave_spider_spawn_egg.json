@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "minecraft:item/cave_spider_spawn_egg"
+  }
+}

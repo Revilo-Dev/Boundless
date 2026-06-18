@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "aether:item/miscellaneous/mimic_spawn_egg"
+  }
+}

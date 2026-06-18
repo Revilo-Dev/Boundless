@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "twilightforest:item/helmet_crab_spawn_egg"
+  }
+}

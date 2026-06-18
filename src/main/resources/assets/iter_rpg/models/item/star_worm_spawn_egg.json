@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "iter_rpg:item/star_worm_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "blue_skies:item/alchemist_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "swampier_swamps:item/dragonfly_spawn_egg"
+  }
+}

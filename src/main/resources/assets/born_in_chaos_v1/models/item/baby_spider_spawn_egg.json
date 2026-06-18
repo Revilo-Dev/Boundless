@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "born_in_chaos_v1:item/baby_spider_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "earthmobsmod:item/dairy_cow_spawn_egg"
+  }
+}

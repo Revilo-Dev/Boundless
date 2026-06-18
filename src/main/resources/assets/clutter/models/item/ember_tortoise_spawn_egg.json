@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "clutter:item/ember_tortoise_spawn_egg"
+  }
+}

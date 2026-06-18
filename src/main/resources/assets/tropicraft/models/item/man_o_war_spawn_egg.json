@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "tropicraft:item/man_o_war_spawn_egg"
+  }
+}

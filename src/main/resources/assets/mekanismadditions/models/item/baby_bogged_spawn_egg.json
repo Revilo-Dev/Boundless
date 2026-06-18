@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mekanismadditions:item/baby_bogged_spawn_egg"
+  }
+}

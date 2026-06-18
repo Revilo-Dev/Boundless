@@ -389,7 +389,7 @@ public final class QuestListWidget extends AbstractWidget {
                     });
                 }
 
-                float textScale = 0.66f;
+                float textScale = 0.66f * Config.questTextScale();
                 String name = sc.name;
                 int textX = iconX + textIconSize + 2;
                 int textH = (int) (mc.font.lineHeight * textScale);

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "tropicraft:item/sea_urchin_spawn_egg"
+  }
+}

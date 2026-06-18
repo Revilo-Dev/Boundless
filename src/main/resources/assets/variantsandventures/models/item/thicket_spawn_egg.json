@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "variantsandventures:item/thicket_spawn_egg"
+  }
+}

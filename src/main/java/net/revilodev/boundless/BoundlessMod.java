@@ -17,6 +17,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -100,11 +101,16 @@ public final class BoundlessMod {
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer sp) {
-            BoundlessNetwork.syncPlayer(sp);
             if (!Config.disableQuestBook() && Config.spawnWithQuestBook() && !hasQuestBook(sp)) {
                 sp.getInventory().add(new ItemStack(ModItems.QUEST_BOOK.get()));
             }
         }
+    }
+
+    @SubscribeEvent
+    public void onDatapackSync(OnDatapackSyncEvent event) {
+        QuestData.loadServer(event.getPlayerList().getServer(), true);
+        event.getRelevantPlayers().forEach(BoundlessNetwork::syncPlayer);
     }
 
     private static boolean hasQuestBook(ServerPlayer player) {

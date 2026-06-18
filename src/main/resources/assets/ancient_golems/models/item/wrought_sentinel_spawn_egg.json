@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "ancient_golems:item/wrought_sentinel_spawn_egg"
+  }
+}

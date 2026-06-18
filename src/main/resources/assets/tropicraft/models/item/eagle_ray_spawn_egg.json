@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "tropicraft:item/eagle_ray_spawn_egg"
+  }
+}

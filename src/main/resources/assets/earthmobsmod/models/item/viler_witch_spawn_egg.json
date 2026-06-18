@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "earthmobsmod:item/viler_witch_spawn_egg"
+  }
+}

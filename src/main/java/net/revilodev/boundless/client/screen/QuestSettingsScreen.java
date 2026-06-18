@@ -35,12 +35,12 @@ public final class QuestSettingsScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
     private static final ResourceLocation BTN_TEX_DISABLED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
-    private static final ResourceLocation BTN_BACK_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_button.png");
-    private static final ResourceLocation BTN_BACK_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_highlighted.png");
+    private static final ResourceLocation BACK_TAB_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
+    private static final ResourceLocation BACK_TAB_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
     private static final ResourceLocation HEADER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/9-slice-header.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
     private static final ResourceLocation TAB_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
@@ -62,6 +62,11 @@ public final class QuestSettingsScreen extends Screen {
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
     private static final int TAB_GAP = 3;
+    private static final int BACK_TAB_W = 27;
+    private static final int BACK_TAB_H = 17;
+    private static final int SIDE_TAB_X_OFFSET = 4;
+    private static final int BACK_TAB_X_OFFSET = SIDE_TAB_X_OFFSET + 6;
+    private static final int BACK_TAB_BOTTOM_MARGIN = 6;
     private static final int HEADER_TEX_W = 72;
     private static final int HEADER_TEX_H = 10;
     private static final int HEADER_SLICE = 3;
@@ -189,7 +194,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void initMenu() {
-        menuList = new QuestListWidget(px, py, pw, ph, this::handleMenuClick);
+        menuList = new QuestListWidget(px + 4, py, pw, ph, this::handleMenuClick);
         menuList.setQuests(buildMenuQuests());
         menuList.setCategory("all");
         menuList.setBypassFilters(true);
@@ -347,11 +352,19 @@ public final class QuestSettingsScreen extends Screen {
 
     private void initNavButtons() {
         int btnY = py + ph - 20;
-        backButton = new BackButton(px, btnY, () -> setPage(Page.MENU));
-        resetConfigButton = new HoldResetButton(px + 31, btnY, 78, 20, () -> Component.literal(configTab == ConfigTab.ALL ? "Reset all configs" : "Reset to default"), this::resetCurrentConfigTab);
+        backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
+        resetConfigButton = new HoldResetButton(px + 2, btnY, pw - 4, 20, () -> Component.literal(configTab == ConfigTab.ALL ? "Reset all configs" : "Reset to default"), this::resetCurrentConfigTab);
 
         addRenderableWidget(backButton);
         addRenderableWidget(resetConfigButton);
+    }
+
+    private void goBack() {
+        if (page == Page.MENU) {
+            Minecraft.getInstance().setScreen(parent);
+        } else {
+            setPage(Page.MENU);
+        }
     }
 
     private void initHeader() {
@@ -422,9 +435,8 @@ public final class QuestSettingsScreen extends Screen {
         resetConfigButton.visible = config;
         resetConfigButton.active = config;
 
-        boolean showBack = page != Page.MENU;
-        backButton.visible = showBack;
-        backButton.active = showBack;
+        backButton.visible = true;
+        backButton.active = true;
         if (header != null) {
             header.visible = true;
             header.active = false;
@@ -564,7 +576,7 @@ public final class QuestSettingsScreen extends Screen {
             hideQuestWidgetIcons = false;
             questTextScale = 1.0D;
             questIconScale = 1.0D;
-            enableDescriptionColors = false;
+            enableDescriptionColors = true;
             hideCategoryHeader = false;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
@@ -746,6 +758,7 @@ public final class QuestSettingsScreen extends Screen {
         int max = maxConfigScroll();
         if (configScrollY < 0f) configScrollY = 0f;
         if (configScrollY > max) configScrollY = max;
+        layoutBackButton();
 
         int top = configViewportTop();
         int bottom = configViewportBottom();
@@ -760,7 +773,8 @@ public final class QuestSettingsScreen extends Screen {
             layoutRow(visibleRows.get(i), baseY + i * rowGap, top, bottom);
         }
         if (resetConfigButton != null) {
-            resetConfigButton.setX(px + 24);
+            resetConfigButton.setX(px + 2);
+            resetConfigButton.setWidth(pw - 4);
             resetConfigButton.setY(scrolledY(baseY + visibleRows.size() * rowGap + 2));
             boolean inView = resetConfigButton.getY() + resetConfigButton.getHeight() > top && resetConfigButton.getY() < bottom;
             resetConfigButton.visible = page == Page.CONFIG && inView;
@@ -779,7 +793,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void layoutConfigTabButtons() {
-        int x = leftX - TAB_W + 4;
+        int x = leftX - TAB_W + SIDE_TAB_X_OFFSET;
         int startY = py + 6;
         for (int i = 0; i < configTabButtons.size(); i++) {
             ConfigTabButton button = configTabButtons.get(i);
@@ -788,6 +802,12 @@ public final class QuestSettingsScreen extends Screen {
             button.visible = page == Page.CONFIG;
             button.active = page == Page.CONFIG;
         }
+    }
+
+    private void layoutBackButton() {
+        if (backButton == null) return;
+        backButton.setX(leftX - TAB_W + BACK_TAB_X_OFFSET);
+        backButton.setY(topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN);
     }
 
     private void layoutRow(ConfigRow row, int baseY, int top, int bottom) {
@@ -937,7 +957,8 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean selected = configTab == tab;
-            int renderX = getX() + (selected ? -2 : 0);
+            boolean hovered = this.isMouseOver(mouseX, mouseY);
+            int renderX = getX() + (selected && !hovered ? -2 : 0);
             gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, getY(), 0, 0, this.width, this.height, TAB_W, TAB_H);
             gg.blit(icon, renderX + (this.width - 16) / 2, getY() + (this.height - 16) / 2, 0, 0, 16, 16, 16, 16);
             if (this.isMouseOver(mouseX, mouseY)) {
@@ -989,10 +1010,10 @@ public final class QuestSettingsScreen extends Screen {
             String valueText = value == null ? "" : value.get();
             if (valueText == null) valueText = "";
 
-            int labelX = getX() + 6;
+            int labelX = getX() + 7;
             float valueScale = 0.72f;
             int valueW = (int) (font.width(valueText) * valueScale);
-            int valueX = getX() + this.width - valueW - 6;
+            int valueX = getX() + this.width - valueW - 5;
 
             String labelText = label;
             int maxLabelW = valueX - labelX + 9;
@@ -1088,7 +1109,7 @@ public final class QuestSettingsScreen extends Screen {
             var font = Minecraft.getInstance().font;
             float scale = 0.72f;
             int textW = Math.round(font.width(text) * scale);
-            int textX = getX() + (this.width - textW) / 2;
+            int textX = getX() + (this.width - textW) / 2 - 5;
             int textY = getY() + (this.height - Math.round(font.lineHeight * scale)) / 2;
             boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
             gg.pose().pushPose();
@@ -1127,7 +1148,7 @@ public final class QuestSettingsScreen extends Screen {
 
             var font = Minecraft.getInstance().font;
             int textW = font.width(getMessage());
-            int textX = getX() + (this.width - textW) / 2 + 2;
+            int textX = getX() + (this.width - textW) / 2 - 3;
             int textY = getY() + (this.height - font.lineHeight) / 2 + 1;
             int color = this.active ? 0xFFFFFF : 0x808080;
             gg.drawString(font, getMessage(), textX, textY, color, false);
@@ -1141,7 +1162,7 @@ public final class QuestSettingsScreen extends Screen {
         private final Runnable onPress;
 
         public BackButton(int x, int y, Runnable onPress) {
-            super(x, y, 24, 20, Component.empty());
+            super(x, y, BACK_TAB_W, BACK_TAB_H, Component.empty());
             this.onPress = onPress;
         }
 
@@ -1153,7 +1174,7 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.isMouseOver(mouseX, mouseY);
-            ResourceLocation tex = hovered ? BTN_BACK_TEX_HOVER : BTN_BACK_TEX;
+            ResourceLocation tex = hovered ? BACK_TAB_HOVER_TEX : BACK_TAB_TEX;
             gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
         }
 

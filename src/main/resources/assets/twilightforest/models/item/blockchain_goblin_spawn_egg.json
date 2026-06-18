@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "twilightforest:item/blockchain_goblin_spawn_egg"
+  }
+}

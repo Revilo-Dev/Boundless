@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "gnumus:item/gnumus_hunter_not_dispawn_spawn_egg"
+  }
+}

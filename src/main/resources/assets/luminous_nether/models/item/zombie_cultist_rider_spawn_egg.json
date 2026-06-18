@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "luminous_nether:item/zombie_cultist_rider_spawn_egg"
+  }
+}

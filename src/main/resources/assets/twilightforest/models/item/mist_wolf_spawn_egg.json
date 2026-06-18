@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "twilightforest:item/mist_wolf_spawn_egg"
+  }
+}

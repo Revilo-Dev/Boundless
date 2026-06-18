@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "enderzoology:item/fallen_mount_spawn_egg"
+  }
+}

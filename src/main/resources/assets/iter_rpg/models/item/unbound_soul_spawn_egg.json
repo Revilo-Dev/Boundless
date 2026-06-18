@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "iter_rpg:item/unbound_soul_spawn_egg"
+  }
+}

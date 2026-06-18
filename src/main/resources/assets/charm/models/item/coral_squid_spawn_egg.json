@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "charm:item/coral_squid_spawn_egg"
+  }
+}

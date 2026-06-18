@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "unusualprehistory:item/coty_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "enderzoology:item/wither_cat_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "realmrpg_quests:item/cook_spawn_egg"
+  }
+}

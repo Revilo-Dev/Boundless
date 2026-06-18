@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "legendary_monsters:item/ambusher_spawn_egg"
+  }
+}

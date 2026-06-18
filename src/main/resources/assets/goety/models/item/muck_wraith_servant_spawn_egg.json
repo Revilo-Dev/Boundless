@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "goety:item/muck_wraith_servant_spawn_egg"
+  }
+}

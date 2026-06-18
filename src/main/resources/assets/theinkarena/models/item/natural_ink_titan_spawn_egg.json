@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "theinkarena:item/natural_ink_titan_spawn_egg"
+  }
+} 

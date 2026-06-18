@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "hybrid-aquatic:item/ratfish_spawn_egg"
+  }
+}

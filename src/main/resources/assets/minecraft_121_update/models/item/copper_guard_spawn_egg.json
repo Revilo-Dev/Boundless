@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "minecraft_121_update:item/copper_guard_spawn_egg"
+  }
+}

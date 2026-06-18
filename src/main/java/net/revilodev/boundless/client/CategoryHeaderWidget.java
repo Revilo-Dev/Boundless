@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 @OnlyIn(Dist.CLIENT)
 public final class CategoryHeaderWidget extends AbstractWidget {
     private static final ResourceLocation HEADER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/9-slice-header.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
     private static final int TEX_W = 72;
     private static final int TEX_H = 10;
     private static final int SLICE = 3;

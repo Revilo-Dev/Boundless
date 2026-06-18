@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "dawnera:item/sabertooth_salmon_spawn_egg"
+  }
+}

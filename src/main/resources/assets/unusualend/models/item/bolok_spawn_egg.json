@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "unusualend:item/bolok_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "deep_dark_regrowth:item/replicate_spawn_egg"
+  }
+}

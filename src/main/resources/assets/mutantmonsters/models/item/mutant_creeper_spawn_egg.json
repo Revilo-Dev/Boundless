@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "mutantmonsters:item/mutant_creeper_spawn_egg"
+  }
+}

@@ -123,7 +123,7 @@ public final class QuestPanelClient {
         }
         e.addListener(st.tabs);
 
-        st.header = new CategoryHeaderWidget(0, 0, PANEL_W, () -> st.tabs == null ? "" : st.tabs.getSelectedName());
+        st.header = new CategoryHeaderWidget(0, 0, PANEL_W, () -> sectionTitle(st));
         e.addListener(st.header);
 
         int filterX = computePanelX(inv) + 10;
@@ -229,8 +229,8 @@ public final class QuestPanelClient {
     }
 
     public static void applyConfigChanges() {
-        QuestData.loadClient(true);
         for (State st : STATES.values()) {
+            if (st == null) continue;
             if (st.list != null) {
                 st.list.setQuests(QuestData.all());
                 st.list.setCategory(st.selectedCategory);
@@ -257,6 +257,8 @@ public final class QuestPanelClient {
                 st.btn.visible = show;
                 st.btn.active = show;
             }
+            reposition(st.inv, st);
+            updateVisibility(st);
         }
     }
 
@@ -485,7 +487,7 @@ public final class QuestPanelClient {
         }
 
         if (st.header != null) {
-            boolean showHeader = st.open && !Config.hideCategoryHeader() && !Config.disableCategories();
+            boolean showHeader = st.open && (st.showingDetails || (!Config.hideCategoryHeader() && !Config.disableCategories()));
             st.header.visible = showHeader;
             st.header.active = false;
         }
@@ -545,6 +547,14 @@ public final class QuestPanelClient {
             lastSelectedCategory = st.selectedCategory;
             if (st.list != null) st.list.setCategory(st.selectedCategory);
         }
+    }
+
+    private static String sectionTitle(State st) {
+        if (st == null) return "";
+        if (st.showingDetails && st.details != null) {
+            return st.details.currentQuestTitle();
+        }
+        return st.tabs == null ? "" : st.tabs.getSelectedName();
     }
 
 

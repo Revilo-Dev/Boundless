@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "earthmobsmod:item/zombified_rabbit_spawn_egg"
+  }
+}

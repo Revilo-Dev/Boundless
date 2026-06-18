@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "hybrid-aquatic:item/golden_dorado_spawn_egg"
+  }
+}

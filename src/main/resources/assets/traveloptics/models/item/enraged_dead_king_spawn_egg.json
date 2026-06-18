@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "traveloptics:item/enraged_dead_king_spawn_egg"
+  }
+}

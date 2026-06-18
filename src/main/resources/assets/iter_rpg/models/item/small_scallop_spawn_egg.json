@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "iter_rpg:item/small_scallop_spawn_egg"
+  }
+}

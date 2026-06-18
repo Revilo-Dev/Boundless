@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "traveloptics:item/void_tome_spawn_egg"
+  }
+}

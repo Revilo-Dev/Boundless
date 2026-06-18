@@ -125,7 +125,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         int filterY = topY + panelHeight - filter.getPreferredHeight() + 29;
         filter.setBounds(filterX, filterY, filter.getPreferredWidth(), filter.getPreferredHeight());
 
-        header = new CategoryHeaderWidget(leftX, topY, panelWidth, () -> tabs == null ? "" : tabs.getSelectedName());
+        header = new CategoryHeaderWidget(leftX, topY, panelWidth, this::sectionTitle);
         header.setPanelBounds(leftX, topY, panelWidth);
         settingsButton = new SettingsButton(leftX - 22, topY + panelHeight - 20, () -> {
             if (minecraft == null || minecraft.player == null || !minecraft.player.hasPermissions(2)) return;
@@ -180,7 +180,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         header.active = false;
 
         if (header != null) {
-            boolean showHeader = !Config.hideCategoryHeader() && !Config.disableCategories();
+            boolean showHeader = showingDetails || (!Config.hideCategoryHeader() && !Config.disableCategories());
             header.visible = showHeader;
         }
 
@@ -195,6 +195,13 @@ public final class StandaloneQuestBookScreen extends Screen {
             settingsButton.visible = showSettings;
             settingsButton.active = showSettings;
         }
+    }
+
+    private String sectionTitle() {
+        if (showingDetails && details != null) {
+            return details.currentQuestTitle();
+        }
+        return tabs == null ? "" : tabs.getSelectedName();
     }
 
     @Override

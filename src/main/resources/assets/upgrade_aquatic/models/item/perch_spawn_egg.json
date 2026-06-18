@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "upgrade_aquatic:item/perch_spawn_egg"
+  }
+}

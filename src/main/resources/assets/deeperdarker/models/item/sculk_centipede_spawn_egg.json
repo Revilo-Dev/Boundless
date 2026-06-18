@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "deeperdarker:item/sculk_centipede_spawn_egg"
+  }
+}

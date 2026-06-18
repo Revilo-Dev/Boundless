@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "endermanoverhaul:item/soulsand_valley_enderman_spawn_egg"
+  }
+}

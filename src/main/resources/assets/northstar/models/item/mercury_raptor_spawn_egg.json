@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "northstar:item/mercury_raptor_spawn_egg"
+  }
+}

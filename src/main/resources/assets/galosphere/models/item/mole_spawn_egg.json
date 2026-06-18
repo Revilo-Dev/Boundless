@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "galosphere:item/mole_spawn_egg"
+  }
+}

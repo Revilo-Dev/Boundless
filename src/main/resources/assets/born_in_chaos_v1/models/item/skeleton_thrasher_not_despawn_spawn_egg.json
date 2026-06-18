@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "born_in_chaos_v1:item/skeleton_thrasher_not_despawn_spawn_egg"
+  }
+}

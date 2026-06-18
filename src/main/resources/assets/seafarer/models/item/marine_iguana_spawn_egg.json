@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "seafarer:item/marine_iguana_spawn_egg"
+  }
+}

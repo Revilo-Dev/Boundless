@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "crittersandcompanions:item/shima_enaga_spawn_egg"
+  }
+}

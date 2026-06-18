@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "biomancy:item/thick_fur_sheep_spawn_egg"
+  }
+}

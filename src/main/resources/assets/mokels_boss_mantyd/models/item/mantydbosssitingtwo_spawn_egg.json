@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mokels_boss_mantyd:item/boss_mantyd_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "illagerinvasion:item/invoker_spawn_egg"
+  }
+}

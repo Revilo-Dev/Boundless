@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "dawnera:item/pond_snail_spawn_egg"
+  }
+}

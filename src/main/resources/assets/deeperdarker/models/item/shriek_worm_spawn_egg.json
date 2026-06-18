@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "deeperdarker:item/shriek_worm_spawn_egg"
+  }
+}

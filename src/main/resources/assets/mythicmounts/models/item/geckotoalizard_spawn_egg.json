@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mythicmounts:item/geckotoalizard_spawn_egg"
+  }
+}

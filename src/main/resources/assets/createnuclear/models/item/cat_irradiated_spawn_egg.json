@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "createnuclear:item/cat_irradiated_spawn_egg"
+  }
+}

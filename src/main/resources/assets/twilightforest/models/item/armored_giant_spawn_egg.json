@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "twilightforest:item/armored_giant_spawn_egg"
+  }
+}

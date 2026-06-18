@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mischief_illagers:item/withermancer_spawn_egg"
+  }
+}

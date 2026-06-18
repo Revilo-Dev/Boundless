@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "createnuclear:item/chicken_irradiated_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "legendary_monsters:item/shulker_mimic_spawn_egg"
+  }
+}

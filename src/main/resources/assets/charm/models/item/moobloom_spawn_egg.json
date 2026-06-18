@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "charm:item/moobloom_spawn_egg"
+  }
+}

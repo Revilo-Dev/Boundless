@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "stalwart_dungeons:item/giddy_blaze_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "super_block_world:item/shy_guy_spawn_egg"
+  }
+}

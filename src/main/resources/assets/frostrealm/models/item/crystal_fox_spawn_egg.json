@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "frostrealm:item/crystal_fox_spawn_egg"
+  }
+}

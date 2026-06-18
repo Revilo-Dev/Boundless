@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "hunters_return:item/spawnegg_hunter"
+  }
+}

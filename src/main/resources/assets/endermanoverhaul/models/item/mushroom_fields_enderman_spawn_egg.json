@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "endermanoverhaul:item/mushroom_fields_enderman_spawn_egg"
+  }
+}
