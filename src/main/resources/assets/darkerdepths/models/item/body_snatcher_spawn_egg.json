@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "darkerdepths:item/body_snatcher_spawn_egg"
+  }
+}

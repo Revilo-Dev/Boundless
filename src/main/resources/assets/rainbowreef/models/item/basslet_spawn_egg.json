@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "rainbowreef:item/basslet_spawn_egg"
+  }
+}

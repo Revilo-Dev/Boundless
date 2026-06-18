@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "theinkarena:item/soul_specter_spawn_egg"
+  }
+}

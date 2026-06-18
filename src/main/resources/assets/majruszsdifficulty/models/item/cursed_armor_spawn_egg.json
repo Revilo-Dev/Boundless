@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "majruszsdifficulty:item/cursed_armor_spawn_egg"
+  }
+}

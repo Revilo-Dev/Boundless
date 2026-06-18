@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "enlightened_end:item/floating_elevibloom_spawn_egg"
+  }
+}

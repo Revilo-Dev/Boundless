@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "alexscaves:item/spawn_egg_atlatitan"
+  }
+}

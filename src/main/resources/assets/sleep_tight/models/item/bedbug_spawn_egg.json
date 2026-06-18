@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "sleep_tight:item/bedbug_spawn_egg"
+  }
+}

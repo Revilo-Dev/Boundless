@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "aquatic_frontiers:item/sandy_coral_spawn_egg"
+  }
+}

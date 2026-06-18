@@ -619,7 +619,11 @@ public final class BoundlessNetwork {
     }
 
     private static void handleSyncClear(SyncClear p, IPayloadContext ctx) {
-        ctx.enqueueWork(QuestTracker::clientClearAll);
+        ctx.enqueueWork(() -> {
+            QuestTracker.clientClearAll();
+            QuestData.clearClientNetworkData();
+            ClientQuestSync.clear();
+        });
     }
 
     private static void handleToast(Toast p, IPayloadContext ctx) {
@@ -873,6 +877,7 @@ public final class BoundlessNetwork {
     @OnlyIn(Dist.CLIENT)
     private static final class ClientQuestSync {
         private static int activeSyncId = -1;
+        private static int newestSyncIdSeen = -1;
         private static int expected = -1;
         private static byte[][] parts = null;
         private static int received = 0;
@@ -884,6 +889,11 @@ public final class BoundlessNetwork {
             received = 0;
         }
 
+        private static void clear() {
+            reset();
+            newestSyncIdSeen = -1;
+        }
+
         private static void accept(SyncQuestsChunk p) {
             if (p == null) return;
 
@@ -893,9 +903,11 @@ public final class BoundlessNetwork {
 
             if (total <= 0 || total > 65536) { reset(); return; }
             if (idx < 0 || idx >= total) { reset(); return; }
+            if (sid < newestSyncIdSeen) return;
 
             if (activeSyncId != sid || expected != total || parts == null) {
                 activeSyncId = sid;
+                newestSyncIdSeen = sid;
                 expected = total;
                 parts = new byte[total][];
                 received = 0;

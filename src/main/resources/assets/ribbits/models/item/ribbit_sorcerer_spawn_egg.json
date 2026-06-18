@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "ribbits:item/ribbit_sorcerer_spawn_egg"
+  }
+}

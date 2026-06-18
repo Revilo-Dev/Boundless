@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "lava_monster:item/lava_monster_spawn_egg"
+  }
+}

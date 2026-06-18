@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "dawnera:item/diabloceratops_spawn_egg"
+  }
+}

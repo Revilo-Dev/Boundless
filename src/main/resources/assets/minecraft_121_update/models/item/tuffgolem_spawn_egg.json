@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "minecraft_121_update:item/tuffgolem_spawn_egg"
+  }
+}

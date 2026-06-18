@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "samurai_dynasty:item/akaname_spawn_egg"
+  }
+}

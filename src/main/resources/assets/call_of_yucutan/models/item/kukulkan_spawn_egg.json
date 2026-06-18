@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "call_of_yucutan:item/kukulkan_spawn_egg"
+  }
+}

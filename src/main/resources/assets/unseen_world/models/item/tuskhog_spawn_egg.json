@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "unseen_world:item/tuskhog_spawn_egg"
+  }
+}

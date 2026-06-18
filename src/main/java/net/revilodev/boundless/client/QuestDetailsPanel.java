@@ -208,6 +208,10 @@ public final class QuestDetailsPanel extends AbstractWidget {
         if (q != null) PinnedQuestHud.setCurrentQuestId(q.id);
     }
 
+    public String currentQuestTitle() {
+        return quest == null ? "" : quest.name;
+    }
+
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         if (!this.visible || quest == null) return;
@@ -236,10 +240,10 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         String title = quest.name;
         int nameWidth = w - 32 - 18;
-        float titleScale = 1f;
+        float titleScale = textScale();
         if (title != null && title.length() > 16) {
             int textW = mc.font.width(title);
-            if (textW > 0) titleScale = Math.max(0.5f, Math.min(1f, (float) nameWidth / (float) textW));
+            if (textW > 0) titleScale = Math.max(0.5f, Math.min(titleScale, (float) nameWidth / (float) textW));
         }
         if (titleScale < 1f) {
             gg.pose().pushPose();
@@ -315,8 +319,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         if (!quest.dependencies.isEmpty()) {
             Component requiresLabel = Component.translatable("ui.boundless.questbook.requires");
-            gg.drawWordWrap(mc.font, requiresLabel, x + 4, curY[0], w - 8, 0xff9f0f);
-            curY[0] += mc.font.wordWrapHeight(requiresLabel, w - 8) + 2;
+            drawScaledWordWrap(gg, requiresLabel, x + 4, curY[0], w - 8, 0xff9f0f);
+            curY[0] += scaledWrappedHeight(requiresLabel, w - 8) + 2;
 
             for (String depId : quest.dependencies) {
                 QuestData.Quest depQuest = QuestData.byId(depId).orElse(null);
@@ -324,7 +328,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
                 int lineY = curY[0];
                 int textX = x + 24;
-                int textW = mc.font.width(depName);
+                int textW = scaledTextWidth(depName);
                 int color = 0xFF5555;
 
                 if (depQuest != null && mc.player != null) {
@@ -336,14 +340,15 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     depQuest.iconItem().ifPresent(icon -> renderScaledItem(gg, new ItemStack(icon), x + 4, lineY));
                 }
 
-                gg.drawString(mc.font, depName, textX, lineY + 4, color, false);
-                gg.fill(textX, lineY + 14, textX + textW, lineY + 15, color);
+                drawScaledString(gg, depName, textX, lineY + 4, color);
+                int underlineY = lineY + 4 + scaledLineHeight();
+                gg.fill(textX, underlineY, textX + textW, underlineY + 1, color);
 
-                DepClickRegion region = new DepClickRegion(textX, lineY, textW, mc.font.lineHeight + 2, depId);
+                DepClickRegion region = new DepClickRegion(textX, lineY, textW, scaledLineHeight() + 6, depId);
                 depRegions.add(region);
                 if (region.contains(mouseX, mouseY)) hoveredTooltips.add(Component.translatable("ui.boundless.questbook.view"));
 
-                curY[0] += LINE_ITEM_ROW;
+                curY[0] += scaledRowHeight();
             }
             curY[0] += 2;
         }
@@ -814,8 +819,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
 
         if (!quest.dependencies.isEmpty()) {
-            y += mc.font.wordWrapHeight(Component.translatable("ui.boundless.questbook.requires"), w - 8) + 2;
-            y += quest.dependencies.size() * LINE_ITEM_ROW + 2;
+            y += scaledWrappedHeight(Component.translatable("ui.boundless.questbook.requires"), w - 8) + 2;
+            y += quest.dependencies.size() * scaledRowHeight() + 2;
         }
 
         if (quest.completion != null && !quest.completion.targets.isEmpty()) {

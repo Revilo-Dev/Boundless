@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "golemoverhaul:item/kelp_golem_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "goety:item/hoglin_servant_spawn_egg"
+  }
+}

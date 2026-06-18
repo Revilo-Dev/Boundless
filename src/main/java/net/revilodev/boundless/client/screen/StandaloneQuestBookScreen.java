@@ -6,8 +6,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryTabsWidget;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
@@ -197,7 +197,8 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
     }
 
-        public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    @Override
+    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
@@ -212,23 +213,24 @@ public final class StandaloneQuestBookScreen extends Screen {
         super.render(gg, mouseX, mouseY, partialTick);
     }
 
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         boolean overSearch = searchBox != null && searchBox.visible
                 && mouseX >= searchBox.getX() && mouseX <= searchBox.getX() + searchBox.getWidth()
                 && mouseY >= searchBox.getY() && mouseY <= searchBox.getY() + searchBox.getHeight();
         if (list.visible && list.active) {
             if (!overSearch && mouseX >= list.getX() && mouseX <= list.getX() + list.getWidth()
                     && mouseY >= list.getY() && mouseY <= list.getY() + list.getHeight()) {
-                if (list.mouseScrolled(mouseX, mouseY, scrollDelta)) return true;
+                if (list.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
             }
         }
         if (details.visible && details.active) {
             if (mouseX >= details.getX() && mouseX <= details.getX() + details.getWidth()
                     && mouseY >= details.getY() && mouseY <= details.getY() + details.getHeight()) {
-                if (details.mouseScrolled(mouseX, mouseY, scrollDelta)) return true;
+                if (details.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollDelta);
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override

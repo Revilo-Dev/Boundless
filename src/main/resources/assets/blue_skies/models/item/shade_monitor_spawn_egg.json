@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "blue_skies:item/shade_monitor_spawn_egg"
+  }
+}

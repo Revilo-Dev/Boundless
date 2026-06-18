@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "rainbowreef:item/moorish_idol_spawn_egg"
+  }
+}

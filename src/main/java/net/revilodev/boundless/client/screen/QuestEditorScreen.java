@@ -23,12 +23,9 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.SharedConstants;
 import net.minecraft.util.StringUtil;
@@ -125,11 +122,19 @@ public final class QuestEditorScreen extends Screen {
     private static final ResourceLocation LOCK_TEX_HOVER =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_hovered.png");
     private static final ResourceLocation HEADER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/9-slice-header.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
     private static final ResourceLocation TAB_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
+    private static final ResourceLocation BACK_TAB_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
+    private static final ResourceLocation BACK_TAB_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
+    private static final ResourceLocation UNSAVED_POPUP_BG_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/20x20-9-slice.png");
+    private static final ResourceLocation UNSAVED_EXCLAMATION_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/icon/exclamation.png");
     private static final ResourceLocation BROWSER_GUI_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/browser-gui.png");
     private static final ResourceLocation BROWSER_SLOT_TEX =
@@ -153,6 +158,11 @@ public final class QuestEditorScreen extends Screen {
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
     private static final int TAB_GAP = 3;
+    private static final int BACK_TAB_W = 27;
+    private static final int BACK_TAB_H = 17;
+    private static final int SIDE_TAB_X_OFFSET = 4;
+    private static final int BACK_TAB_X_OFFSET = SIDE_TAB_X_OFFSET + 6;
+    private static final int BACK_TAB_BOTTOM_MARGIN = 6;
     private static final int TOP_ACTION_GAP = 3;
     private static final int BOTTOM_CREATE_GAP = 3;
     private static final int CREATE_PACK_BUTTON_OFFSET_X = -1;
@@ -161,6 +171,11 @@ public final class QuestEditorScreen extends Screen {
     private static final int HEADER_TEX_W = 72;
     private static final int HEADER_TEX_H = 10;
     private static final int HEADER_SLICE = 3;
+    private static final int UNSAVED_POPUP_TEX_SIZE = 20;
+    private static final int UNSAVED_POPUP_SLICE = 5;
+    private static final int UNSAVED_EXCLAMATION_W = 4;
+    private static final int UNSAVED_EXCLAMATION_H = 11;
+    private static final int UNSAVED_EXCLAMATION_GAP = 4;
     private static final int INLINE_FLAG_LABEL_H = 8;
 
     private static final int PANEL_W = 147;
@@ -193,6 +208,10 @@ public final class QuestEditorScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/import-button.png");
     private static final ResourceLocation IMPORT_PACK_BUTTON_TEX_HOVER =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/import-button-hovered.png");
+    private static final ResourceLocation PLUS_BUTTON_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/plus_button.png");
+    private static final ResourceLocation PLUS_BUTTON_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/plus_button-hovered.png");
     private static final ResourceLocation PACK_ACTION_NEEDED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/quest_widget-action-needed.png");
     private static final ResourceLocation PACK_CHANGED_TEX =
@@ -247,11 +266,6 @@ public final class QuestEditorScreen extends Screen {
     private static final String ENTRY_CATEGORIES = "__categories__";
     private static final String ENTRY_SUBCATEGORIES = "__subcategories__";
     private static final String ENTRY_QUESTS = "__quests__";
-    private static final String FOOTER_PREFIX =
-            "Welcome to the Quest editor, if you require assistance head over to ";
-    private static final String FOOTER_LINK = "https://discord.gg/DARzByw6VW";
-    private static final int FOOTER_TEXT_COLOR = 0xFF5555;
-    private static final int FOOTER_LINK_COLOR = 0x3B82F6;
     private static final long PENDING_INIT_TTL_MS = 15000L;
     private static ScreenState pendingInitState;
     private static long pendingInitUntil = 0L;
@@ -271,6 +285,7 @@ public final class QuestEditorScreen extends Screen {
     private BackButton backButton;
     private EditBox questSearchBox;
     private Button createPackButton;
+    private IconButton createEntryButton;
     private IconButton importQuestPackButton;
     private EditorTabButton categoriesTabButton;
     private EditorTabButton subCategoriesTabButton;
@@ -294,10 +309,6 @@ public final class QuestEditorScreen extends Screen {
     private boolean deleteHoldActive = false;
     private long deleteHoldStartMs = 0L;
     private ScreenState pendingState;
-    private final List<FormattedCharSequence> footerLines = new ArrayList<>();
-    private final List<Integer> footerLineX = new ArrayList<>();
-    private int footerStartY = 0;
-
     private final List<FormField> activeFields = new ArrayList<>();
     private final List<FormField> allFields = new ArrayList<>();
 
@@ -383,6 +394,7 @@ public final class QuestEditorScreen extends Screen {
     private String savedEditorState;
     private String pendingDiscardEntryId = "";
     private Mode pendingDiscardMode;
+    private EditorEntry pendingDiscardEntry;
     private String questSearchQuery = "";
     private EntryRowKind openTypeMenuKind;
     private int openTypeMenuRow = -1;
@@ -450,18 +462,22 @@ public final class QuestEditorScreen extends Screen {
         addRenderableWidget(duplicateButton);
         addRenderableWidget(deleteQuestButton);
 
-        backButton = new BackButton(pxLeft + 2, barY, this::goBack);
+        backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
         addRenderableWidget(backButton);
         createPackButton = Button.builder(tr("create_new"), button -> openPackCreate())
-                .bounds(pxLeft + 2 + backButton.getWidth() + BOTTOM_CREATE_GAP + CREATE_PACK_BUTTON_OFFSET_X, barY, 72, 20)
+                .bounds(pxLeft + 2, barY, pw - SMALL_BTN_SIZE - SMALL_BTN_GAP - 4, 20)
                 .build();
         addRenderableWidget(createPackButton);
+        createEntryButton = new IconButton(pxLeft + 2, barY, SMALL_BTN_SIZE, PLUS_BUTTON_TEX, PLUS_BUTTON_HOVER_TEX, this::requestCreateEntryForCurrentMode);
+        createEntryButton.visible = false;
+        createEntryButton.active = false;
+        addRenderableWidget(createEntryButton);
         importQuestPackButton = new IconButton(createPackButton.getX() + createPackButton.getWidth() + 2, barY, SMALL_BTN_SIZE, IMPORT_PACK_BUTTON_TEX, IMPORT_PACK_BUTTON_TEX_HOVER, this::openImportQuestPackDirectory);
         addRenderableWidget(importQuestPackButton);
         categoriesTabButton = new EditorTabButton(trs("categories"), "boundless:quest_book", Mode.CATEGORY_LIST);
         subCategoriesTabButton = new EditorTabButton(trs("subcategories"), "minecraft:book", Mode.SUBCATEGORY_LIST);
         questsTabButton = new EditorTabButton(trs("quests"), QUEST_TAB_SCROLL_ICON_TEX, Mode.QUEST_LIST);
-        questSearchBox = new EditBox(font, pxLeft + 2 + 24 + SMALL_BTN_GAP, barY, pw - 24 - SMALL_BTN_GAP - 2, 20, tr("search_quests"));
+        questSearchBox = new EditBox(font, pxLeft + 2, barY, pw - 4, 20, tr("search_quests"));
         questSearchBox.setMaxLength(128);
         questSearchBox.setHint(tr("search_quests"));
         questSearchBox.setValue(questSearchQuery);
@@ -689,7 +705,6 @@ public final class QuestEditorScreen extends Screen {
 
     private List<EditorEntry> buildCategoryEntries() {
         List<EditorEntry> out = new ArrayList<>();
-        out.add(new EditorEntry(ENTRY_NEW, trs("create_new_category"), "", ""));
         if (currentPack == null) return out;
         for (NamedEntry entry : listCategoryEntries(currentPack)) {
             out.add(EditorEntry.movable(entry.id, entry.name, entry.id, entry.icon));
@@ -699,7 +714,6 @@ public final class QuestEditorScreen extends Screen {
 
     private List<EditorEntry> buildSubCategoryEntries() {
         List<EditorEntry> out = new ArrayList<>();
-        out.add(new EditorEntry(ENTRY_NEW, trs("create_new_subcategory"), "", ""));
         if (currentPack == null) return out;
         for (NamedEntry entry : listSubCategoryEntries(currentPack)) {
             out.add(EditorEntry.movable(entry.id, entry.name, entry.id, entry.icon));
@@ -709,7 +723,6 @@ public final class QuestEditorScreen extends Screen {
 
     private List<EditorEntry> buildQuestEntries() {
         List<EditorEntry> out = new ArrayList<>();
-        out.add(new EditorEntry(ENTRY_NEW, trs("create_new_quest"), "", ""));
         if (currentPack == null) return out;
         QuestListIndex index = questListIndex();
         Map<String, Map<String, List<NamedEntry>>> grouped = new LinkedHashMap<>();
@@ -856,6 +869,10 @@ public final class QuestEditorScreen extends Screen {
 
     private void handleLeftClick(EditorEntry entry) {
         if (entry == null) return;
+        if (Objects.equals(selectedEntryId, entry.id) && hasUnsavedEditorChanges()) {
+            leftList.setSelectedId(selectedEntryId);
+            return;
+        }
         if (shouldWarnForUnsavedChanges(entry)) {
             return;
         }
@@ -1080,6 +1097,25 @@ public final class QuestEditorScreen extends Screen {
     private void openPackCreate() {
         setMode(Mode.PACK_CREATE);
         showPackCreate();
+    }
+
+    private void requestCreateEntryForCurrentMode() {
+        EditorEntry entry = switch (mode) {
+            case CATEGORY_LIST -> new EditorEntry(ENTRY_NEW, trs("create_new_category"), "", "");
+            case SUBCATEGORY_LIST -> new EditorEntry(ENTRY_NEW, trs("create_new_subcategory"), "", "");
+            case QUEST_LIST -> new EditorEntry(ENTRY_NEW, trs("create_new_quest"), "", "");
+            default -> null;
+        };
+        if (entry != null) handleLeftClick(entry);
+    }
+
+    private Component createEntryTooltip() {
+        return Component.literal(switch (mode) {
+            case CATEGORY_LIST -> "Create new Category";
+            case SUBCATEGORY_LIST -> "Create new Subcategory";
+            case QUEST_LIST -> "Create new Quest";
+            default -> "Create new";
+        });
     }
 
     private void handlePackEntry(EditorEntry entry) {
@@ -3361,7 +3397,8 @@ public final class QuestEditorScreen extends Screen {
         }
         pendingDiscardMode = mode;
         pendingDiscardEntryId = entry.id;
-        statusMessage = "You have unsaved changes. Click again to discard them.";
+        pendingDiscardEntry = entry;
+        statusMessage = "";
         statusColor = 0xFFD080;
         leftList.setSelectedId(selectedEntryId);
         return true;
@@ -3370,6 +3407,7 @@ public final class QuestEditorScreen extends Screen {
     private void clearPendingDiscardState() {
         pendingDiscardEntryId = "";
         pendingDiscardMode = null;
+        pendingDiscardEntry = null;
     }
 
     private void markCurrentEditorLoaded(boolean existingEntry) {
@@ -4266,6 +4304,7 @@ public final class QuestEditorScreen extends Screen {
         boolean duplicateVisible = duplicateButton != null && duplicateButton.visible;
         boolean deleteQuestVisible = deleteQuestButton != null && deleteQuestButton.visible;
         boolean questSearchVisible = questSearchBox != null && questSearchBox.visible;
+        boolean createEntryVisible = createEntryButton != null && createEntryButton.visible;
         if (leftList != null) leftList.visible = false;
         if (backButton != null) backButton.visible = false;
         if (saveButton != null) saveButton.visible = false;
@@ -4273,6 +4312,7 @@ public final class QuestEditorScreen extends Screen {
         if (duplicateButton != null) duplicateButton.visible = false;
         if (deleteQuestButton != null) deleteQuestButton.visible = false;
         if (questSearchBox != null) questSearchBox.visible = false;
+        if (createEntryButton != null) createEntryButton.visible = false;
 
         gg.enableScissor(pxRight, py, pxRight + pw, py + ph);
         super.render(gg, mouseX, mouseY, partialTick);
@@ -4285,6 +4325,7 @@ public final class QuestEditorScreen extends Screen {
         if (duplicateButton != null) duplicateButton.visible = duplicateVisible;
         if (deleteQuestButton != null) deleteQuestButton.visible = deleteQuestVisible;
         if (questSearchBox != null) questSearchBox.visible = questSearchVisible;
+        if (createEntryButton != null) createEntryButton.visible = createEntryVisible;
 
         if (leftList != null && leftList.visible) leftList.render(gg, mouseX, mouseY, partialTick);
         if (backButton != null && backButton.visible) backButton.render(gg, mouseX, mouseY, partialTick);
@@ -4294,6 +4335,7 @@ public final class QuestEditorScreen extends Screen {
         if (deleteQuestButton != null && deleteQuestButton.visible) deleteQuestButton.render(gg, mouseX, mouseY, partialTick);
         renderDeleteHoldProgress(gg);
         if (questSearchBox != null && questSearchBox.visible) questSearchBox.render(gg, mouseX, mouseY, partialTick);
+        if (createEntryButton != null && createEntryButton.visible) createEntryButton.render(gg, mouseX, mouseY, partialTick);
         if (createPackButton != null && createPackButton.visible) createPackButton.render(gg, mouseX, mouseY, partialTick);
         if (importQuestPackButton != null && importQuestPackButton.visible) importQuestPackButton.render(gg, mouseX, mouseY, partialTick);
         renderIconOverlays(gg);
@@ -4309,17 +4351,23 @@ public final class QuestEditorScreen extends Screen {
             gg.drawString(font, statusMessage, msgX, topY + PANEL_H + 8, statusColor, false);
         }
         renderSavedState(gg);
-        renderFooter(gg, mouseX, mouseY);
         renderIdSuggestions(gg, mouseX, mouseY);
+        renderUnsavedChangesPopup(gg, mouseX, mouseY);
     }
 
     private void updateLeftPaneLayout() {
         if (leftList != null) {
             leftList.setBounds(pxLeft, py, pw, listH);
         }
-        if (createPackButton != null && backButton != null) {
-            createPackButton.setX(backButton.getX() + backButton.getWidth() + BOTTOM_CREATE_GAP + CREATE_PACK_BUTTON_OFFSET_X);
-            createPackButton.setY(backButton.getY());
+        if (backButton != null) {
+            backButton.setX(leftX - TAB_W + BACK_TAB_X_OFFSET);
+            backButton.setY(topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN);
+        }
+        int barY = py + ph + (BOTTOM_BAR_H - 20) / 2;
+        if (createPackButton != null) {
+            createPackButton.setX(pxLeft + 2);
+            createPackButton.setY(barY);
+            createPackButton.setWidth(pw - SMALL_BTN_SIZE - SMALL_BTN_GAP - 4);
             createPackButton.visible = mode == Mode.PACK_LIST;
             createPackButton.active = mode == Mode.PACK_LIST;
         }
@@ -4329,11 +4377,33 @@ public final class QuestEditorScreen extends Screen {
             importQuestPackButton.visible = mode == Mode.PACK_LIST;
             importQuestPackButton.active = mode == Mode.PACK_LIST;
         }
+        boolean createEntryVisible = canCreateEntryInCurrentMode();
+        if (createEntryButton != null) {
+            createEntryButton.setX(pxLeft + 2);
+            createEntryButton.setY(barY);
+            createEntryButton.visible = createEntryVisible;
+            createEntryButton.active = createEntryVisible;
+        }
+        if (questSearchBox != null) {
+            int searchX = pxLeft + 2;
+            int searchW = pw - 4;
+            if (mode == Mode.QUEST_LIST && createEntryVisible) {
+                searchX += SMALL_BTN_SIZE + SMALL_BTN_GAP;
+                searchW -= SMALL_BTN_SIZE + SMALL_BTN_GAP;
+            }
+            questSearchBox.setX(searchX);
+            questSearchBox.setY(barY);
+            questSearchBox.setWidth(searchW);
+        }
         layoutTabButtons();
     }
 
+    private boolean canCreateEntryInCurrentMode() {
+        return mode == Mode.CATEGORY_LIST || mode == Mode.SUBCATEGORY_LIST || mode == Mode.QUEST_LIST;
+    }
+
     private void layoutTabButtons() {
-        int x = leftX - TAB_W + 4;
+        int x = leftX - TAB_W + SIDE_TAB_X_OFFSET;
         int startY = py + 6;
         layoutTabButton(categoriesTabButton, x, startY);
         layoutTabButton(subCategoriesTabButton, x, startY + TAB_H + TAB_GAP);
@@ -4372,6 +4442,10 @@ public final class QuestEditorScreen extends Screen {
             gg.renderTooltip(font, tr("tooltip.import_questpacks"), mouseX, mouseY);
             return;
         }
+        if (createEntryButton != null && createEntryButton.visible && createEntryButton.isMouseOver(mouseX, mouseY)) {
+            gg.renderTooltip(font, createEntryTooltip(), mouseX, mouseY);
+            return;
+        }
         if (duplicateButton != null && duplicateButton.visible && duplicateButton.isMouseOver(mouseX, mouseY)) {
             gg.renderTooltip(font, tr("tooltip.duplicate"), mouseX, mouseY);
             return;
@@ -4379,6 +4453,74 @@ public final class QuestEditorScreen extends Screen {
         if (deleteQuestButton != null && deleteQuestButton.visible && deleteQuestButton.isMouseOver(mouseX, mouseY)) {
             gg.renderTooltip(font, deleteConfirmArmed ? Component.literal("Hold to delete") : tr("tooltip.delete"), mouseX, mouseY);
         }
+        if (backButton != null && backButton.visible && backButton.isMouseOver(mouseX, mouseY)) {
+            gg.renderTooltip(font, Component.literal("Back"), mouseX, mouseY);
+        }
+    }
+
+    private boolean isUnsavedChangesPopupOpen() {
+        return pendingDiscardMode != null && !pendingDiscardEntryId.isBlank();
+    }
+
+    private void renderUnsavedChangesPopup(GuiGraphics gg, int mouseX, int mouseY) {
+        if (!isUnsavedChangesPopupOpen()) return;
+        String message = "You have unsaved changes";
+        String save = "Save";
+        String discard = "Discard";
+        int popupW = Math.max(116, font.width(message) + 22);
+        int popupH = 48;
+        int x = (this.width - popupW) / 2;
+        int y = (this.height - popupH) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(0, 0, 700);
+        gg.fill(0, 0, this.width, this.height, 0x70000000);
+        renderNineSlice(gg, UNSAVED_POPUP_BG_TEX, x, y, popupW, popupH, UNSAVED_POPUP_TEX_SIZE, UNSAVED_POPUP_TEX_SIZE, UNSAVED_POPUP_SLICE);
+        int messageW = font.width(message);
+        int messageGroupW = UNSAVED_EXCLAMATION_W + UNSAVED_EXCLAMATION_GAP + messageW;
+        int messageX = x + (popupW - messageGroupW) / 2 + UNSAVED_EXCLAMATION_W + UNSAVED_EXCLAMATION_GAP;
+        int iconX = messageX - UNSAVED_EXCLAMATION_GAP - UNSAVED_EXCLAMATION_W;
+        int messageY = y + 10;
+        int iconY = messageY + (font.lineHeight - UNSAVED_EXCLAMATION_H) / 2;
+        gg.blit(UNSAVED_EXCLAMATION_TEX, iconX, iconY, 0, 0, UNSAVED_EXCLAMATION_W, UNSAVED_EXCLAMATION_H, UNSAVED_EXCLAMATION_W, UNSAVED_EXCLAMATION_H);
+        gg.drawString(font, message, messageX, messageY, 0x000000, false);
+
+        int gap = 18;
+        int saveX = x + popupW / 2 - font.width(save) - gap / 2;
+        int discardX = x + popupW / 2 + gap / 2;
+        int actionY = y + 30;
+        int saveColor = isInsideText(mouseX, mouseY, saveX, actionY, save) ? 0x208020 : 0x000000;
+        int discardColor = isInsideText(mouseX, mouseY, discardX, actionY, discard) ? 0xA02020 : 0x000000;
+        gg.drawString(font, save, saveX, actionY, saveColor, false);
+        gg.drawString(font, discard, discardX, actionY, discardColor, false);
+        gg.pose().popPose();
+    }
+
+    private void renderNineSlice(GuiGraphics gg, ResourceLocation texture, int x, int y, int width, int height, int texW, int texH, int slice) {
+        int centerTexW = texW - slice * 2;
+        int centerTexH = texH - slice * 2;
+        int centerW = Math.max(0, width - slice * 2);
+        int centerH = Math.max(0, height - slice * 2);
+
+        gg.blit(texture, x, y, 0, 0, slice, slice, texW, texH);
+        gg.blit(texture, x + slice + centerW, y, texW - slice, 0, slice, slice, texW, texH);
+        gg.blit(texture, x, y + slice + centerH, 0, texH - slice, slice, slice, texW, texH);
+        gg.blit(texture, x + slice + centerW, y + slice + centerH, texW - slice, texH - slice, slice, slice, texW, texH);
+
+        if (centerW > 0) {
+            gg.blit(texture, x + slice, y, centerW, slice, slice, 0, centerTexW, slice, texW, texH);
+            gg.blit(texture, x + slice, y + slice + centerH, centerW, slice, slice, texH - slice, centerTexW, slice, texW, texH);
+        }
+        if (centerH > 0) {
+            gg.blit(texture, x, y + slice, slice, centerH, 0, slice, slice, centerTexH, texW, texH);
+            gg.blit(texture, x + slice + centerW, y + slice, slice, centerH, texW - slice, slice, slice, centerTexH, texW, texH);
+        }
+        if (centerW > 0 && centerH > 0) {
+            gg.blit(texture, x + slice, y + slice, centerW, centerH, slice, slice, centerTexW, centerTexH, texW, texH);
+        }
+    }
+
+    private boolean isInsideText(double mouseX, double mouseY, int x, int y, String text) {
+        return mouseX >= x && mouseX <= x + font.width(text) && mouseY >= y && mouseY <= y + font.lineHeight;
     }
 
     private void renderPanelHeader(GuiGraphics gg, int panelX, String title) {
@@ -5544,6 +5686,9 @@ public final class QuestEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (isUnsavedChangesPopupOpen()) {
+            return handleUnsavedChangesPopupClick(mouseX, mouseY, button);
+        }
         if (button == 0 && clickItemPicker(mouseX, mouseY)) return true;
         if (button == 0 && clickTypeMenu(mouseX, mouseY)) return true;
         if (button == 0 && clickDropdownMenu(mouseX, mouseY)) return true;
@@ -5581,13 +5726,45 @@ public final class QuestEditorScreen extends Screen {
         if (button == 0 && !isInsideSuggestionTargetField(mouseX, mouseY)) {
             clearEntryTextFocus();
         }
-        Style style = getFooterStyleAt((int) mouseX, (int) mouseY);
-        if (style != null && style.getClickEvent() != null
-                && style.getClickEvent().getAction() == ClickEvent.Action.OPEN_URL) {
-            this.handleComponentClicked(style);
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private boolean handleUnsavedChangesPopupClick(double mouseX, double mouseY, int button) {
+        if (button != 0) return true;
+        String save = "Save";
+        String discard = "Discard";
+        int popupW = Math.max(116, font.width("You have unsaved changes") + 22);
+        int popupH = 48;
+        int x = (this.width - popupW) / 2;
+        int y = (this.height - popupH) / 2;
+        int gap = 18;
+        int actionY = y + 30;
+        int saveX = x + popupW / 2 - font.width(save) - gap / 2;
+        int discardX = x + popupW / 2 + gap / 2;
+        if (isInsideText(mouseX, mouseY, saveX, actionY, save)) {
+            saveCurrent();
+            if (!hasUnsavedEditorChanges()) {
+                continuePendingDiscardNavigation();
+            }
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        if (isInsideText(mouseX, mouseY, discardX, actionY, discard)) {
+            continuePendingDiscardNavigation();
+            return true;
+        }
+        return true;
+    }
+
+    private void continuePendingDiscardNavigation() {
+        EditorEntry entry = pendingDiscardEntry;
+        if (entry == null && leftList != null) {
+            entry = leftList.entryById(pendingDiscardEntryId);
+        }
+        if (entry == null) {
+            clearPendingDiscardState();
+            return;
+        }
+        handleLeftClick(entry);
     }
 
     @Override
@@ -5685,6 +5862,10 @@ public final class QuestEditorScreen extends Screen {
     private boolean clickToolbarButtons(double mouseX, double mouseY) {
         if (createPackButton != null && createPackButton.visible && createPackButton.active && createPackButton.isMouseOver(mouseX, mouseY)) {
             createPackButton.onPress();
+            return true;
+        }
+        if (createEntryButton != null && createEntryButton.visible && createEntryButton.active && createEntryButton.isMouseOver(mouseX, mouseY)) {
+            createEntryButton.onPress();
             return true;
         }
         if (importQuestPackButton != null && importQuestPackButton.visible && importQuestPackButton.active && importQuestPackButton.isMouseOver(mouseX, mouseY)) {
@@ -6831,59 +7012,6 @@ public final class QuestEditorScreen extends Screen {
             }
         }
         return "";
-    }
-
-    private void renderFooter(GuiGraphics gg, int mouseX, int mouseY) {
-        Component footer = footerComponent();
-        int maxWidth = Math.max(80, this.width - 12);
-        footerLines.clear();
-        footerLines.addAll(font.split(footer, maxWidth));
-        footerLineX.clear();
-        int totalHeight = footerLines.size() * font.lineHeight;
-        footerStartY = this.height - totalHeight - 4;
-        int y = footerStartY;
-        for (FormattedCharSequence line : footerLines) {
-            int lineWidth = font.width(line);
-            int x = (this.width - lineWidth) / 2;
-            footerLineX.add(x);
-            gg.drawString(font, line, x, y, 0xFFFFFF, false);
-            y += font.lineHeight;
-        }
-
-        Style style = getFooterStyleAt(mouseX, mouseY);
-        if (style != null) {
-            gg.renderComponentHoverEffect(font, style, mouseX, mouseY);
-        }
-    }
-
-    private Component footerComponent() {
-        Style red = Style.EMPTY.withColor(FOOTER_TEXT_COLOR);
-        Style link = Style.EMPTY
-                .withColor(FOOTER_LINK_COLOR)
-                .withUnderlined(true)
-                .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, FOOTER_LINK))
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(FOOTER_LINK)));
-        return Component.literal(FOOTER_PREFIX).withStyle(red)
-                .append(Component.literal(FOOTER_LINK).withStyle(link));
-    }
-
-    private Style getFooterStyleAt(int mouseX, int mouseY) {
-        if (footerLines.isEmpty()) return null;
-        int y = footerStartY;
-        for (int i = 0; i < footerLines.size(); i++) {
-            int lineHeight = font.lineHeight;
-            if (mouseY >= y && mouseY < y + lineHeight) {
-                int x = footerLineX.get(i);
-                int width = font.width(footerLines.get(i));
-                if (mouseX >= x && mouseX <= x + width) {
-                    return Minecraft.getInstance().font.getSplitter()
-                            .componentStyleAtWidth(footerLines.get(i), mouseX - x);
-                }
-                return null;
-            }
-            y += lineHeight;
-        }
-        return null;
     }
 
     private static final class ScaledMultiLineEditBox extends AbstractScrollWidget {
@@ -8220,6 +8348,14 @@ public final class QuestEditorScreen extends Screen {
             selectedId = id == null ? "" : id;
         }
 
+        EditorEntry entryById(String id) {
+            String target = id == null ? "" : id;
+            for (EditorEntry entry : entries) {
+                if (Objects.equals(entry.id, target)) return entry;
+            }
+            return null;
+        }
+
         float getScrollY() {
             return scrollY;
         }
@@ -8573,7 +8709,8 @@ public final class QuestEditorScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean selected = mode == targetMode;
-            int renderX = getX() + (selected ? 2 : 0);
+            boolean hovered = this.isMouseOver(mouseX, mouseY);
+            int renderX = getX() + (selected && !hovered ? -2 : 0);
             gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, getY(), 0, 0, this.width, this.height, TAB_W, TAB_H);
             int iconX = renderX + (this.width - 16) / 2;
             int iconY = getY() + 5;
@@ -8943,15 +9080,10 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private static final class BackButton extends AbstractButton {
-        private static final ResourceLocation TEX_NORMAL =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_button.png");
-        private static final ResourceLocation TEX_HOVER =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_highlighted.png");
-
         private final Runnable onPress;
 
         public BackButton(int x, int y, Runnable onPress) {
-            super(x, y, 24, 20, Component.empty());
+            super(x, y, BACK_TAB_W, BACK_TAB_H, Component.empty());
             this.onPress = onPress;
         }
 
@@ -8963,7 +9095,7 @@ public final class QuestEditorScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.isMouseOver(mouseX, mouseY);
-            ResourceLocation tex = hovered ? TEX_HOVER : TEX_NORMAL;
+            ResourceLocation tex = hovered ? BACK_TAB_HOVER_TEX : BACK_TAB_TEX;
             gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
         }
 

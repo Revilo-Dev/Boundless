@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "iter_rpg:item/water_elemental_spawn_egg"
+  }
+}

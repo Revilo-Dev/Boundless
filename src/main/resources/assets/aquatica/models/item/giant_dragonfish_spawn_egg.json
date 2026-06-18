@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "aquatica:item/giant_dragonfish_spawn_egg"
+  }
+}

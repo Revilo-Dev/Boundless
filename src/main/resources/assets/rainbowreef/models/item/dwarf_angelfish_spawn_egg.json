@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "rainbowreef:item/dwarf_angelfish_spawn_egg"
+  }
+}

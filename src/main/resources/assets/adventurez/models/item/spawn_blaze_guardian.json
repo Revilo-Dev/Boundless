@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "adventurez:item/spawn_blaze_guardian"
+  }
+}

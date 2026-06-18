@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "create_bic_bit:item/herring_spawn_egg"
+  }
+}

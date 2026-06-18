@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "ancient_golems:item/iron_golem_origin_spawn_egg"
+  }
+}

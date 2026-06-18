@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "rottencreatures:item/undead_miner_spawn_egg"
+  }
+}

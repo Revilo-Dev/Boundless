@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "biomemakeover:item/lightning_bug_spawn_egg"
+  }
+}

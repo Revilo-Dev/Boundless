@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "royalvariations:item/royal_skeleton_spawn_egg"
+  }
+}

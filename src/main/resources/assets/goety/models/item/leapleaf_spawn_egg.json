@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "goety:item/leapleaf_spawn_egg"
+  }
+}

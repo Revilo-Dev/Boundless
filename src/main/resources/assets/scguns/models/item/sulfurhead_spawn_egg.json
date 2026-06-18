@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "scguns:item/sulfurhead_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "terramity:item/green_fairy_spawn_egg"
+  }
+}

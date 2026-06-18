@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "frostiful:item/frostologer_spawn_egg"
+  }
+}

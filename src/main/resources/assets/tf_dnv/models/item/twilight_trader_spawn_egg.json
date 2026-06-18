@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "tf_dnv:item/twilight_trader_spawn_egg"
+  }
+}

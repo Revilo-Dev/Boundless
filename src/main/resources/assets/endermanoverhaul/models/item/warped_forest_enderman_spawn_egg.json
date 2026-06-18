@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "endermanoverhaul:item/warped_forest_enderman_spawn_egg"
+  }
+}

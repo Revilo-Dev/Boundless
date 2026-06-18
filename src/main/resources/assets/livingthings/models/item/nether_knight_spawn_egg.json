@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "livingthings:item/nether_knight_spawn_egg"
+  }
+}

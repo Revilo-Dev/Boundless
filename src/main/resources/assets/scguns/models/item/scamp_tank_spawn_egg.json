@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "scguns:item/scamp_tank_spawn_egg"
+  }
+}

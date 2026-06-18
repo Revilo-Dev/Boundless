@@ -67,7 +67,7 @@ public final class Config {
                     .define("enableQuestSearchBox", false);
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
             BUILDER.comment("If true, allows colored quest descriptions to render with Boundless color tokens.")
-                    .define("enableDescriptionColors", false);
+                    .define("enableDescriptionColors", true);
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_TOASTS =
             BUILDER.comment("If true, shows quest unlocked toasts.")
                     .define("enableQuestToasts", true);

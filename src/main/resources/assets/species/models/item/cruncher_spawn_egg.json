@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "species:item/cruncher_spawn_egg"
+  }
+} 

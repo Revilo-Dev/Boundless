@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "savage_and_ravage:item/griefer_spawn_egg"
+  }
+}

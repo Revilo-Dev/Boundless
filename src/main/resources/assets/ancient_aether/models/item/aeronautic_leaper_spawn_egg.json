@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "ancient_aether:item/aeronautic_leaper_spawn_egg"
+  }
+}

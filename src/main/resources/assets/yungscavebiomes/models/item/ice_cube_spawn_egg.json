@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "yungscavebiomes:item/ice_cube_spawn_egg"
+  }
+}

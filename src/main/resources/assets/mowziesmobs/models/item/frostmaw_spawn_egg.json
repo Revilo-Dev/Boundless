@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "mowziesmobs:item/frostmaw_spawn_egg"
+  }
+}

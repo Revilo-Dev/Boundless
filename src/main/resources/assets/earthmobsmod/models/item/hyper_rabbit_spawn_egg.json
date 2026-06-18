@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "earthmobsmod:item/hyper_rabbit_spawn_egg"
+  }
+}

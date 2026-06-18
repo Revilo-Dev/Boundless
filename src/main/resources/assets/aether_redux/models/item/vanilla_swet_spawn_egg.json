@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "aether_redux:item/vanilla_swet_spawn_egg"
+  }
+}

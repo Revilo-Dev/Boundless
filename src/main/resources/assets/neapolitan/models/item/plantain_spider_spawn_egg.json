@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "neapolitan:item/plantain_spider_spawn_egg"
+  }
+}

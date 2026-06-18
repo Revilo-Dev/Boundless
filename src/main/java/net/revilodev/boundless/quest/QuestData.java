@@ -364,8 +364,6 @@ public final class QuestData {
     }
 
     private static synchronized void load(ResourceManager rm, boolean forceReload) {
-        if ((loadedClient || loadedServer) && !forceReload && !QUESTS.isEmpty()) return;
-
         QUESTS.clear();
         CATEGORIES.clear();
         SUBCATEGORIES.clear();
@@ -477,26 +475,67 @@ public final class QuestData {
 
     private static void loadModQuestPackData(Path packRoot) {
         Path dataRoot = packRoot.resolve("data");
-        if (!Files.isDirectory(dataRoot)) return;
+        if (!Files.isDirectory(dataRoot)) {
+            String namespace = namespaceFromPackRoot(packRoot);
+            Path directQuestsRoot = packRoot.resolve("quests");
+            if (Files.isDirectory(directQuestsRoot)) {
+                loadQuestNamespace(directQuestsRoot, namespace);
+            }
+            try (DirectoryStream<Path> namespaces = Files.newDirectoryStream(packRoot)) {
+                for (Path namespaceDir : namespaces) {
+                    if (!Files.isDirectory(namespaceDir)) continue;
+                    if (!Files.isDirectory(namespaceDir.resolve("quests"))) continue;
+                    loadQuestNamespace(namespaceDir.resolve("quests"), normalizeNamespace(namespaceDir.getFileName().toString()));
+                }
+            } catch (Exception ignored) {
+            }
+            return;
+        }
 
         try (DirectoryStream<Path> namespaces = Files.newDirectoryStream(dataRoot)) {
             for (Path namespaceDir : namespaces) {
                 if (!Files.isDirectory(namespaceDir)) continue;
-                String ns = namespaceDir.getFileName() == null ? "" : namespaceDir.getFileName().toString();
+                String ns = namespaceDir.getFileName() == null ? "" : normalizeNamespace(namespaceDir.getFileName().toString());
                 if (shouldSkipNamespace(ns)) continue;
 
                 Path questsRoot = namespaceDir.resolve("quests");
                 if (!Files.isDirectory(questsRoot)) continue;
 
-                loadCategoriesFromPath(questsRoot.resolve("categories"), ns);
-                loadSubCategoriesFromPath(questsRoot.resolve("subcategories"), ns);
-                loadSubCategoriesFromPath(questsRoot.resolve("sub_category"), ns);
-                loadSubCategoriesFromPath(questsRoot.resolve("subcategory"), ns);
-                loadSubCategoriesFromPath(questsRoot.resolve("sub-category"), ns);
-                loadQuestsFromPath(questsRoot, ns);
+                loadQuestNamespace(questsRoot, ns);
             }
         } catch (Exception ignored) {
         }
+    }
+
+    private static void loadQuestNamespace(Path questsRoot, String namespace) {
+        if (!Files.isDirectory(questsRoot)) return;
+        String ns = normalizeNamespace(namespace);
+        if (shouldSkipNamespace(ns)) return;
+        loadCategoriesFromPath(questsRoot.resolve("categories"), ns);
+        loadSubCategoriesFromPath(questsRoot.resolve("subcategories"), ns);
+        loadSubCategoriesFromPath(questsRoot.resolve("sub_category"), ns);
+        loadSubCategoriesFromPath(questsRoot.resolve("subcategory"), ns);
+        loadSubCategoriesFromPath(questsRoot.resolve("sub-category"), ns);
+        loadQuestsFromPath(questsRoot, ns);
+    }
+
+    private static String namespaceFromPackRoot(Path packRoot) {
+        if (packRoot == null || packRoot.getFileName() == null) return "boundless_pack";
+        return normalizeNamespace(packRoot.getFileName().toString());
+    }
+
+    private static String normalizeNamespace(String raw) {
+        String input = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        StringBuilder out = new StringBuilder(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.') {
+                out.append(ch);
+            } else {
+                out.append('_');
+            }
+        }
+        return out.isEmpty() ? "boundless_pack" : out.toString();
     }
 
     private static void loadCategoriesFromPath(Path categoriesDir, String namespace) {
@@ -1536,6 +1575,14 @@ public final class QuestData {
             SUBCATEGORIES.clear();
             loadedClient = false;
         }
+    }
+
+    public static synchronized void clearClientNetworkData() {
+        if (FMLEnvironment.dist != Dist.CLIENT) return;
+        QUESTS.clear();
+        CATEGORIES.clear();
+        SUBCATEGORIES.clear();
+        loadedClient = true;
     }
 
     private static String optString(JsonObject o, String key) {

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "netherskeletons:item/charred_skeleton_spawn_egg"
+  }
+}

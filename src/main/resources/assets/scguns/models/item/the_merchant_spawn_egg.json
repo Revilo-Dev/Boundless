@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "scguns:item/the_merchant_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "northstar:item/mars_moth_spawn_egg"
+  }
+}

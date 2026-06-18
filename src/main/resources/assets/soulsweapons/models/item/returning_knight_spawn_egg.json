@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "soulsweapons:item/returning_knight_spawn_egg"
+  }
+}

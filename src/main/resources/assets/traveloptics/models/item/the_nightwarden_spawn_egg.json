@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "traveloptics:item/the_nightwarden_spawn_egg"
+  }
+}

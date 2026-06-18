@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "createmechanicalcompanion:item/potato_cannon_illager_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "soulsweapons:item/rime_spectre_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "netherdepthsupgrade:item/eyeball_fish_spawn_egg"
+  }
+}

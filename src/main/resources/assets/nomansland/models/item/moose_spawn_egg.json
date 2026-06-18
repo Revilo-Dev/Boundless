@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "nomansland:item/moose_spawn_egg"
+  }
+}

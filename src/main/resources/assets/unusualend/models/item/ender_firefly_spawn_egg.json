@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "unusualend:item/ender_firefly_spawn_egg"
+  }
+}

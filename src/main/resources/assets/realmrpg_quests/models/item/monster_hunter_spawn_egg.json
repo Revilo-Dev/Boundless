@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "realmrpg_quests:item/monster_hunter_spawn_egg"
+  }
+}

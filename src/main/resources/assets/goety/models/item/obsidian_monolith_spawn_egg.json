@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "goety:item/obsidian_monolith_spawn_egg"
+  }
+}

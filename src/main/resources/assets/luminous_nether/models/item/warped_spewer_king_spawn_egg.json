@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "luminous_nether:item/warped_spewer_king_spawn_egg"
+  }
+}

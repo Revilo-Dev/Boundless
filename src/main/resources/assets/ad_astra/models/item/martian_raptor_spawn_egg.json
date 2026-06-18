@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "ad_astra:item/martian_raptor_spawn_egg"
+  }
+} 

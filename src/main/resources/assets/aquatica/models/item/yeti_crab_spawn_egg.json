@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "aquatica:item/yeti_crab_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "dungeons_and_combat:item/infernus_spawn_egg"
+  }
+}

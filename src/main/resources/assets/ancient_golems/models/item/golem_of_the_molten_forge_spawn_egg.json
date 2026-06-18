@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "ancient_golems:item/golem_of_the_molten_forge_spawn_egg"
+  }
+}

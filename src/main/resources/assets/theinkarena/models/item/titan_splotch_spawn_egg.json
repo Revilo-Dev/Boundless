@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "theinkarena:item/splotch_spawn_egg"
+  }
+}

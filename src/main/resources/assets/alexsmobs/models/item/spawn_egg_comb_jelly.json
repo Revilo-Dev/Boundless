@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "alexsmobs:item/spawn_egg_comb_jelly"
+  }
+}

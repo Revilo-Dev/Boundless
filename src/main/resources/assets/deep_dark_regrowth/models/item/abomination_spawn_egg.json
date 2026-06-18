@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "deep_dark_regrowth:item/abomination_spawn_egg"
+  }
+}

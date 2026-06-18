@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "enderscape:item/drifter_spawn_egg"
+  }
+}

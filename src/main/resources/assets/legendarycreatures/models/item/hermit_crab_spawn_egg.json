@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "legendarycreatures:item/hermit_crab_spawn_egg"
+  }
+}

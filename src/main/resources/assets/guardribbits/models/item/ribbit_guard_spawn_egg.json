@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "guardribbits:item/ribbit_guard_spawn_egg"
+  }
+}
