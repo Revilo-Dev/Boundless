@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
@@ -27,6 +28,7 @@ import net.revilodev.boundless.client.toast.QuestUnlockedToast;
 import net.revilodev.boundless.item.ModItems;
 import net.revilodev.boundless.quest.KillCounterState;
 import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestProgressState;
 import net.revilodev.boundless.quest.QuestTracker;
 
@@ -74,6 +76,7 @@ public final class BoundlessNetwork {
         r.playToClient(SyncClear.TYPE, SyncClear.CODEC, BoundlessNetwork::handleSyncClear);
         r.playToClient(Toast.TYPE, Toast.CODEC, BoundlessNetwork::handleToast);
         r.playToClient(OpenQuestBook.TYPE, OpenQuestBook.CODEC, BoundlessNetwork::handleOpenQuestBook);
+        r.playToClient(SyncConfig.TYPE, SyncConfig.CODEC, BoundlessNetwork::handleSyncConfig);
         r.playToClient(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC, BoundlessNetwork::handleSyncQuestsChunk);
     }
 
@@ -258,6 +261,83 @@ public final class BoundlessNetwork {
         @Override public Type<OpenQuestBook> type() { return TYPE; }
     }
 
+    public record SyncConfig(
+            List<String> disabledCategories,
+            List<String> appliedQuestPacks,
+            List<String> disabledQuestPacks,
+            String pinnedQuestHudPosition,
+            boolean hideQuestBookInInventory,
+            String questBookInventoryButtonPosition,
+            boolean centerInventoryWithQuestPanel,
+            boolean hideCategoryHeader,
+            String filterDisplayMode,
+            boolean disableCategories,
+            boolean enableBuiltinQuestPack,
+            boolean hideQuestWidgetIcons,
+            double questTextScale,
+            double questIconScale,
+            boolean enableQuestSearchBox,
+            boolean enableDescriptionColors,
+            boolean enableQuestToasts,
+            boolean disableQuestPinning,
+            boolean autoClaimQuestRewards,
+            boolean enableQuestScrolls,
+            boolean disableQuestBook,
+            boolean spawnWithQuestBook) implements CustomPacketPayload {
+        public static final Type<SyncConfig> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_config"));
+        public static final StreamCodec<FriendlyByteBuf, SyncConfig> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    writeStringList(buf, p.disabledCategories);
+                    writeStringList(buf, p.appliedQuestPacks);
+                    writeStringList(buf, p.disabledQuestPacks);
+                    buf.writeUtf(p.pinnedQuestHudPosition == null ? "" : p.pinnedQuestHudPosition);
+                    buf.writeBoolean(p.hideQuestBookInInventory);
+                    buf.writeUtf(p.questBookInventoryButtonPosition == null ? "" : p.questBookInventoryButtonPosition);
+                    buf.writeBoolean(p.centerInventoryWithQuestPanel);
+                    buf.writeBoolean(p.hideCategoryHeader);
+                    buf.writeUtf(p.filterDisplayMode == null ? "" : p.filterDisplayMode);
+                    buf.writeBoolean(p.disableCategories);
+                    buf.writeBoolean(p.enableBuiltinQuestPack);
+                    buf.writeBoolean(p.hideQuestWidgetIcons);
+                    buf.writeDouble(p.questTextScale);
+                    buf.writeDouble(p.questIconScale);
+                    buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeBoolean(p.enableQuestToasts);
+                    buf.writeBoolean(p.disableQuestPinning);
+                    buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.disableQuestBook);
+                    buf.writeBoolean(p.spawnWithQuestBook);
+                },
+                buf -> new SyncConfig(
+                        readStringList(buf),
+                        readStringList(buf),
+                        readStringList(buf),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readDouble(),
+                        buf.readDouble(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean())
+        );
+        @Override public Type<SyncConfig> type() { return TYPE; }
+    }
+
     public record SyncQuestsChunk(int syncId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
         public static final Type<SyncQuestsChunk> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_quests_chunk"));
@@ -285,6 +365,7 @@ public final class BoundlessNetwork {
 
     public static void syncPlayer(ServerPlayer p) {
         PacketDistributor.sendToPlayer(p, new SyncClear());
+        sendConfig(p);
         sendQuestData(p);
 
         List<KillEntry> killEntries = new ArrayList<>();
@@ -314,6 +395,60 @@ public final class BoundlessNetwork {
         }
 
         syncComputedCompletion(p);
+    }
+
+    private static void sendConfig(ServerPlayer p) {
+        PacketDistributor.sendToPlayer(p, new SyncConfig(
+                configStringList(Config.disabledCategories()),
+                configStringList(Config.appliedQuestPacks()),
+                configStringList(Config.disabledQuestPacks()),
+                Config.pinnedQuestHudPosition(),
+                Config.hideQuestBookInInventory(),
+                Config.questBookInventoryButtonPosition(),
+                Config.centerInventoryWithQuestPanel(),
+                Config.hideCategoryHeader(),
+                Config.filterDisplayMode(),
+                Config.disableCategories(),
+                Config.enableBuiltinQuestPack(),
+                Config.hideQuestWidgetIcons(),
+                Config.questTextScale(),
+                Config.questIconScale(),
+                Config.enableQuestSearchBox(),
+                Config.enableDescriptionColors(),
+                Config.enableQuestToasts(),
+                Config.disableQuestPinning(),
+                Config.autoClaimQuestRewards(),
+                Config.enableQuestScrolls(),
+                Config.disableQuestBook(),
+                Config.spawnWithQuestBook()
+        ));
+    }
+
+    private static List<String> configStringList(List<? extends String> values) {
+        if (values == null || values.isEmpty()) return List.of();
+        List<String> out = new ArrayList<>(values.size());
+        for (String value : values) {
+            if (value != null) out.add(value);
+        }
+        return out.isEmpty() ? List.of() : List.copyOf(out);
+    }
+
+    private static void writeStringList(FriendlyByteBuf buf, List<String> values) {
+        List<String> safe = values == null ? List.of() : values;
+        buf.writeVarInt(safe.size());
+        for (String value : safe) {
+            buf.writeUtf(value == null ? "" : value);
+        }
+    }
+
+    private static List<String> readStringList(FriendlyByteBuf buf) {
+        int size = buf.readVarInt();
+        if (size < 0 || size > 4096) throw new IllegalArgumentException("string list size " + size);
+        List<String> values = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            values.add(buf.readUtf());
+        }
+        return values;
     }
 
     public static void sendProgressMeta(ServerPlayer player, String questId) {
@@ -642,6 +777,33 @@ public final class BoundlessNetwork {
         });
     }
 
+    private static void handleSyncConfig(SyncConfig p, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> Config.applySyncedFromServer(
+                p.disabledCategories(),
+                p.appliedQuestPacks(),
+                p.disabledQuestPacks(),
+                p.pinnedQuestHudPosition(),
+                p.hideQuestBookInInventory(),
+                p.questBookInventoryButtonPosition(),
+                p.centerInventoryWithQuestPanel(),
+                p.hideCategoryHeader(),
+                p.filterDisplayMode(),
+                p.disableCategories(),
+                p.enableBuiltinQuestPack(),
+                p.hideQuestWidgetIcons(),
+                p.questTextScale(),
+                p.questIconScale(),
+                p.enableQuestSearchBox(),
+                p.enableDescriptionColors(),
+                p.enableQuestToasts(),
+                p.disableQuestPinning(),
+                p.autoClaimQuestRewards(),
+                p.enableQuestScrolls(),
+                p.disableQuestBook(),
+                p.spawnWithQuestBook()
+        ));
+    }
+
     private static void handleSyncQuestsChunk(SyncQuestsChunk p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> ClientQuestSync.accept(p));
     }
@@ -695,6 +857,7 @@ public final class BoundlessNetwork {
         int size = inv.getContainerSize();
         ItemStack[] sim = new ItemStack[size];
         for (int i = 0; i < size; i++) sim[i] = inv.getItem(i).copy();
+        HolderLookup.Provider registries = sp.registryAccess();
         QuestTracker.ExperienceSnapshot simulatedXp =
                 new QuestTracker.ExperienceSnapshot(sp.experienceLevel, sp.experienceProgress);
         boolean hasXpSubmitTarget = false;
@@ -716,24 +879,23 @@ public final class BoundlessNetwork {
 
             if (raw == null || raw.isBlank()) return false;
 
-            if (raw.startsWith("#")) {
+            QuestItemSpec spec = QuestItemSpec.parse(raw);
+            if (spec.tag) {
                 ResourceLocation tagRl;
-                try { tagRl = ResourceLocation.parse(raw.substring(1)); }
+                try { tagRl = ResourceLocation.parse(spec.id); }
                 catch (Exception ignored) { return false; }
 
                 TagKey<Item> tag = TagKey.create(Registries.ITEM, tagRl);
 
-                if (!canTakeTag(sim, tag, need)) return false;
-                if (!takeTag(sim, tag, need)) return false;
+                if (!canTakeTag(sim, tag, spec, need, registries)) return false;
+                if (!takeTag(sim, tag, spec, need, registries)) return false;
 
             } else {
-                Item item;
-                try { item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(raw)); }
-                catch (Exception ignored) { item = null; }
+                Item item = spec.item();
                 if (item == null) return false;
 
-                if (!canTakeItem(sim, item, need)) return false;
-                if (!takeItem(sim, item, need)) return false;
+                if (!canTakeItem(sim, item, spec, need, registries)) return false;
+                if (!takeItem(sim, item, spec, need, registries)) return false;
             }
         }
 
@@ -750,19 +912,18 @@ public final class BoundlessNetwork {
             if (raw == null || raw.isBlank()) return false;
 
             boolean ok;
-            if (raw.startsWith("#")) {
+            QuestItemSpec spec = QuestItemSpec.parse(raw);
+            if (spec.tag) {
                 ResourceLocation tagRl;
-                try { tagRl = ResourceLocation.parse(raw.substring(1)); }
+                try { tagRl = ResourceLocation.parse(spec.id); }
                 catch (Exception ignored) { return false; }
 
                 TagKey<Item> tag = TagKey.create(Registries.ITEM, tagRl);
-                ok = takeTag(inv, tag, need);
+                ok = takeTag(inv, tag, spec, need, registries);
             } else {
-                Item item;
-                try { item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(raw)); }
-                catch (Exception ignored) { item = null; }
+                Item item = spec.item();
                 if (item == null) return false;
-                ok = takeItem(inv, item, need);
+                ok = takeItem(inv, item, spec, need, registries);
             }
 
             if (!ok) return false;
@@ -776,34 +937,37 @@ public final class BoundlessNetwork {
         return true;
     }
 
-    private static boolean canTakeItem(ItemStack[] stacks, Item item, int needed) {
+    private static boolean canTakeItem(ItemStack[] stacks, Item item, QuestItemSpec spec, int needed, HolderLookup.Provider registries) {
         int have = 0;
         for (ItemStack s : stacks) {
             if (s == null || s.isEmpty()) continue;
             if (!s.is(item)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
             have += s.getCount();
             if (have >= needed) return true;
         }
         return have >= needed;
     }
 
-    private static boolean canTakeTag(ItemStack[] stacks, TagKey<Item> tag, int needed) {
+    private static boolean canTakeTag(ItemStack[] stacks, TagKey<Item> tag, QuestItemSpec spec, int needed, HolderLookup.Provider registries) {
         int have = 0;
         for (ItemStack s : stacks) {
             if (s == null || s.isEmpty()) continue;
             if (!s.is(tag)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
             have += s.getCount();
             if (have >= needed) return true;
         }
         return have >= needed;
     }
 
-    private static boolean takeItem(ItemStack[] stacks, Item item, int toTake) {
+    private static boolean takeItem(ItemStack[] stacks, Item item, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
         int remaining = toTake;
         for (int i = 0; i < stacks.length && remaining > 0; i++) {
             ItemStack s = stacks[i];
             if (s == null || s.isEmpty()) continue;
             if (!s.is(item)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
 
             int take = Math.min(remaining, s.getCount());
             s.shrink(take);
@@ -814,12 +978,13 @@ public final class BoundlessNetwork {
         return remaining <= 0;
     }
 
-    private static boolean takeTag(ItemStack[] stacks, TagKey<Item> tag, int toTake) {
+    private static boolean takeTag(ItemStack[] stacks, TagKey<Item> tag, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
         int remaining = toTake;
         for (int i = 0; i < stacks.length && remaining > 0; i++) {
             ItemStack s = stacks[i];
             if (s == null || s.isEmpty()) continue;
             if (!s.is(tag)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
 
             int take = Math.min(remaining, s.getCount());
             s.shrink(take);
@@ -830,7 +995,7 @@ public final class BoundlessNetwork {
         return remaining <= 0;
     }
 
-    private static boolean takeItem(Inventory inv, Item item, int toTake) {
+    private static boolean takeItem(Inventory inv, Item item, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
         int remaining = toTake;
         int size = inv.getContainerSize();
 
@@ -838,6 +1003,7 @@ public final class BoundlessNetwork {
             ItemStack s = inv.getItem(i);
             if (s.isEmpty()) continue;
             if (!s.is(item)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
 
             int take = Math.min(remaining, s.getCount());
             s.shrink(take);
@@ -848,7 +1014,7 @@ public final class BoundlessNetwork {
         return remaining <= 0;
     }
 
-    private static boolean takeTag(Inventory inv, TagKey<Item> tag, int toTake) {
+    private static boolean takeTag(Inventory inv, TagKey<Item> tag, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
         int remaining = toTake;
         int size = inv.getContainerSize();
 
@@ -856,6 +1022,7 @@ public final class BoundlessNetwork {
             ItemStack s = inv.getItem(i);
             if (s.isEmpty()) continue;
             if (!s.is(tag)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
 
             int take = Math.min(remaining, s.getCount());
             s.shrink(take);

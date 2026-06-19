@@ -103,6 +103,7 @@ public final class BoundlessMod {
             if (!Config.disableQuestBook() && Config.spawnWithQuestBook() && !hasQuestBook(sp)) {
                 sp.getInventory().add(new ItemStack(ModItems.QUEST_BOOK.get()));
             }
+            BoundlessNetwork.syncPlayer(sp);
         }
     }
 

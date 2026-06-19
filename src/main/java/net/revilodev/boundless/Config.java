@@ -11,6 +11,12 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_CATEGORIES =
             BUILDER.comment("A list of quest category IDs to completely disable.")
                     .defineListAllowEmpty(List.of("disabledQuestCategories"), List::of, o -> o instanceof String);
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> APPLIED_QUEST_PACKS =
+            BUILDER.comment("Instance questpack IDs explicitly enabled by the server.")
+                    .defineListAllowEmpty(List.of("appliedQuestPacks"), List::of, o -> o instanceof String);
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_QUEST_PACKS =
+            BUILDER.comment("Instance questpack IDs explicitly disabled by the server.")
+                    .defineListAllowEmpty(List.of("disabledQuestPacks"), List::of, o -> o instanceof String);
 
     static {
         BUILDER.push("UI");
@@ -102,6 +108,106 @@ public final class Config {
 
     public static List<? extends String> disabledCategories() {
         return DISABLED_CATEGORIES.get();
+    }
+
+    public static List<? extends String> appliedQuestPacks() {
+        return APPLIED_QUEST_PACKS.get();
+    }
+
+    public static List<? extends String> disabledQuestPacks() {
+        return DISABLED_QUEST_PACKS.get();
+    }
+
+    public static boolean isQuestPackApplied(String id, boolean defaultEnabled) {
+        String normalized = normalizeQuestPackId(id);
+        if (normalized.isBlank()) return false;
+        if (containsNormalized(DISABLED_QUEST_PACKS.get(), normalized)) return false;
+        if (containsNormalized(APPLIED_QUEST_PACKS.get(), normalized)) return true;
+        return defaultEnabled;
+    }
+
+    public static void setQuestPackApplied(String id, boolean enabled) {
+        String normalized = normalizeQuestPackId(id);
+        if (normalized.isBlank()) return;
+        List<String> applied = normalizedCopy(APPLIED_QUEST_PACKS.get());
+        List<String> disabled = normalizedCopy(DISABLED_QUEST_PACKS.get());
+        applied.remove(normalized);
+        disabled.remove(normalized);
+        if (enabled) applied.add(normalized);
+        else disabled.add(normalized);
+        APPLIED_QUEST_PACKS.set(applied);
+        DISABLED_QUEST_PACKS.set(disabled);
+        SPEC.save();
+    }
+
+    public static void applySyncedFromServer(
+            List<String> disabledCategories,
+            List<String> appliedQuestPacks,
+            List<String> disabledQuestPacks,
+            String pinnedQuestHudPosition,
+            boolean hideQuestBookInInventory,
+            String questBookInventoryButtonPosition,
+            boolean centerInventoryWithQuestPanel,
+            boolean hideCategoryHeader,
+            String filterDisplayMode,
+            boolean disableCategories,
+            boolean enableBuiltinQuestPack,
+            boolean hideQuestWidgetIcons,
+            double questTextScale,
+            double questIconScale,
+            boolean enableQuestSearchBox,
+            boolean enableDescriptionColors,
+            boolean enableQuestToasts,
+            boolean disableQuestPinning,
+            boolean autoClaimQuestRewards,
+            boolean enableQuestScrolls,
+            boolean disableQuestBook,
+            boolean spawnWithQuestBook) {
+        DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
+        APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : List.copyOf(appliedQuestPacks));
+        DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : List.copyOf(disabledQuestPacks));
+        PINNED_QUEST_HUD_POSITION.set(pinnedQuestHudPosition);
+        HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
+        QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
+        CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
+        HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
+        FILTER_DISPLAY_MODE.set(filterDisplayMode);
+        DISABLE_CATEGORIES.set(disableCategories);
+        ENABLE_BUILTIN_QUEST_PACK.set(enableBuiltinQuestPack);
+        HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
+        QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
+        QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
+        ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
+        ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
+        ENABLE_QUEST_TOASTS.set(enableQuestToasts);
+        DISABLE_QUEST_PINNING.set(disableQuestPinning);
+        AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
+        ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
+        DISABLE_QUEST_BOOK.set(disableQuestBook);
+        SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
+    }
+
+    private static boolean containsNormalized(List<? extends String> values, String id) {
+        if (values == null || id == null || id.isBlank()) return false;
+        for (String value : values) {
+            if (id.equals(normalizeQuestPackId(value))) return true;
+        }
+        return false;
+    }
+
+    private static List<String> normalizedCopy(List<? extends String> values) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        if (values != null) {
+            for (String value : values) {
+                String normalized = normalizeQuestPackId(value);
+                if (!normalized.isBlank()) out.add(normalized);
+            }
+        }
+        return new java.util.ArrayList<>(out);
+    }
+
+    private static String normalizeQuestPackId(String id) {
+        return id == null ? "" : id.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     public static String pinnedQuestHudPosition() {

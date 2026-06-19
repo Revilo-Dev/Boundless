@@ -11,12 +11,12 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.revilodev.boundless.Config;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -270,10 +270,7 @@ public final class BoundlessCommands {
             source.sendFailure(Component.literal("Unknown questpack: " + key));
             return 0;
         }
-        if (!writeQuestPackEnabled(packRoot, enabled)) {
-            source.sendFailure(Component.literal("Failed to update questpack: " + key));
-            return 0;
-        }
+        Config.setQuestPackApplied(key, enabled);
 
         MinecraftServer server = source.getServer();
         QuestData.loadServer(server, true);
@@ -312,21 +309,16 @@ public final class BoundlessCommands {
     }
 
     private static boolean readQuestPackEnabled(Path packRoot) {
+        String id = packRoot == null || packRoot.getFileName() == null ? "" : packRoot.getFileName().toString();
         Boolean enabledFromPackJson = readEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"));
-        if (enabledFromPackJson != null) return enabledFromPackJson;
-        Boolean enabledFromMcmeta = readEnabledFlag(packRoot.resolve("pack.mcmeta"));
-        return enabledFromMcmeta == null ? true : enabledFromMcmeta;
-    }
-
-    private static boolean writeQuestPackEnabled(Path packRoot, boolean enabled) {
-        try {
-            Files.createDirectories(packRoot);
-            writeEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"), enabled);
-            writeEnabledFlag(packRoot.resolve("pack.mcmeta"), enabled);
-            return true;
-        } catch (Exception ignored) {
-            return false;
+        boolean defaultEnabled;
+        if (enabledFromPackJson != null) {
+            defaultEnabled = enabledFromPackJson;
+        } else {
+            Boolean enabledFromMcmeta = readEnabledFlag(packRoot.resolve("pack.mcmeta"));
+            defaultEnabled = enabledFromMcmeta == null || enabledFromMcmeta;
         }
+        return Config.isQuestPackApplied(id, defaultEnabled);
     }
 
     private static Boolean readEnabledFlag(Path metaPath) {
@@ -343,28 +335,6 @@ public final class BoundlessCommands {
             return Boolean.parseBoolean(enabled.getAsString());
         } catch (Exception ignored) {
             return null;
-        }
-    }
-
-    private static void writeEnabledFlag(Path metaPath, boolean enabled) throws Exception {
-        JsonObject root;
-        if (Files.exists(metaPath)) {
-            try (BufferedReader reader = Files.newBufferedReader(metaPath, StandardCharsets.UTF_8)) {
-                JsonElement parsed = JsonParser.parseReader(reader);
-                root = parsed instanceof JsonObject obj ? obj : new JsonObject();
-            }
-        } else {
-            root = new JsonObject();
-        }
-        JsonObject boundless = root.has("boundless") && root.get("boundless").isJsonObject()
-                ? root.getAsJsonObject("boundless")
-                : new JsonObject();
-        boundless.addProperty("enabled", enabled);
-        root.add("boundless", boundless);
-        Path parent = metaPath.getParent();
-        if (parent != null) Files.createDirectories(parent);
-        try (BufferedWriter writer = Files.newBufferedWriter(metaPath, StandardCharsets.UTF_8)) {
-            writer.write(root.toString());
         }
     }
 }
