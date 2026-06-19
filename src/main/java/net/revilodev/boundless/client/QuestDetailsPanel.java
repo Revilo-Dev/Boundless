@@ -29,6 +29,7 @@ import net.revilodev.boundless.compat.JeiCompat;
 import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestTracker;
 
 import java.util.ArrayList;
@@ -161,13 +162,19 @@ public final class QuestDetailsPanel extends AbstractWidget {
         final int w;
         final int h;
         final ItemStack stack;
+        final boolean jeiEnabled;
 
         ItemClickRegion(int x, int y, int w, int h, ItemStack stack) {
+            this(x, y, w, h, stack, true);
+        }
+
+        ItemClickRegion(int x, int y, int w, int h, ItemStack stack, boolean jeiEnabled) {
             this.x = x;
             this.y = y;
             this.w = w;
             this.h = h;
             this.stack = stack;
+            this.jeiEnabled = jeiEnabled;
         }
 
         boolean contains(double mx, double my) {
@@ -438,15 +445,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     }
 
                     String raw = t.id;
-                    boolean isTagSyntax = raw.startsWith("#");
-                    String key = isTagSyntax ? raw.substring(1) : raw;
+                    QuestItemSpec spec = QuestItemSpec.parse(raw);
+                    boolean isTagSyntax = spec.tag;
+                    String key = spec.id;
                     ResourceLocation rl = safeParse(key);
                     if (rl == null) {
                         drawScaledString(gg, Component.translatable("ui.boundless.questbook.invalid_item_target"), x + 4, curY[0] + 4, 0xFF5555);
                         curY[0] += scaledRowHeight();
                         continue;
                     }
-                    Item direct = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
+                    Item direct = spec.item();
                     boolean treatAsTag = isTagSyntax || direct == null;
 
                     int need = t.count;
@@ -635,12 +643,12 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         if (hasItemRewards) {
             for (QuestData.RewardEntry re : quest.rewards.items) {
-                Item item = resolveItem(re.item);
+                Item item = resolveItem(QuestItemSpec.stripComponents(re.item));
                 int lineY = curY[0];
                 if (item != null) {
                     ItemStack st = new ItemStack(item, Math.max(1, re.count));
                     renderScaledItem(gg, st, x + 4, lineY);
-                    itemRegions.add(new ItemClickRegion(x + 4, lineY, 16, 16, st.copy()));
+                    itemRegions.add(new ItemClickRegion(x + 4, lineY, 16, 16, st.copy(), false));
                     drawScaledString(gg, "x" + st.getCount(), x + 24, lineY + 6, 0xA8FFA8);
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
                         hoveredTooltips.add(st.getHoverName());
@@ -1300,7 +1308,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         if (button == 0) {
             for (ItemClickRegion region : itemRegions) {
-                if (region.contains(mouseX, mouseY) && openJeiForStack(region.stack)) {
+                if (region.jeiEnabled && region.contains(mouseX, mouseY) && openJeiForStack(region.stack)) {
                     return true;
                 }
             }

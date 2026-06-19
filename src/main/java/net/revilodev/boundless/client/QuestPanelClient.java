@@ -487,7 +487,7 @@ public final class QuestPanelClient {
         }
 
         if (st.header != null) {
-            boolean showHeader = st.open && (st.showingDetails || (!Config.hideCategoryHeader() && !Config.disableCategories()));
+            boolean showHeader = st.open && !st.showingDetails && !Config.hideCategoryHeader() && !Config.disableCategories();
             st.header.visible = showHeader;
             st.header.active = false;
         }
@@ -551,9 +551,6 @@ public final class QuestPanelClient {
 
     private static String sectionTitle(State st) {
         if (st == null) return "";
-        if (st.showingDetails && st.details != null) {
-            return st.details.currentQuestTitle();
-        }
         return st.tabs == null ? "" : st.tabs.getSelectedName();
     }
 

@@ -429,7 +429,10 @@ public final class QuestListWidget extends AbstractWidget {
                     tex = ROW_TEX;
                 }
 
-                gg.blit(tex, getX(), top, 0, 0, 127, 27, 127, 27);
+                boolean hovered = this.active
+                        && mouseX >= getX() && mouseX <= getX() + width
+                        && mouseY >= top && mouseY <= top + h;
+                blitQuestWidget(gg, tex, getX(), top, 127, 27, hovered);
 
                 int textX = getX() + 23;
                 if (!hideIcons) {
@@ -465,6 +468,12 @@ public final class QuestListWidget extends AbstractWidget {
             int barY = contentTop + (int) ((viewportHeight - barH) * scrollRatio);
             gg.fill(getX() + width + 4, barY, getX() + width + 6, barY + barH, 0xFF808080);
         }
+    }
+
+    private void blitQuestWidget(GuiGraphics gg, ResourceLocation texture, int x, int y, int w, int h, boolean hovered) {
+        if (hovered) RenderSystem.setShaderColor(1.1f, 1.1f, 1.1f, 1.0f);
+        gg.blit(texture, x, y, 0, 0, w, h, w, h);
+        if (hovered) RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
     private void renderScaledItem(GuiGraphics gg, ItemStack stack, int x, int y) {

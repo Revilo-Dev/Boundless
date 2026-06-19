@@ -3,10 +3,14 @@ package net.revilodev.boundless.quest;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.item.ItemInput;
+import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -444,28 +448,29 @@ public final class QuestTracker {
 
     public static int getCountInInventory(String id, Player player) {
         if (player == null || id == null || id.isBlank()) return 0;
-        boolean isTagSyntax = id.startsWith("#");
-        String key = isTagSyntax ? id.substring(1) : id;
+        QuestItemSpec spec = QuestItemSpec.parse(id);
+        String key = spec.id;
 
         ResourceLocation rl = tryParseCached(key);
         if (rl == null) return 0;
 
         Item direct = resolveItemById(key);
         int found = 0;
+        var registries = player.registryAccess();
         var inventory = player.getInventory();
         int containerSize = inventory.getContainerSize();
 
-        if (isTagSyntax || direct == null) {
+        if (spec.tag || direct == null) {
             var itemTag = net.minecraft.tags.TagKey.create(Registries.ITEM, rl);
             for (int i = 0; i < containerSize; i++) {
                 ItemStack s = inventory.getItem(i);
-                if (!s.isEmpty() && s.is(itemTag)) found += s.getCount();
+                if (!s.isEmpty() && s.is(itemTag) && spec.matches(s, registries)) found += s.getCount();
             }
             if (found == 0) {
                 var blockTag = net.minecraft.tags.TagKey.create(Registries.BLOCK, rl);
                 for (int i = 0; i < containerSize; i++) {
                     ItemStack s = inventory.getItem(i);
-                    if (!s.isEmpty() && s.getItem() instanceof BlockItem bi && bi.getBlock().builtInRegistryHolder().is(blockTag)) {
+                    if (!s.isEmpty() && s.getItem() instanceof BlockItem bi && bi.getBlock().builtInRegistryHolder().is(blockTag) && spec.componentsMatch(s, registries)) {
                         found += s.getCount();
                     }
                 }
@@ -473,7 +478,7 @@ public final class QuestTracker {
         } else {
             for (int i = 0; i < containerSize; i++) {
                 ItemStack s = inventory.getItem(i);
-                if (!s.isEmpty() && s.is(direct)) found += s.getCount();
+                if (!s.isEmpty() && s.is(direct) && spec.matches(s, registries)) found += s.getCount();
             }
         }
 
@@ -695,17 +700,18 @@ public final class QuestTracker {
         for (QuestData.RewardEntry r : q.rewards.items) {
             if (r == null || r.item == null || r.item.isBlank()) continue;
             try {
-                ResourceLocation rl = tryParseCached(r.item);
+                QuestItemSpec spec = QuestItemSpec.parse(r.item);
+                ResourceLocation rl = tryParseCached(spec.id);
                 if (rl == null) {
                     BoundlessMod.LOGGER.warn("Skipping invalid item reward '{}' for quest {}", r.item, q.id);
                     continue;
                 }
-                Item item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
+                Item item = spec.item();
                 if (item == null) {
                     BoundlessMod.LOGGER.warn("Skipping missing item reward '{}' for quest {}", r.item, q.id);
                     continue;
                 }
-                ItemStack stack = new ItemStack(item, Math.max(1, r.count));
+                ItemStack stack = createRewardStack(player, spec, item, Math.max(1, r.count));
                 if (!player.getInventory().add(stack) && !stack.isEmpty()) {
                     player.drop(stack, false);
                 }
@@ -716,9 +722,23 @@ public final class QuestTracker {
         }
     }
 
+    private static ItemStack createRewardStack(ServerPlayer player, QuestItemSpec spec, Item item, int count) {
+        if (player != null && spec != null && !spec.components.isBlank()) {
+            try {
+                ItemParser.ItemResult parsed = new ItemParser(player.registryAccess()).parse(new StringReader(spec.commandSyntax()));
+                return new ItemInput(parsed.item(), parsed.components()).createItemStack(count, false);
+            } catch (CommandSyntaxException e) {
+                BoundlessMod.LOGGER.warn("Could not parse item reward components '{}'; granting base item", spec.serialized(), e);
+            } catch (Throwable t) {
+                BoundlessMod.LOGGER.warn("Could not apply item reward components '{}'; granting base item", spec.serialized(), t);
+            }
+        }
+        return new ItemStack(item, count);
+    }
+
     private static void runCommandRewards(ServerPlayer player, QuestData.Quest q) {
         if (player == null || q == null || q.rewards == null) return;
-        CommandSourceStack css = player.createCommandSourceStack().withPermission(4);
+        CommandSourceStack css = player.createCommandSourceStack().withPermission(4).withSuppressedOutput();
         LinkedHashSet<String> toRun = new LinkedHashSet<>();
 
         if (q.rewards.commands != null) {

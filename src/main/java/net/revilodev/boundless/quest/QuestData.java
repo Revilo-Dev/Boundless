@@ -75,7 +75,7 @@ public final class QuestData {
 
             this.id = Objects.requireNonNull(id);
             this.name = name == null ? id : name;
-            this.icon = icon == null ? "minecraft:book" : icon;
+            this.icon = icon == null || icon.isBlank() ? "boundless:quest_book" : icon;
             this.description = description == null ? "" : description;
             this.dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
             this.lockAfterDependency = lockAfterDependency;
@@ -450,10 +450,16 @@ public final class QuestData {
 
     private static boolean isInstancePackEnabled(Path packRoot) {
         if (packRoot == null) return false;
+        String id = packRoot.getFileName() == null ? "" : packRoot.getFileName().toString();
         Boolean enabledFromPackJson = readEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"));
-        if (enabledFromPackJson != null) return enabledFromPackJson;
-        Boolean enabledFromMcmeta = readEnabledFlag(packRoot.resolve("pack.mcmeta"));
-        return enabledFromMcmeta == null ? true : enabledFromMcmeta;
+        boolean defaultEnabled;
+        if (enabledFromPackJson != null) {
+            defaultEnabled = enabledFromPackJson;
+        } else {
+            Boolean enabledFromMcmeta = readEnabledFlag(packRoot.resolve("pack.mcmeta"));
+            defaultEnabled = enabledFromMcmeta == null || enabledFromMcmeta;
+        }
+        return Config.isQuestPackApplied(id, defaultEnabled);
     }
 
     private static Boolean readEnabledFlag(Path metaPath) {
