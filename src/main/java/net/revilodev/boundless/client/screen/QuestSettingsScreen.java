@@ -11,10 +11,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.client.QuestListWidget;
+import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 
 import java.util.ArrayList;
@@ -549,9 +551,36 @@ public final class QuestSettingsScreen extends Screen {
         Config.DISABLE_QUEST_BOOK.set(disableQuestBook);
         Config.SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
         Config.SPEC.save();
+        sendConfigToServer();
         QuestPanelClient.applyConfigChanges();
         if (close) {
             Minecraft.getInstance().setScreen(parent);
+        }
+    }
+
+    private void sendConfigToServer() {
+        try {
+            PacketDistributor.sendToServer(new BoundlessNetwork.UpdateServerConfig(
+                    pinnedHudPos,
+                    hideQuestBookInInventory,
+                    questBookInventoryButtonPosition,
+                    centerInventoryWithQuestPanel,
+                    hideCategoryHeader,
+                    filterDisplayMode,
+                    disableCategories,
+                    hideQuestWidgetIcons,
+                    questTextScale,
+                    questIconScale,
+                    enableQuestSearchBox,
+                    enableDescriptionColors,
+                    enableQuestToasts,
+                    disableQuestPinning,
+                    autoClaimQuestRewards,
+                    enableQuestScrolls,
+                    disableQuestBook,
+                    spawnWithQuestBook
+            ));
+        } catch (Throwable ignored) {
         }
     }
 
