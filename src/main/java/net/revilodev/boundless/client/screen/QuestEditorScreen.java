@@ -35,15 +35,18 @@ import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.entity.MobCategory;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.compat.LevelUpCompat;
+import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestItemSpec;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
@@ -933,7 +936,9 @@ public final class QuestEditorScreen extends Screen {
             boolean next = !Config.enableBuiltinQuestPack();
             Config.ENABLE_BUILTIN_QUEST_PACK.set(next);
             Config.SPEC.save();
-            runBoundlessReloadInBackground();
+            if (!sendQuestPackEnabledToServer("", next, true)) {
+                runBoundlessReloadInBackground();
+            }
             QuestPanelClient.applyConfigChanges();
             statusMessage = next ? trs("status.builtin_enabled") : trs("status.builtin_disabled");
             statusColor = 0xA0FFA0;
@@ -950,7 +955,9 @@ public final class QuestEditorScreen extends Screen {
             setError(trs("error.update_questpack_failed"));
             return;
         }
-        runBoundlessReloadInBackground();
+        if (!sendQuestPackToServer(pack, next) && !sendQuestPackEnabledToServer(pack.name, next, false)) {
+            runBoundlessReloadInBackground();
+        }
         statusMessage = trs(next ? "status.questpack_enabled" : "status.questpack_disabled", pack.name);
         statusColor = 0xA0FFA0;
         refreshLeftList();
@@ -2587,6 +2594,7 @@ public final class QuestEditorScreen extends Screen {
         boolean changed = false;
 
         for (String packName : new ArrayList<>(stagedDeletedPackNames)) {
+            sendDeleteQuestPackToServer(packName);
             changed |= deleteAppliedPackArtifactsSafe(packName);
         }
         for (QuestPack pack : new ArrayList<>(stagedPacks.values())) {
@@ -2642,18 +2650,19 @@ public final class QuestEditorScreen extends Screen {
 
     private boolean mirrorCurrentPackDirectorySafe() {
         if (currentPack == null || currentPack.root == null) return false;
+        boolean uploaded = sendQuestPackToServer(currentPack, currentPack.enabled);
         try {
             Path targetRoot = packsRoot().resolve(currentPack.name);
             Path sourceReal = currentPack.root.toRealPath();
             Path targetReal = Files.exists(targetRoot) ? targetRoot.toRealPath() : targetRoot.toAbsolutePath().normalize();
             if (sourceReal.equals(targetReal)) {
-                return false;
+                return uploaded;
             }
             mirrorDirectory(currentPack.root, targetRoot);
             return true;
         } catch (IOException ignored) {
         }
-        return false;
+        return uploaded;
     }
 
     private void mirrorDirectory(Path sourceRoot, Path targetRoot) throws IOException {
@@ -3975,6 +3984,79 @@ public final class QuestEditorScreen extends Screen {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private boolean sendQuestPackEnabledToServer(String id, boolean enabled, boolean builtin) {
+        try {
+            PacketDistributor.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private boolean sendQuestPackToServer(QuestPack pack, boolean enabled) {
+        if (pack == null || pack.name == null || pack.name.isBlank() || pack.root == null || !Files.isDirectory(pack.root)) {
+            return false;
+        }
+        try {
+            byte[] zipBytes = zipDirectoryToBytes(pack.root);
+            int uploadId = nextQuestPackUploadId();
+            int chunkSize = 60000;
+            int total = Math.max(1, (zipBytes.length + chunkSize - 1) / chunkSize);
+            for (int i = 0; i < total; i++) {
+                int start = i * chunkSize;
+                int end = Math.min(zipBytes.length, start + chunkSize);
+                byte[] part = java.util.Arrays.copyOfRange(zipBytes, start, end);
+                PacketDistributor.sendToServer(new BoundlessNetwork.UploadQuestPackChunk(
+                        pack.name,
+                        enabled,
+                        uploadId,
+                        total,
+                        i,
+                        part
+                ));
+            }
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private boolean sendDeleteQuestPackToServer(String packName) {
+        String normalizedName = safe(packName).trim();
+        if (normalizedName.isBlank()) return false;
+        try {
+            PacketDistributor.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static int questPackUploadId = 1;
+
+    private static int nextQuestPackUploadId() {
+        questPackUploadId++;
+        if (questPackUploadId <= 0) questPackUploadId = 1;
+        return questPackUploadId;
+    }
+
+    private byte[] zipDirectoryToBytes(Path sourceRoot) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (ZipOutputStream zos = new ZipOutputStream(out)) {
+            try (var walk = Files.walk(sourceRoot)) {
+                for (Path src : (Iterable<Path>) walk::iterator) {
+                    if (Files.isDirectory(src)) continue;
+                    Path rel = sourceRoot.relativize(src);
+                    String entryName = rel.toString().replace('\\', '/');
+                    zos.putNextEntry(new ZipEntry(entryName));
+                    Files.copy(src, zos);
+                    zos.closeEntry();
+                }
+            }
+        }
+        return out.toByteArray();
     }
 
     private void runBoundlessReloadInBackground() {

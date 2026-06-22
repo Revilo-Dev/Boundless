@@ -18,6 +18,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -32,12 +33,19 @@ import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestProgressState;
 import net.revilodev.boundless.quest.QuestTracker;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public final class BoundlessNetwork {
 
@@ -47,9 +55,12 @@ public final class BoundlessNetwork {
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
     private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
+    private static final ConcurrentHashMap<String, QuestPackUploadSession> QUESTPACK_UPLOADS = new ConcurrentHashMap<>();
 
     private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
     private static final int QUEST_CHUNK_BYTES = 60000;
+    private static final Path INSTANCE_QUEST_PACKS_ROOT =
+            FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks").normalize();
 
     private BoundlessNetwork() {}
 
@@ -69,6 +80,10 @@ public final class BoundlessNetwork {
         r.playToServer(CreateScroll.TYPE, CreateScroll.CODEC, BoundlessNetwork::handleCreateScroll);
         r.playToServer(RestartRepeatable.TYPE, RestartRepeatable.CODEC, BoundlessNetwork::handleRestartRepeatable);
         r.playToServer(UpdateFieldInput.TYPE, UpdateFieldInput.CODEC, BoundlessNetwork::handleUpdateFieldInput);
+        r.playToServer(SetQuestPackEnabled.TYPE, SetQuestPackEnabled.CODEC, BoundlessNetwork::handleSetQuestPackEnabled);
+        r.playToServer(UpdateServerConfig.TYPE, UpdateServerConfig.CODEC, BoundlessNetwork::handleUpdateServerConfig);
+        r.playToServer(UploadQuestPackChunk.TYPE, UploadQuestPackChunk.CODEC, BoundlessNetwork::handleUploadQuestPackChunk);
+        r.playToServer(DeleteQuestPack.TYPE, DeleteQuestPack.CODEC, BoundlessNetwork::handleDeleteQuestPack);
 
         r.playToClient(SyncStatus.TYPE, SyncStatus.CODEC, BoundlessNetwork::handleSyncStatus);
         r.playToClient(SyncStatuses.TYPE, SyncStatuses.CODEC, BoundlessNetwork::handleSyncStatuses);
@@ -143,6 +158,125 @@ public final class BoundlessNetwork {
                 buf -> new UpdateFieldInput(buf.readUtf(), buf.readUtf(), buf.readUtf())
         );
         @Override public Type<UpdateFieldInput> type() { return TYPE; }
+    }
+
+    public record SetQuestPackEnabled(String id, boolean enabled, boolean builtin) implements CustomPacketPayload {
+        public static final Type<SetQuestPackEnabled> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "set_questpack_enabled"));
+        public static final StreamCodec<FriendlyByteBuf, SetQuestPackEnabled> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.id == null ? "" : p.id);
+                    buf.writeBoolean(p.enabled);
+                    buf.writeBoolean(p.builtin);
+                },
+                buf -> new SetQuestPackEnabled(buf.readUtf(), buf.readBoolean(), buf.readBoolean())
+        );
+        @Override public Type<SetQuestPackEnabled> type() { return TYPE; }
+    }
+
+    public record UpdateServerConfig(
+            String pinnedQuestHudPosition,
+            boolean hideQuestBookInInventory,
+            String questBookInventoryButtonPosition,
+            boolean centerInventoryWithQuestPanel,
+            boolean hideCategoryHeader,
+            String filterDisplayMode,
+            boolean disableCategories,
+            boolean hideQuestWidgetIcons,
+            double questTextScale,
+            double questIconScale,
+            boolean enableQuestSearchBox,
+            boolean enableDescriptionColors,
+            boolean enableQuestToasts,
+            boolean disableQuestPinning,
+            boolean autoClaimQuestRewards,
+            boolean enableQuestScrolls,
+            boolean disableQuestBook,
+            boolean spawnWithQuestBook) implements CustomPacketPayload {
+        public static final Type<UpdateServerConfig> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_server_config"));
+        public static final StreamCodec<FriendlyByteBuf, UpdateServerConfig> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.pinnedQuestHudPosition == null ? "" : p.pinnedQuestHudPosition);
+                    buf.writeBoolean(p.hideQuestBookInInventory);
+                    buf.writeUtf(p.questBookInventoryButtonPosition == null ? "" : p.questBookInventoryButtonPosition);
+                    buf.writeBoolean(p.centerInventoryWithQuestPanel);
+                    buf.writeBoolean(p.hideCategoryHeader);
+                    buf.writeUtf(p.filterDisplayMode == null ? "" : p.filterDisplayMode);
+                    buf.writeBoolean(p.disableCategories);
+                    buf.writeBoolean(p.hideQuestWidgetIcons);
+                    buf.writeDouble(p.questTextScale);
+                    buf.writeDouble(p.questIconScale);
+                    buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeBoolean(p.enableQuestToasts);
+                    buf.writeBoolean(p.disableQuestPinning);
+                    buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.disableQuestBook);
+                    buf.writeBoolean(p.spawnWithQuestBook);
+                },
+                buf -> new UpdateServerConfig(
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readDouble(),
+                        buf.readDouble(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean())
+        );
+        @Override public Type<UpdateServerConfig> type() { return TYPE; }
+    }
+
+    public record UploadQuestPackChunk(String id, boolean enabled, int uploadId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
+        public static final Type<UploadQuestPackChunk> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "upload_questpack_chunk"));
+        public static final StreamCodec<FriendlyByteBuf, UploadQuestPackChunk> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.id == null ? "" : p.id);
+                    buf.writeBoolean(p.enabled);
+                    buf.writeVarInt(p.uploadId);
+                    buf.writeVarInt(p.totalParts);
+                    buf.writeVarInt(p.index);
+                    byte[] safe = p.part == null ? new byte[0] : p.part;
+                    buf.writeVarInt(safe.length);
+                    buf.writeBytes(safe);
+                },
+                buf -> {
+                    String id = buf.readUtf();
+                    boolean enabled = buf.readBoolean();
+                    int uploadId = buf.readVarInt();
+                    int totalParts = buf.readVarInt();
+                    int index = buf.readVarInt();
+                    int len = buf.readVarInt();
+                    if (len < 0 || len > 1_200_000) throw new IllegalArgumentException("questpack chunk len " + len);
+                    byte[] bytes = new byte[len];
+                    buf.readBytes(bytes);
+                    return new UploadQuestPackChunk(id, enabled, uploadId, totalParts, index, bytes);
+                }
+        );
+        @Override public Type<UploadQuestPackChunk> type() { return TYPE; }
+    }
+
+    public record DeleteQuestPack(String id) implements CustomPacketPayload {
+        public static final Type<DeleteQuestPack> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "delete_questpack"));
+        public static final StreamCodec<FriendlyByteBuf, DeleteQuestPack> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.id == null ? "" : p.id),
+                buf -> new DeleteQuestPack(buf.readUtf())
+        );
+        @Override public Type<DeleteQuestPack> type() { return TYPE; }
     }
 
     public record SyncStatus(String questId, String status) implements CustomPacketPayload {
@@ -744,6 +878,174 @@ public final class BoundlessNetwork {
         });
     }
 
+    private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.player();
+            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+
+            if (p.builtin()) {
+                Config.ENABLE_BUILTIN_QUEST_PACK.set(p.enabled());
+                Config.SPEC.save();
+            } else {
+                String id = p.id() == null ? "" : p.id().trim();
+                if (id.isBlank()) return;
+                if (id.contains("/") || id.contains("\\")) return;
+                Path packRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
+                if (!packRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT) || !Files.isDirectory(packRoot)) return;
+                Config.setQuestPackApplied(id, p.enabled());
+            }
+
+            QuestData.loadServer(sp.server, true);
+            for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+                syncPlayer(player);
+            }
+        });
+    }
+
+    private static void handleUpdateServerConfig(UpdateServerConfig p, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.player();
+            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+
+            Config.PINNED_QUEST_HUD_POSITION.set(p.pinnedQuestHudPosition());
+            Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(p.hideQuestBookInInventory());
+            Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(p.questBookInventoryButtonPosition());
+            Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(p.centerInventoryWithQuestPanel());
+            Config.HIDE_CATEGORY_HEADER.set(p.hideCategoryHeader());
+            Config.FILTER_DISPLAY_MODE.set(p.filterDisplayMode());
+            Config.DISABLE_CATEGORIES.set(p.disableCategories());
+            Config.HIDE_QUEST_WIDGET_ICONS.set(p.hideQuestWidgetIcons());
+            Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questTextScale())));
+            Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
+            Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
+            Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
+            Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
+            Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
+            Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
+            Config.ENABLE_QUEST_SCROLLS.set(p.enableQuestScrolls());
+            Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
+            Config.SPAWN_WITH_QUEST_BOOK.set(p.spawnWithQuestBook());
+            Config.SPEC.save();
+
+            for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+                sendConfig(player);
+            }
+        });
+    }
+
+    private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.player();
+            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            String id = normalizeQuestPackFolderName(p.id());
+            if (id.isBlank()) return;
+            if (p.totalParts() <= 0 || p.totalParts() > 65536) return;
+            if (p.index() < 0 || p.index() >= p.totalParts()) return;
+
+            String key = sp.getUUID() + ":" + id + ":" + p.uploadId();
+            QuestPackUploadSession session = QUESTPACK_UPLOADS.compute(key, (ignored, existing) -> {
+                if (existing == null || existing.totalParts != p.totalParts()) {
+                    return new QuestPackUploadSession(id, p.enabled(), p.totalParts());
+                }
+                return existing;
+            });
+            if (session == null) return;
+            if (session.parts[p.index()] == null) {
+                session.parts[p.index()] = p.part() == null ? new byte[0] : p.part();
+                session.received++;
+            }
+            if (session.received < session.totalParts) return;
+
+            QUESTPACK_UPLOADS.remove(key);
+            byte[] zipBytes = session.join();
+            try {
+                writeUploadedQuestPack(id, zipBytes);
+                Config.setQuestPackApplied(id, session.enabled);
+                reloadAndSyncAll(sp);
+            } catch (IOException ignored) {
+            }
+        });
+    }
+
+    private static void handleDeleteQuestPack(DeleteQuestPack p, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.player();
+            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            String id = normalizeQuestPackFolderName(p.id());
+            if (id.isBlank()) return;
+            try {
+                deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
+                Config.setQuestPackApplied(id, false);
+                reloadAndSyncAll(sp);
+            } catch (IOException ignored) {
+            }
+        });
+    }
+
+    private static void reloadAndSyncAll(ServerPlayer sp) {
+        QuestData.loadServer(sp.server, true);
+        for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+            syncPlayer(player);
+        }
+    }
+
+    private static String normalizeQuestPackFolderName(String raw) {
+        String id = raw == null ? "" : raw.trim();
+        if (id.isBlank()) return "";
+        if (".".equals(id) || "..".equals(id)) return "";
+        if (id.contains("/") || id.contains("\\") || id.matches(".*[<>:\"|?*].*")) return "";
+        return id;
+    }
+
+    private static void writeUploadedQuestPack(String id, byte[] zipBytes) throws IOException {
+        Files.createDirectories(INSTANCE_QUEST_PACKS_ROOT);
+        Path targetRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
+        if (!targetRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+        if (targetRoot.equals(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+
+        Path tempRoot = INSTANCE_QUEST_PACKS_ROOT.resolve("." + id + ".upload").normalize();
+        deleteDirectoryIfExists(tempRoot);
+        Files.createDirectories(tempRoot);
+
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes == null ? new byte[0] : zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+                if (name == null || name.isBlank()) continue;
+                Path dst = tempRoot.resolve(name).normalize();
+                if (!dst.startsWith(tempRoot)) throw new IOException("Invalid questpack zip entry");
+                if (entry.isDirectory()) {
+                    Files.createDirectories(dst);
+                } else {
+                    Path parent = dst.getParent();
+                    if (parent != null) Files.createDirectories(parent);
+                    Files.copy(zis, dst, StandardCopyOption.REPLACE_EXISTING);
+                }
+                zis.closeEntry();
+            }
+        }
+
+        deleteDirectoryIfExists(targetRoot);
+        Files.move(tempRoot, targetRoot, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private static void deleteDirectoryIfExists(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) return;
+        Path normalized = root.normalize();
+        if (!normalized.startsWith(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+        if (normalized.equals(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+        try (var walk = Files.walk(normalized)) {
+            List<Path> paths = new ArrayList<>();
+            for (Path path : (Iterable<Path>) walk::iterator) {
+                paths.add(path);
+            }
+            paths.sort((a, b) -> b.getNameCount() - a.getNameCount());
+            for (Path path : paths) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
     private static void handleSyncStatus(SyncStatus p, IPayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()))
@@ -800,7 +1102,8 @@ public final class BoundlessNetwork {
     }
 
     private static void handleSyncConfig(SyncConfig p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> Config.applySyncedFromServer(
+        ctx.enqueueWork(() -> {
+            Config.applySyncedFromServer(
                 p.disabledCategories(),
                 p.appliedQuestPacks(),
                 p.disabledQuestPacks(),
@@ -823,7 +1126,9 @@ public final class BoundlessNetwork {
                 p.enableQuestScrolls(),
                 p.disableQuestBook(),
                 p.spawnWithQuestBook()
-        ));
+            );
+            ClientOnly.applyConfigChanges();
+        });
     }
 
     private static void handleSyncQuestsChunk(SyncQuestsChunk p, IPayloadContext ctx) {
@@ -1055,11 +1360,49 @@ public final class BoundlessNetwork {
         return remaining <= 0;
     }
 
+    private static final class QuestPackUploadSession {
+        final String id;
+        final boolean enabled;
+        final int totalParts;
+        final byte[][] parts;
+        int received;
+
+        QuestPackUploadSession(String id, boolean enabled, int totalParts) {
+            this.id = id;
+            this.enabled = enabled;
+            this.totalParts = totalParts;
+            this.parts = new byte[totalParts][];
+        }
+
+        byte[] join() {
+            int len = 0;
+            for (byte[] part : parts) {
+                if (part != null) len += part.length;
+            }
+            byte[] out = new byte[len];
+            int off = 0;
+            for (byte[] part : parts) {
+                if (part == null) continue;
+                System.arraycopy(part, 0, out, off, part.length);
+                off += part.length;
+            }
+            return out;
+        }
+    }
+
     @OnlyIn(Dist.CLIENT)
     private static final class ClientOnly {
         private static void openQuestBook() {
             net.minecraft.client.Minecraft.getInstance()
                     .setScreen(new net.revilodev.boundless.client.screen.StandaloneQuestBookScreen());
+        }
+
+        private static void applyConfigChanges() {
+            net.revilodev.boundless.client.QuestPanelClient.applyConfigChanges();
+            if (net.minecraft.client.Minecraft.getInstance().screen
+                    instanceof net.revilodev.boundless.client.screen.StandaloneQuestBookScreen screen) {
+                screen.refreshSyncedData();
+            }
         }
     }
 
@@ -1125,6 +1468,7 @@ public final class BoundlessNetwork {
                 String json = new String(all, StandardCharsets.UTF_8);
                 reset();
                 QuestData.applyNetworkJson(json);
+                ClientOnly.applyConfigChanges();
             }
         }
     }

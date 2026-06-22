@@ -195,6 +195,40 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
     }
 
+    public void refreshSyncedData() {
+        if (Config.disableQuestBook()) {
+            if (minecraft != null) minecraft.setScreen(null);
+            return;
+        }
+
+        if (list != null) {
+            list.setTopInset(Config.enableQuestSearchBox() ? 18 : 0);
+            list.setQuests(QuestData.all());
+            list.setCategory(selectedCategory);
+            list.setSearchQuery(searchQuery);
+        }
+
+        if (tabs != null) {
+            if (!Config.disableCategories()) {
+                tabs.setSelected(selectedCategory);
+                tabs.setCategories(QuestData.categoriesOrdered());
+                selectedCategory = tabs.getSelectedId();
+                if (selectedCategory == null || selectedCategory.isBlank()) {
+                    selectedCategory = tabs.selectFirstCategory();
+                }
+                lastSelectedCategory = selectedCategory;
+                if (list != null) list.setCategory(selectedCategory);
+            } else {
+                selectedCategory = "all";
+                lastSelectedCategory = "all";
+                if (list != null) list.setCategory("all");
+            }
+        }
+
+        showingDetails = false;
+        updateVisibility();
+    }
+
     private String sectionTitle() {
         return tabs == null ? "" : tabs.getSelectedName();
     }
