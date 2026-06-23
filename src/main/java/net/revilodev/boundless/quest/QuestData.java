@@ -12,9 +12,9 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.Item;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.fml.loading.FMLPaths;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.fml.loading.FMLPaths;
 import net.revilodev.boundless.Config;
 
 import java.io.BufferedReader;
@@ -93,7 +93,7 @@ public final class QuestData {
 
         public Optional<Item> iconItem() {
             try {
-                ResourceLocation rl = ResourceLocation.parse(icon);
+                ResourceLocation rl = new ResourceLocation(icon);
                 return Optional.ofNullable(BuiltInRegistries.ITEM.get(rl));
             } catch (Exception ignored) {
                 return Optional.empty();
@@ -237,7 +237,7 @@ public final class QuestData {
 
         public Optional<Item> iconItem() {
             try {
-                ResourceLocation rl = ResourceLocation.parse(icon);
+                ResourceLocation rl = new ResourceLocation(icon);
                 return Optional.ofNullable(BuiltInRegistries.ITEM.get(rl));
             } catch (Exception ignored) {
                 return Optional.empty();
@@ -281,7 +281,7 @@ public final class QuestData {
 
         public Optional<Item> iconItem() {
             try {
-                ResourceLocation rl = ResourceLocation.parse(icon);
+                ResourceLocation rl = new ResourceLocation(icon);
                 return Optional.ofNullable(BuiltInRegistries.ITEM.get(rl));
             } catch (Exception ignored) {
                 return Optional.empty();
@@ -594,7 +594,7 @@ public final class QuestData {
                             String rel = questsRoot.relativize(path).toString().replace('\\', '/');
                             if (rel.startsWith("categories/")) return;
                             if (isSubCategoryPath("quests/" + rel)) return;
-                            ResourceLocation loc = ResourceLocation.fromNamespaceAndPath(namespace, "quests/" + rel);
+                            ResourceLocation loc = new ResourceLocation(namespace, "quests/" + rel);
                             if (shouldIgnoreQuestJson(loc)) return;
                             try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
                                 JsonObject obj = safeObject(reader);

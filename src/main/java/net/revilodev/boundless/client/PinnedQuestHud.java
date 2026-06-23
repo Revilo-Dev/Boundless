@@ -45,7 +45,7 @@ import java.util.Map;
 @OnlyIn(Dist.CLIENT)
 public final class PinnedQuestHud {
     private static final ResourceLocation TEX_BG =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pinned_quest_toast.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pinned_quest_toast.png");
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
 
@@ -430,7 +430,7 @@ public final class PinnedQuestHud {
                 ResourceLocation rl = ResourceLocation.tryParse(t.id);
                 ItemStack icon = new ItemStack(Items.DIAMOND_SWORD);
                 if (rl != null) {
-                    ResourceLocation eggRl = ResourceLocation.fromNamespaceAndPath(rl.getNamespace(), rl.getPath() + "_spawn_egg");
+                    ResourceLocation eggRl = new ResourceLocation(rl.getNamespace(), rl.getPath() + "_spawn_egg");
                     Item egg = BuiltInRegistries.ITEM.getOptional(eggRl).orElse(null);
                     if (egg != null) icon = new ItemStack(egg);
                 }

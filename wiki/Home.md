@@ -1,6 +1,6 @@
 # Boundless Wiki
 
-Boundless is a questing mod for NeoForge built around data-driven quest packs, an in-game quest book, and optional in-game editing tools for operators.
+Boundless is a questing mod for Forge built around data-driven quest packs, an in-game quest book, and optional in-game editing tools for operators.
 
 This wiki is focused on **how to use the mod in normal gameplay** first, then moves into pack management and admin tools.
 

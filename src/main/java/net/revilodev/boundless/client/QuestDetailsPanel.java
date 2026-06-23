@@ -1,6 +1,6 @@
 package net.revilodev.boundless.client;
 
-import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -21,9 +21,8 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.JeiCompat;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -50,15 +49,15 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private static final Pattern ITEM_ID_PATTERN = Pattern.compile("\\b[a-z0-9_.-]+:[a-z0-9_./-]+\\b");
 
     private static final ResourceLocation TEX_PIN =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pin.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pin.png");
     private static final ResourceLocation TEX_PIN_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pin-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pin-hovered.png");
     private static final ResourceLocation TEX_UNPIN =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/unpin.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/unpin.png");
     private static final ResourceLocation TEX_UNPIN_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/unpin-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/unpin-hovered.png");
     private static final ResourceLocation TEX_SCROLL =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/scroll-icon.png");
 
     private final Minecraft mc = Minecraft.getInstance();
     private QuestData.Quest quest;
@@ -119,9 +118,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
         this.complete = new CompleteButton(getX(), getY(), () -> {
             if (quest != null && mc.player != null) {
                 if (QuestTracker.canRestartRepeatable(quest, mc.player)) {
-                    PacketDistributor.sendToServer(new BoundlessNetwork.RestartRepeatable(quest.id));
+                    BoundlessNetwork.sendToServer(new BoundlessNetwork.RestartRepeatable(quest.id));
                 } else {
-                    PacketDistributor.sendToServer(new BoundlessNetwork.Redeem(quest.id));
+                    BoundlessNetwork.sendToServer(new BoundlessNetwork.Redeem(quest.id));
                 }
                 if (this.onBack != null) this.onBack.run();
             }
@@ -131,7 +130,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         this.reject = new RejectButton(getX(), getY(), () -> {
             if (quest != null && mc.player != null && quest.optional) {
-                PacketDistributor.sendToServer(new BoundlessNetwork.Reject(quest.id));
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.Reject(quest.id));
                 if (this.onBack != null) this.onBack.run();
             }
         });
@@ -144,7 +143,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         this.scroll = new ScrollButton(getX(), getY(), () -> {
             if (quest != null && mc.player != null) {
-                PacketDistributor.sendToServer(new BoundlessNetwork.CreateScroll(quest.id));
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.CreateScroll(quest.id));
             }
         });
         this.scroll.visible = false;
@@ -510,7 +509,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
                     Item iconItem;
                     if (et != null) {
-                        ResourceLocation eggRl = ResourceLocation.fromNamespaceAndPath(rl.getNamespace(), rl.getPath() + "_spawn_egg");
+                        ResourceLocation eggRl = new ResourceLocation(rl.getNamespace(), rl.getPath() + "_spawn_egg");
                         iconItem = BuiltInRegistries.ITEM.getOptional(eggRl).orElse(Items.DIAMOND_SWORD);
                     } else {
                         iconItem = Items.DIAMOND_SWORD;
@@ -540,7 +539,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     boolean has = QuestTracker.hasEffect(mc.player, t.id);
                     int color = has ? 0x55FF55 : 0xFF5555;
 
-                    ResourceLocation tex = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
+                    ResourceLocation tex = new ResourceLocation("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
                     renderScaledTextureIcon(gg, tex, x + 4, curY[0]);
                     drawScaledString(gg, eName, x + 26, curY[0] + 6, color);
 
@@ -562,21 +561,15 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     ItemStack icon = new ItemStack(Items.MOJANG_BANNER_PATTERN);
                     String advName = rl.toString();
 
-                    AdvancementHolder holder = null;
-
-                    if (mc.getConnection() != null) {
-                        holder = mc.getConnection().getAdvancements().get(rl);
-                    }
-
-                    if (holder == null && mc.hasSingleplayerServer()) {
+                    Advancement advancement = null;
+                    if (mc.hasSingleplayerServer()) {
                         var server = mc.getSingleplayerServer();
-                        if (server != null) holder = server.getAdvancements().get(rl);
+                        if (server != null) advancement = server.getAdvancements().getAdvancement(rl);
                     }
 
-                    if (holder != null) {
-                        var displayOpt = holder.value().display();
-                        if (displayOpt.isPresent()) {
-                            DisplayInfo di = displayOpt.get();
+                    if (advancement != null) {
+                        DisplayInfo di = advancement.getDisplay();
+                        if (di != null) {
                             advName = di.getTitle().getString();
                             icon = di.getIcon();
                         }
@@ -1173,9 +1166,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
         if (path.startsWith("entities/")) {
             String entityPath = path.substring("entities/".length());
-            Item egg = BuiltInRegistries.ITEM.getOptional(ResourceLocation.fromNamespaceAndPath(namespace, entityPath + "_spawn_egg")).orElse(null);
+            Item egg = BuiltInRegistries.ITEM.getOptional(new ResourceLocation(namespace, entityPath + "_spawn_egg")).orElse(null);
             if (egg == null) {
-                egg = BuiltInRegistries.ITEM.getOptional(ResourceLocation.fromNamespaceAndPath("minecraft", "zombie_spawn_egg")).orElse(Items.ZOMBIE_SPAWN_EGG);
+                egg = BuiltInRegistries.ITEM.getOptional(new ResourceLocation("minecraft", "zombie_spawn_egg")).orElse(Items.ZOMBIE_SPAWN_EGG);
             }
             return new ItemStack(egg);
         }
@@ -1211,7 +1204,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 if (targetBox != box) continue;
                 String normalized = value == null ? "" : value.trim();
                 QuestTracker.setFieldInputProgress(mc.player, key, normalized);
-                PacketDistributor.sendToServer(new BoundlessNetwork.UpdateFieldInput(quest.id, target.id, normalized));
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.UpdateFieldInput(quest.id, target.id, normalized));
                 break;
             }
         });
@@ -1238,10 +1231,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         scrollY = Mth.clamp(scrollY - (float) (delta * 12), 0f, maxScroll);
         return true;
-    }
-
-    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-        return mouseScrolled(mouseX, mouseY, deltaY);
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -1393,9 +1382,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private static final class BackButton extends AbstractButton {
         private static final ResourceLocation TEX_NORMAL =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_button.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_back_button.png");
         private static final ResourceLocation TEX_HOVER =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_highlighted.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_back_highlighted.png");
 
         private final Runnable onPress;
 
@@ -1422,11 +1411,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private static final class CompleteButton extends AbstractButton {
         private static final ResourceLocation TEX_NORMAL =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button.png");
         private static final ResourceLocation TEX_HOVER =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
         private static final ResourceLocation TEX_DISABLED =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
 
         private final Runnable onPress;
 
@@ -1462,13 +1451,13 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private static final class RejectButton extends AbstractButton {
         private static final ResourceLocation TEX_NORMAL =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_reject.png");
         private static final ResourceLocation TEX_HOVER =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject_highlighted.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_reject_highlighted.png");
         private static final ResourceLocation TEX_DISABLED =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject_disabled.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/quest_reject_disabled.png");
         private static final ResourceLocation TEX_CONFIRM =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/are_you_sure_button.png");
+                new ResourceLocation("boundless", "textures/gui/sprites/editor/are_you_sure_button.png");
 
         private final Runnable onPress;
         private boolean optionalAllowed;

@@ -1,6 +1,5 @@
 package net.revilodev.boundless.quest;
 
-import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -108,17 +107,8 @@ public final class QuestItemSpec {
 
     public static String describeStackComponents(ItemStack stack, HolderLookup.Provider registries) {
         if (stack == null || stack.isEmpty()) return "";
-        if (registries != null) {
-            try {
-                String serialized = new ItemInput(stack.getItemHolder(), stack.getComponentsPatch()).serialize(registries);
-                String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-                if (serialized.startsWith(id)) {
-                    return serialized.substring(id.length()).trim();
-                }
-                int start = componentStart(serialized);
-                if (start >= 0) return serialized.substring(start).trim();
-            } catch (Throwable ignored) {
-            }
+        if (stack.hasTag() && stack.getTag() != null) {
+            return stack.getTag().toString();
         }
         return describeStackComponents(stack);
     }

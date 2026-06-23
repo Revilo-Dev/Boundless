@@ -11,9 +11,9 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.client.event.ScreenEvent;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.screen.QuestSettingsScreen;
 import net.revilodev.boundless.quest.QuestData;
@@ -26,19 +26,19 @@ import java.util.WeakHashMap;
 @OnlyIn(Dist.CLIENT)
 public final class QuestPanelClient {
     private static final ResourceLocation BTN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_button.png");
     private static final ResourceLocation BTN_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_button_hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_button_hovered.png");
     private static final ResourceLocation BTN_TEX_TOAST =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_book_toast.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_book_toast.png");
     private static final ResourceLocation BTN_TEX_TOAST_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_book_toast_highlighted.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_book_toast_highlighted.png");
     private static final ResourceLocation BTN_SETTINGS =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/settings_button.png");
     private static final ResourceLocation BTN_SETTINGS_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button_hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/settings_button_hovered.png");
     private static final ResourceLocation PANEL_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
+            new ResourceLocation("boundless", "textures/gui/quest_panel.png");
     private static final int PANEL_W = 147;
     private static final int PANEL_H = 166;
     private static final int BTN_X_BESIDE_RECIPE = 125;
@@ -192,14 +192,14 @@ public final class QuestPanelClient {
 
         if (st.list != null && st.list.visible) {
             if (!overSearch && mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
-                double dY = e.getScrollDeltaY();
-                used = st.list.mouseScrolled(mx, my, dY) || st.list.mouseScrolled(mx, my, 0.0, dY);
+                double dY = e.getScrollDelta();
+                used = st.list.mouseScrolled(mx, my, dY);
             }
         }
         if (st.details != null && st.details.visible) {
             if (mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
-                double dY = e.getScrollDeltaY();
-                used = st.details.mouseScrolled(mx, my, dY) || st.details.mouseScrolled(mx, my, 0.0, dY) || used;
+                double dY = e.getScrollDelta();
+                used = st.details.mouseScrolled(mx, my, dY) || used;
             }
         }
         if (used) e.setCanceled(true);

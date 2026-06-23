@@ -19,17 +19,17 @@ import java.util.function.Consumer;
 @OnlyIn(Dist.CLIENT)
 public final class CategoryTabsWidget extends AbstractWidget {
     private static final ResourceLocation TAB =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/tab_selected.png");
     private static final ResourceLocation MOVE_DOWN =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_down.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/arrow_down.png");
     private static final ResourceLocation MOVE_UP =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_up.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/arrow_up.png");
     private static final ResourceLocation MOVE_DOWN_HIGHLIGHTED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_down-highlighted.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/arrow_down-highlighted.png");
     private static final ResourceLocation MOVE_UP_HIGHLIGHTED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_up-highlighted.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/arrow_up-highlighted.png");
     private static final int PAGE_SIZE = 5;
     private static final int CONTROL_ICON_BASE = 16;
     private static final float CONTROL_ICON_SCALE = 1.0f;

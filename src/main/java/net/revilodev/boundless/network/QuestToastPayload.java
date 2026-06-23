@@ -6,7 +6,7 @@ import net.revilodev.boundless.BoundlessMod;
 
 public record QuestToastPayload(String questId) {
     public static final ResourceLocation ID =
-            ResourceLocation.fromNamespaceAndPath(BoundlessMod.MOD_ID, "quest_toast");
+            new ResourceLocation(BoundlessMod.MOD_ID, "quest_toast");
 
     public static void encode(QuestToastPayload msg, FriendlyByteBuf buf) { buf.writeUtf(msg.questId); }
     public static QuestToastPayload decode(FriendlyByteBuf buf) { return new QuestToastPayload(buf.readUtf()); }

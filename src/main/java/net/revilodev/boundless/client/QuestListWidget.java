@@ -29,15 +29,15 @@ import java.util.function.Consumer;
 public final class QuestListWidget extends AbstractWidget {
 
     private static final ResourceLocation ROW_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget.png");
     private static final ResourceLocation ROW_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_disabled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget_disabled.png");
     private static final ResourceLocation ROW_TEX_REDEEMABLE =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_redeemable.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget_redeemable.png");
     private static final ResourceLocation ROW_TEX_COMPLETED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_completed.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget_completed.png");
     private static final ResourceLocation ROW_TEX_DISCARDED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_discarded.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget_discarded.png");
 
     private final Minecraft mc = Minecraft.getInstance();
     private final List<QuestData.Quest> quests = new ArrayList<>();
@@ -502,7 +502,7 @@ public final class QuestListWidget extends AbstractWidget {
     private ResourceLocation textureIcon(String icon) {
         if (icon == null || icon.isBlank()) return null;
         try {
-            ResourceLocation rl = ResourceLocation.parse(icon);
+            ResourceLocation rl = new ResourceLocation(icon);
             return rl.getPath().startsWith("textures/") ? rl : null;
         } catch (Exception ignored) {
             return null;
@@ -564,10 +564,6 @@ public final class QuestListWidget extends AbstractWidget {
         float max = content - viewportHeight;
         scrollY = Mth.clamp(scrollY - (float) (delta * 12), 0f, max);
         return true;
-    }
-
-    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-        return mouseScrolled(mouseX, mouseY, deltaY);
     }
 
     @Override

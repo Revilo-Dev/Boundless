@@ -16,14 +16,14 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLPaths;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
-import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.PacketDistributor;
+import net.minecraftforge.network.simple.SimpleChannel;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.toast.QuestUnlockedToast;
 import net.revilodev.boundless.item.ModItems;
@@ -44,13 +44,22 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public final class BoundlessNetwork {
 
-    private static final String CHANNEL = "boundless";
+    private static final ResourceLocation CHANNEL_NAME = new ResourceLocation("boundless", "main");
     private static final String VERSION = "2";
+    private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
+            CHANNEL_NAME,
+            () -> VERSION,
+            VERSION::equals,
+            VERSION::equals
+    );
     private static boolean REGISTERED = false;
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
@@ -64,40 +73,62 @@ public final class BoundlessNetwork {
 
     private BoundlessNetwork() {}
 
-    public static void bootstrap(IEventBus bus) {
-        bus.addListener(BoundlessNetwork::register);
-    }
-
-    private static void register(RegisterPayloadHandlersEvent event) {
+    public static void bootstrap() {
         if (REGISTERED) return;
         REGISTERED = true;
+        int id = 0;
+        register(id++, Redeem.class, Redeem.CODEC::encode, Redeem.CODEC::decode, BoundlessNetwork::handleRedeem, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, Reject.class, Reject.CODEC::encode, Reject.CODEC::decode, BoundlessNetwork::handleReject, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, CreateScroll.class, CreateScroll.CODEC::encode, CreateScroll.CODEC::decode, BoundlessNetwork::handleCreateScroll, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, RestartRepeatable.class, RestartRepeatable.CODEC::encode, RestartRepeatable.CODEC::decode, BoundlessNetwork::handleRestartRepeatable, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, UpdateFieldInput.class, UpdateFieldInput.CODEC::encode, UpdateFieldInput.CODEC::decode, BoundlessNetwork::handleUpdateFieldInput, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, SetQuestPackEnabled.class, SetQuestPackEnabled.CODEC::encode, SetQuestPackEnabled.CODEC::decode, BoundlessNetwork::handleSetQuestPackEnabled, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, UpdateServerConfig.class, UpdateServerConfig.CODEC::encode, UpdateServerConfig.CODEC::decode, BoundlessNetwork::handleUpdateServerConfig, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, UploadQuestPackChunk.class, UploadQuestPackChunk.CODEC::encode, UploadQuestPackChunk.CODEC::decode, BoundlessNetwork::handleUploadQuestPackChunk, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, DeleteQuestPack.class, DeleteQuestPack.CODEC::encode, DeleteQuestPack.CODEC::decode, BoundlessNetwork::handleDeleteQuestPack, NetworkDirection.PLAY_TO_SERVER);
 
-        PayloadRegistrar r = event.registrar(CHANNEL).versioned(VERSION);
+        register(id++, SyncStatus.class, SyncStatus.CODEC::encode, SyncStatus.CODEC::decode, BoundlessNetwork::handleSyncStatus, NetworkDirection.PLAY_TO_CLIENT);
+        register(id++, SyncStatuses.class, SyncStatuses.CODEC::encode, SyncStatuses.CODEC::decode, BoundlessNetwork::handleSyncStatuses, NetworkDirection.PLAY_TO_CLIENT);
+        register(id++, SyncProgressMeta.class, SyncProgressMeta.CODEC::encode, SyncProgressMeta.CODEC::decode, BoundlessNetwork::handleSyncProgressMeta, NetworkDirection.PLAY_TO_CLIENT);
+        register(id++, SyncKills.class, SyncKills.CODEC::encode, SyncKills.CODEC::decode, BoundlessNetwork::handleSyncKills, NetworkDirection.PLAY_TO_CLIENT);
+        register(id++, SyncClear.class, SyncClear.CODEC::encode, SyncClear.CODEC::decode, BoundlessNetwork::handleSyncClear, NetworkDirection.PLAY_TO_CLIENT);
+        register(id++, Toast.class, Toast.CODEC::encode, Toast.CODEC::decode, BoundlessNetwork::handleToast, NetworkDirection.PLAY_TO_CLIENT);
+        register(id++, OpenQuestBook.class, OpenQuestBook.CODEC::encode, OpenQuestBook.CODEC::decode, BoundlessNetwork::handleOpenQuestBook, NetworkDirection.PLAY_TO_CLIENT);
+        register(id++, SyncConfig.class, SyncConfig.CODEC::encode, SyncConfig.CODEC::decode, BoundlessNetwork::handleSyncConfig, NetworkDirection.PLAY_TO_CLIENT);
+        register(id, SyncQuestsChunk.class, SyncQuestsChunk.CODEC::encode, SyncQuestsChunk.CODEC::decode, BoundlessNetwork::handleSyncQuestsChunk, NetworkDirection.PLAY_TO_CLIENT);
+    }
 
-        r.playToServer(Redeem.TYPE, Redeem.CODEC, BoundlessNetwork::handleRedeem);
-        r.playToServer(Reject.TYPE, Reject.CODEC, BoundlessNetwork::handleReject);
-        r.playToServer(CreateScroll.TYPE, CreateScroll.CODEC, BoundlessNetwork::handleCreateScroll);
-        r.playToServer(RestartRepeatable.TYPE, RestartRepeatable.CODEC, BoundlessNetwork::handleRestartRepeatable);
-        r.playToServer(UpdateFieldInput.TYPE, UpdateFieldInput.CODEC, BoundlessNetwork::handleUpdateFieldInput);
-        r.playToServer(SetQuestPackEnabled.TYPE, SetQuestPackEnabled.CODEC, BoundlessNetwork::handleSetQuestPackEnabled);
-        r.playToServer(UpdateServerConfig.TYPE, UpdateServerConfig.CODEC, BoundlessNetwork::handleUpdateServerConfig);
-        r.playToServer(UploadQuestPackChunk.TYPE, UploadQuestPackChunk.CODEC, BoundlessNetwork::handleUploadQuestPackChunk);
-        r.playToServer(DeleteQuestPack.TYPE, DeleteQuestPack.CODEC, BoundlessNetwork::handleDeleteQuestPack);
+    private static <T> void register(
+            int id,
+            Class<T> type,
+            BiConsumer<FriendlyByteBuf, T> encoder,
+            Function<FriendlyByteBuf, T> decoder,
+            BiConsumer<T, PayloadContext> handler,
+            NetworkDirection direction) {
+        CHANNEL.messageBuilder(type, id, direction)
+                .encoder((message, buf) -> encoder.accept(buf, message))
+                .decoder(decoder)
+                .consumerMainThread((message, contextSupplier) -> {
+                    handler.accept(message, new PayloadContext(contextSupplier));
+                    contextSupplier.get().setPacketHandled(true);
+                })
+                .add();
+    }
 
-        r.playToClient(SyncStatus.TYPE, SyncStatus.CODEC, BoundlessNetwork::handleSyncStatus);
-        r.playToClient(SyncStatuses.TYPE, SyncStatuses.CODEC, BoundlessNetwork::handleSyncStatuses);
-        r.playToClient(SyncProgressMeta.TYPE, SyncProgressMeta.CODEC, BoundlessNetwork::handleSyncProgressMeta);
-        r.playToClient(SyncKills.TYPE, SyncKills.CODEC, BoundlessNetwork::handleSyncKills);
-        r.playToClient(SyncClear.TYPE, SyncClear.CODEC, BoundlessNetwork::handleSyncClear);
-        r.playToClient(Toast.TYPE, Toast.CODEC, BoundlessNetwork::handleToast);
-        r.playToClient(OpenQuestBook.TYPE, OpenQuestBook.CODEC, BoundlessNetwork::handleOpenQuestBook);
-        r.playToClient(SyncConfig.TYPE, SyncConfig.CODEC, BoundlessNetwork::handleSyncConfig);
-        r.playToClient(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC, BoundlessNetwork::handleSyncQuestsChunk);
+    private record PayloadContext(Supplier<NetworkEvent.Context> contextSupplier) {
+        void enqueueWork(Runnable runnable) {
+            contextSupplier.get().enqueueWork(runnable);
+        }
+
+        net.minecraft.world.entity.player.Player player() {
+            ServerPlayer sender = contextSupplier.get().getSender();
+            return sender != null ? sender : ClientOnly.player();
+        }
     }
 
     public record Redeem(String questId) implements CustomPacketPayload {
         public static final Type<Redeem> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "redeem"));
+                new Type<>(new ResourceLocation("boundless", "redeem"));
         public static final StreamCodec<FriendlyByteBuf, Redeem> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new Redeem(buf.readUtf())
@@ -107,7 +138,7 @@ public final class BoundlessNetwork {
 
     public record Reject(String questId) implements CustomPacketPayload {
         public static final Type<Reject> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "reject"));
+                new Type<>(new ResourceLocation("boundless", "reject"));
         public static final StreamCodec<FriendlyByteBuf, Reject> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new Reject(buf.readUtf())
@@ -117,7 +148,7 @@ public final class BoundlessNetwork {
 
     public record CreateScroll(String questId) implements CustomPacketPayload {
         public static final Type<CreateScroll> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "create_scroll"));
+                new Type<>(new ResourceLocation("boundless", "create_scroll"));
         public static final StreamCodec<FriendlyByteBuf, CreateScroll> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new CreateScroll(buf.readUtf())
@@ -127,7 +158,7 @@ public final class BoundlessNetwork {
 
     public record RestartRepeatable(String questId) implements CustomPacketPayload {
         public static final Type<RestartRepeatable> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "restart_repeatable"));
+                new Type<>(new ResourceLocation("boundless", "restart_repeatable"));
         public static final StreamCodec<FriendlyByteBuf, RestartRepeatable> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new RestartRepeatable(buf.readUtf())
@@ -137,7 +168,7 @@ public final class BoundlessNetwork {
 
     public record UpdateFieldInput(String questId, String targetId, String value) implements CustomPacketPayload {
         public static final Type<UpdateFieldInput> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_field_input"));
+                new Type<>(new ResourceLocation("boundless", "update_field_input"));
         public static final StreamCodec<FriendlyByteBuf, UpdateFieldInput> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.questId);
@@ -151,7 +182,7 @@ public final class BoundlessNetwork {
 
     public record SetQuestPackEnabled(String id, boolean enabled, boolean builtin) implements CustomPacketPayload {
         public static final Type<SetQuestPackEnabled> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "set_questpack_enabled"));
+                new Type<>(new ResourceLocation("boundless", "set_questpack_enabled"));
         public static final StreamCodec<FriendlyByteBuf, SetQuestPackEnabled> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.id == null ? "" : p.id);
@@ -183,7 +214,7 @@ public final class BoundlessNetwork {
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<UpdateServerConfig> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_server_config"));
+                new Type<>(new ResourceLocation("boundless", "update_server_config"));
         public static final StreamCodec<FriendlyByteBuf, UpdateServerConfig> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.pinnedQuestHudPosition == null ? "" : p.pinnedQuestHudPosition);
@@ -230,7 +261,7 @@ public final class BoundlessNetwork {
 
     public record UploadQuestPackChunk(String id, boolean enabled, int uploadId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
         public static final Type<UploadQuestPackChunk> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "upload_questpack_chunk"));
+                new Type<>(new ResourceLocation("boundless", "upload_questpack_chunk"));
         public static final StreamCodec<FriendlyByteBuf, UploadQuestPackChunk> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.id == null ? "" : p.id);
@@ -260,7 +291,7 @@ public final class BoundlessNetwork {
 
     public record DeleteQuestPack(String id) implements CustomPacketPayload {
         public static final Type<DeleteQuestPack> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "delete_questpack"));
+                new Type<>(new ResourceLocation("boundless", "delete_questpack"));
         public static final StreamCodec<FriendlyByteBuf, DeleteQuestPack> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.id == null ? "" : p.id),
                 buf -> new DeleteQuestPack(buf.readUtf())
@@ -270,7 +301,7 @@ public final class BoundlessNetwork {
 
     public record SyncStatus(String questId, String status) implements CustomPacketPayload {
         public static final Type<SyncStatus> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_status"));
+                new Type<>(new ResourceLocation("boundless", "sync_status"));
         public static final StreamCodec<FriendlyByteBuf, SyncStatus> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.questId);
@@ -293,7 +324,7 @@ public final class BoundlessNetwork {
 
     public record SyncStatuses(List<StatusEntry> entries) implements CustomPacketPayload {
         public static final Type<SyncStatuses> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_statuses"));
+                new Type<>(new ResourceLocation("boundless", "sync_statuses"));
         public static final StreamCodec<FriendlyByteBuf, SyncStatuses> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.entries.size());
@@ -323,7 +354,7 @@ public final class BoundlessNetwork {
 
     public record SyncProgressMeta(List<ProgressMetaEntry> entries) implements CustomPacketPayload {
         public static final Type<SyncProgressMeta> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_progress_meta"));
+                new Type<>(new ResourceLocation("boundless", "sync_progress_meta"));
         public static final StreamCodec<FriendlyByteBuf, SyncProgressMeta> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.entries.size());
@@ -353,7 +384,7 @@ public final class BoundlessNetwork {
 
     public record SyncKills(List<KillEntry> entries) implements CustomPacketPayload {
         public static final Type<SyncKills> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_kills"));
+                new Type<>(new ResourceLocation("boundless", "sync_kills"));
         public static final StreamCodec<FriendlyByteBuf, SyncKills> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.entries.size());
@@ -371,7 +402,7 @@ public final class BoundlessNetwork {
 
     public record SyncClear() implements CustomPacketPayload {
         public static final Type<SyncClear> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_clear"));
+                new Type<>(new ResourceLocation("boundless", "sync_clear"));
         public static final StreamCodec<FriendlyByteBuf, SyncClear> CODEC =
                 StreamCodec.of((b, p) -> {}, b -> new SyncClear());
         @Override public Type<SyncClear> type() { return TYPE; }
@@ -379,7 +410,7 @@ public final class BoundlessNetwork {
 
     public record Toast(String questId) implements CustomPacketPayload {
         public static final Type<Toast> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "toast"));
+                new Type<>(new ResourceLocation("boundless", "toast"));
         public static final StreamCodec<FriendlyByteBuf, Toast> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new Toast(buf.readUtf())
@@ -389,7 +420,7 @@ public final class BoundlessNetwork {
 
     public record OpenQuestBook() implements CustomPacketPayload {
         public static final Type<OpenQuestBook> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "open_quest_book"));
+                new Type<>(new ResourceLocation("boundless", "open_quest_book"));
         public static final StreamCodec<FriendlyByteBuf, OpenQuestBook> CODEC =
                 StreamCodec.of((buf, p) -> {}, buf -> new OpenQuestBook());
         @Override public Type<OpenQuestBook> type() { return TYPE; }
@@ -419,7 +450,7 @@ public final class BoundlessNetwork {
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<SyncConfig> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_config"));
+                new Type<>(new ResourceLocation("boundless", "sync_config"));
         public static final StreamCodec<FriendlyByteBuf, SyncConfig> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     writeStringList(buf, p.disabledCategories);
@@ -474,7 +505,7 @@ public final class BoundlessNetwork {
 
     public record SyncQuestsChunk(int syncId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
         public static final Type<SyncQuestsChunk> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_quests_chunk"));
+                new Type<>(new ResourceLocation("boundless", "sync_quests_chunk"));
         public static final StreamCodec<FriendlyByteBuf, SyncQuestsChunk> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.syncId);
@@ -498,7 +529,7 @@ public final class BoundlessNetwork {
     }
 
     public static void syncPlayer(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new SyncClear());
+        sendToPlayer(p, new SyncClear());
         sendConfig(p);
         sendQuestData(p);
 
@@ -506,14 +537,14 @@ public final class BoundlessNetwork {
         KillCounterState.get(p.serverLevel()).snapshotFor(p.getUUID())
                 .forEach((id, ct) -> killEntries.add(new KillEntry(id, ct)));
         if (!killEntries.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncKills(killEntries));
+            sendToPlayer(p, new SyncKills(killEntries));
         }
 
         List<StatusEntry> statuses = new ArrayList<>();
         QuestProgressState.get(p.serverLevel()).snapshotFor(p.getUUID())
                 .forEach((questId, status) -> statuses.add(new StatusEntry(questId, status)));
         if (!statuses.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncStatuses(statuses));
+            sendToPlayer(p, new SyncStatuses(statuses));
         }
 
         List<ProgressMetaEntry> metaEntries = new ArrayList<>();
@@ -525,14 +556,14 @@ public final class BoundlessNetwork {
                         progress != null && progress.scrollCreated()
                 )));
         if (!metaEntries.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncProgressMeta(metaEntries));
+            sendToPlayer(p, new SyncProgressMeta(metaEntries));
         }
 
         syncComputedCompletion(p);
     }
 
     private static void sendConfig(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new SyncConfig(
+        sendToPlayer(p, new SyncConfig(
                 configStringList(Config.disabledCategories()),
                 configStringList(Config.appliedQuestPacks()),
                 configStringList(Config.disabledQuestPacks()),
@@ -588,7 +619,7 @@ public final class BoundlessNetwork {
     public static void sendProgressMeta(ServerPlayer player, String questId) {
         if (player == null || questId == null || questId.isBlank()) return;
         var progress = QuestProgressState.get(player.serverLevel()).progress(player.getUUID(), questId);
-        PacketDistributor.sendToPlayer(player, new SyncProgressMeta(List.of(
+        sendToPlayer(player, new SyncProgressMeta(List.of(
                 new ProgressMetaEntry(questId, progress.claimCount(), progress.scrollRedeemed(), progress.scrollCreated())
         )));
     }
@@ -766,20 +797,30 @@ public final class BoundlessNetwork {
             int start = i * QUEST_CHUNK_BYTES;
             int end = Math.min(bytes.length, start + QUEST_CHUNK_BYTES);
             byte[] part = start >= end ? new byte[0] : java.util.Arrays.copyOfRange(bytes, start, end);
-            PacketDistributor.sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
+            sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
         }
     }
 
     public static void sendStatus(ServerPlayer p, String questId, String status) {
-        PacketDistributor.sendToPlayer(p, new SyncStatus(questId, status));
+        sendToPlayer(p, new SyncStatus(questId, status));
     }
 
     public static void sendToast(ServerPlayer p, String questId) {
-        PacketDistributor.sendToPlayer(p, new Toast(questId));
+        sendToPlayer(p, new Toast(questId));
     }
 
     public static void sendOpenQuestBook(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new OpenQuestBook());
+        sendToPlayer(p, new OpenQuestBook());
+    }
+
+    public static void sendToPlayer(ServerPlayer player, Object message) {
+        if (player == null || message == null) return;
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), message);
+    }
+
+    public static void sendToServer(Object message) {
+        if (message == null) return;
+        CHANNEL.sendToServer(message);
     }
 
     public static void sendToastLocal(String questId) {
@@ -788,7 +829,7 @@ public final class BoundlessNetwork {
         );
     }
 
-    private static void handleRedeem(Redeem p, IPayloadContext ctx) {
+    private static void handleRedeem(Redeem p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
@@ -798,7 +839,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleReject(Reject p, IPayloadContext ctx) {
+    private static void handleReject(Reject p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
@@ -810,7 +851,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleCreateScroll(CreateScroll p, IPayloadContext ctx) {
+    private static void handleCreateScroll(CreateScroll p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (!Config.enableQuestScrolls()) return;
@@ -826,7 +867,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleRestartRepeatable(RestartRepeatable p, IPayloadContext ctx) {
+    private static void handleRestartRepeatable(RestartRepeatable p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
@@ -837,7 +878,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleUpdateFieldInput(UpdateFieldInput p, IPayloadContext ctx) {
+    private static void handleUpdateFieldInput(UpdateFieldInput p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || p.questId() == null || p.questId().isBlank() || p.targetId() == null || p.targetId().isBlank()) return;
@@ -856,7 +897,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, IPayloadContext ctx) {
+    private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
@@ -880,7 +921,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleUpdateServerConfig(UpdateServerConfig p, IPayloadContext ctx) {
+    private static void handleUpdateServerConfig(UpdateServerConfig p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
@@ -911,7 +952,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, IPayloadContext ctx) {
+    private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
@@ -945,7 +986,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleDeleteQuestPack(DeleteQuestPack p, IPayloadContext ctx) {
+    private static void handleDeleteQuestPack(DeleteQuestPack p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
@@ -1024,13 +1065,13 @@ public final class BoundlessNetwork {
         }
     }
 
-    private static void handleSyncStatus(SyncStatus p, IPayloadContext ctx) {
+    private static void handleSyncStatus(SyncStatus p, PayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()))
         );
     }
 
-    private static void handleSyncStatuses(SyncStatuses p, IPayloadContext ctx) {
+    private static void handleSyncStatuses(SyncStatuses p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (StatusEntry e : p.entries()) {
                 QuestTracker.clientSetStatus(e.questId(), QuestTracker.decodeStatus(e.status()));
@@ -1038,7 +1079,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleSyncProgressMeta(SyncProgressMeta p, IPayloadContext ctx) {
+    private static void handleSyncProgressMeta(SyncProgressMeta p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (ProgressMetaEntry e : p.entries()) {
                 QuestTracker.clientSetClaimCount(e.questId(), e.claimCount());
@@ -1048,14 +1089,14 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleSyncKills(SyncKills p, IPayloadContext ctx) {
+    private static void handleSyncKills(SyncKills p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (KillEntry e : p.entries())
                 QuestTracker.clientSetKill(e.entityId(), e.count());
         });
     }
 
-    private static void handleSyncClear(SyncClear p, IPayloadContext ctx) {
+    private static void handleSyncClear(SyncClear p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             QuestTracker.clientClearAll();
             QuestData.clearClientNetworkData();
@@ -1063,7 +1104,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleToast(Toast p, IPayloadContext ctx) {
+    private static void handleToast(Toast p, PayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestData.byId(p.questId()).ifPresent(q ->
                         QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
@@ -1071,7 +1112,7 @@ public final class BoundlessNetwork {
         );
     }
 
-    private static void handleOpenQuestBook(OpenQuestBook p, IPayloadContext ctx) {
+    private static void handleOpenQuestBook(OpenQuestBook p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             if (ctx.player().level().isClientSide() && !Config.disableQuestBook()) {
                 ClientOnly.openQuestBook();
@@ -1079,7 +1120,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleSyncConfig(SyncConfig p, IPayloadContext ctx) {
+    private static void handleSyncConfig(SyncConfig p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             Config.applySyncedFromServer(
                 p.disabledCategories(),
@@ -1109,7 +1150,7 @@ public final class BoundlessNetwork {
         });
     }
 
-    private static void handleSyncQuestsChunk(SyncQuestsChunk p, IPayloadContext ctx) {
+    private static void handleSyncQuestsChunk(SyncQuestsChunk p, PayloadContext ctx) {
         ctx.enqueueWork(() -> ClientQuestSync.accept(p));
     }
 
@@ -1162,7 +1203,7 @@ public final class BoundlessNetwork {
         int size = inv.getContainerSize();
         ItemStack[] sim = new ItemStack[size];
         for (int i = 0; i < size; i++) sim[i] = inv.getItem(i).copy();
-        HolderLookup.Provider registries = sp.registryAccess();
+        HolderLookup.Provider registries = null;
         QuestTracker.ExperienceSnapshot simulatedXp =
                 new QuestTracker.ExperienceSnapshot(sp.experienceLevel, sp.experienceProgress);
         boolean hasXpSubmitTarget = false;
@@ -1187,7 +1228,7 @@ public final class BoundlessNetwork {
             QuestItemSpec spec = QuestItemSpec.parse(raw);
             if (spec.tag) {
                 ResourceLocation tagRl;
-                try { tagRl = ResourceLocation.parse(spec.id); }
+                try { tagRl = new ResourceLocation(spec.id); }
                 catch (Exception ignored) { return false; }
 
                 TagKey<Item> tag = TagKey.create(Registries.ITEM, tagRl);
@@ -1220,7 +1261,7 @@ public final class BoundlessNetwork {
             QuestItemSpec spec = QuestItemSpec.parse(raw);
             if (spec.tag) {
                 ResourceLocation tagRl;
-                try { tagRl = ResourceLocation.parse(spec.id); }
+                try { tagRl = new ResourceLocation(spec.id); }
                 catch (Exception ignored) { return false; }
 
                 TagKey<Item> tag = TagKey.create(Registries.ITEM, tagRl);
@@ -1370,6 +1411,10 @@ public final class BoundlessNetwork {
 
     @OnlyIn(Dist.CLIENT)
     private static final class ClientOnly {
+        private static net.minecraft.world.entity.player.Player player() {
+            return net.minecraft.client.Minecraft.getInstance().player;
+        }
+
         private static void openQuestBook() {
             net.minecraft.client.Minecraft.getInstance()
                     .setScreen(new net.revilodev.boundless.client.screen.StandaloneQuestBookScreen());

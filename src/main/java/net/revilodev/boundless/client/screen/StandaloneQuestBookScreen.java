@@ -6,8 +6,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryTabsWidget;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
@@ -20,11 +20,11 @@ import net.revilodev.boundless.quest.QuestData;
 public final class StandaloneQuestBookScreen extends Screen {
 
     private static final ResourceLocation PANEL_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
+            new ResourceLocation("boundless", "textures/gui/quest_panel.png");
     private static final ResourceLocation BTN_SETTINGS =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/settings_button.png");
     private static final ResourceLocation BTN_SETTINGS_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button_hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/settings_button_hovered.png");
     private static String lastSelectedCategory = "all";
 
     private int panelWidth = 147;
@@ -239,7 +239,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics gg) {
     }
 
     @Override
@@ -255,23 +255,23 @@ public final class StandaloneQuestBookScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         boolean overSearch = searchBox != null && searchBox.visible
                 && mouseX >= searchBox.getX() && mouseX <= searchBox.getX() + searchBox.getWidth()
                 && mouseY >= searchBox.getY() && mouseY <= searchBox.getY() + searchBox.getHeight();
         if (list.visible && list.active) {
             if (!overSearch && mouseX >= list.getX() && mouseX <= list.getX() + list.getWidth()
                     && mouseY >= list.getY() && mouseY <= list.getY() + list.getHeight()) {
-                if (list.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
+                if (list.mouseScrolled(mouseX, mouseY, scrollY)) return true;
             }
         }
         if (details.visible && details.active) {
             if (mouseX >= details.getX() && mouseX <= details.getX() + details.getWidth()
                     && mouseY >= details.getY() && mouseY <= details.getY() + details.getHeight()) {
-                if (details.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
+                if (details.mouseScrolled(mouseX, mouseY, scrollY)) return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     @Override

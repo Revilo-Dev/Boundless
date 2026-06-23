@@ -24,47 +24,47 @@ public final class QuestFilterBar extends AbstractWidget {
     private static final int SIDE_GAP = 1;
 
     private static final ResourceLocation TEX_COMPLETE =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-completed.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-completed.png");
     private static final ResourceLocation TEX_COMPLETE_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-completed-pulled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-completed-pulled.png");
     private static final ResourceLocation TEX_COMPLETE_SELECTED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-completed-selected.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-completed-selected.png");
 
     private static final ResourceLocation TEX_REJECT =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-trash.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-trash.png");
     private static final ResourceLocation TEX_REJECT_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-trash-pulled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-trash-pulled.png");
     private static final ResourceLocation TEX_REJECT_SELECTED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-trash-select.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-trash-select.png");
 
     private static final ResourceLocation TEX_LOCKED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-locked.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-locked.png");
     private static final ResourceLocation TEX_LOCKED_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-locked-pulled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-locked-pulled.png");
     private static final ResourceLocation TEX_LOCKED_SELECTED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-locked-selected.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-locked-selected.png");
     private static final ResourceLocation TEX_SETTINGS =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-settings.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-settings.png");
     private static final ResourceLocation TEX_SETTINGS_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-settings-pulled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/pull-tab-settings-pulled.png");
     private static final ResourceLocation BTN_COMPLETE =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/complete_filter.png");
     private static final ResourceLocation BTN_COMPLETE_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter_hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/complete_filter_hovered.png");
     private static final ResourceLocation BTN_COMPLETE_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter_disabled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/complete_filter_disabled.png");
     private static final ResourceLocation BTN_REJECT =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/reject_filter.png");
     private static final ResourceLocation BTN_REJECT_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter_hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/reject_filter_hovered.png");
     private static final ResourceLocation BTN_REJECT_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter_disabled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/reject_filter_disabled.png");
     private static final ResourceLocation BTN_LOCKED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/locked_filter.png");
     private static final ResourceLocation BTN_LOCKED_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/locked_filter_hovered.png");
     private static final ResourceLocation BTN_LOCKED_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_disabled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/locked_filter_disabled.png");
 
     private static boolean showCompleted = false;
     private static boolean showRejected = false;

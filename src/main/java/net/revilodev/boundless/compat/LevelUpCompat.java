@@ -3,12 +3,13 @@ package net.revilodev.boundless.compat;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.fml.ModList;
 
 import java.lang.reflect.Method;
 
 public final class LevelUpCompat {
     private static final ResourceLocation BOUNDLESS_QUEST_SOURCE =
-            ResourceLocation.fromNamespaceAndPath("boundless", "quest_reward");
+            new ResourceLocation("boundless", "quest_reward");
 
     private static boolean initialized = false;
     private static boolean available = false;

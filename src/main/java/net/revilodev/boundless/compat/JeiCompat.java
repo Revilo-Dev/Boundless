@@ -1,6 +1,7 @@
 package net.revilodev.boundless.compat;
 
 import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.fml.ModList;
 
 public final class JeiCompat {
     private static Object runtime;

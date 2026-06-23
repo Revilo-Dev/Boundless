@@ -1,6 +1,6 @@
 # Boundless
 
-Boundless is a data-driven questing mod for NeoForge with an in-game quest editor and runtime config system.
+Boundless is a data-driven questing mod for Forge with an in-game quest editor and runtime config system.
 
 This README documents the **editor**, **config**, and **quest-pack authoring** features in the current codebase (`src/main`).
 

@@ -4,14 +4,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.effect.MobEffect;
@@ -19,13 +17,13 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.revilodev.boundless.BoundlessMod;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -61,7 +59,7 @@ public final class QuestTracker {
     private static final Map<String, Boolean> CLIENT_SCROLL_CREATED = new HashMap<>();
     private static final Map<String, ResourceLocation> RL_CACHE = new HashMap<>();
     private static final Map<String, Optional<Item>> ITEM_BY_ID_CACHE = new HashMap<>();
-    private static final Map<String, Holder<MobEffect>> EFFECT_BY_ID_CACHE = new HashMap<>();
+    private static final Map<String, MobEffect> EFFECT_BY_ID_CACHE = new HashMap<>();
 
     private static boolean SERVER_TOASTS_DISABLED = false;
     private static String ACTIVE_KEY = null;
@@ -490,13 +488,13 @@ public final class QuestTracker {
 
     public static boolean hasEffect(Player player, String effectId) {
         if (player == null || effectId == null || effectId.isBlank()) return false;
-        Holder<MobEffect> holder = EFFECT_BY_ID_CACHE.get(effectId);
+        MobEffect effect = EFFECT_BY_ID_CACHE.get(effectId);
         if (!EFFECT_BY_ID_CACHE.containsKey(effectId)) {
             ResourceLocation rl = tryParseCached(effectId);
-            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
-            EFFECT_BY_ID_CACHE.put(effectId, holder);
+            effect = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getOptional(rl).orElse(null);
+            EFFECT_BY_ID_CACHE.put(effectId, effect);
         }
-        return holder != null && player.hasEffect(holder);
+        return effect != null && player.hasEffect(effect);
     }
 
     public static boolean hasAdvancement(Player player, String advId) {
@@ -528,10 +526,10 @@ public final class QuestTracker {
     }
 
     private static boolean hasAdvancementServer(ServerPlayer sp, ResourceLocation rl) {
-        AdvancementHolder holder = sp.server.getAdvancements().get(rl);
-        if (holder == null) return false;
+        Advancement advancement = sp.server.getAdvancements().getAdvancement(rl);
+        if (advancement == null) return false;
 
-        AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(holder);
+        AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(advancement);
         boolean done = prog.isDone();
 
         CLIENT_ADV_DONE.put(rl.toString(), done);
@@ -663,8 +661,7 @@ public final class QuestTracker {
             if (rl == null) continue;
             LootTable table;
             try {
-                table = player.server.reloadableRegistries()
-                        .getLootTable(ResourceKey.create(Registries.LOOT_TABLE, rl));
+                table = player.server.getLootData().getLootTable(rl);
             } catch (Throwable ignored) {
                 table = null;
             }
@@ -674,7 +671,7 @@ public final class QuestTracker {
                     .withParameter(LootContextParams.ORIGIN, player.position())
                     .withParameter(LootContextParams.THIS_ENTITY, player)
                     .create(LootContextParamSets.GIFT);
-            ObjectArrayList<ItemStack> generated = table.getRandomItems(params, player.getRandom());
+            ObjectArrayList<ItemStack> generated = table.getRandomItems(params);
             for (ItemStack stack : generated) {
                 if (stack == null || stack.isEmpty()) continue;
                 try {

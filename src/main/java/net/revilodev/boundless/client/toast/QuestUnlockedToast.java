@@ -12,7 +12,7 @@ import net.revilodev.boundless.Config;
 import net.revilodev.boundless.quest.QuestTracker;
 
 public final class QuestUnlockedToast implements Toast {
-    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_toast.png");
+    private static final ResourceLocation TEXTURE = new ResourceLocation("boundless", "textures/gui/sprites/quest_toast.png");
     private final Component title;
     private final Component subtitle;
     private final Item icon;

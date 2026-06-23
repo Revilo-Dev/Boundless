@@ -9,9 +9,8 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.QuestPanelClient;
@@ -25,42 +24,42 @@ import java.util.List;
 @OnlyIn(Dist.CLIENT)
 public final class QuestSettingsScreen extends Screen {
     private static final ResourceLocation PANEL_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
+            new ResourceLocation("boundless", "textures/gui/quest_panel.png");
     private static final int PANEL_W = 147;
     private static final int PANEL_H = 166;
 
     private static final ResourceLocation ROW_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget.png");
     private static final ResourceLocation BTN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button.png");
     private static final ResourceLocation BTN_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
     private static final ResourceLocation BTN_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
     private static final ResourceLocation BACK_TAB_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/back_tab.png");
     private static final ResourceLocation BACK_TAB_HOVER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
     private static final ResourceLocation HEADER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
+            new ResourceLocation("boundless", "textures/gui/3-slice-header.png");
     private static final ResourceLocation TAB_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/tab_selected.png");
     private static final ResourceLocation CONFIG_TAB_ALL_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/search.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/search.png");
     private static final ResourceLocation CONFIG_TAB_STYLE_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/style-icon.png");
     private static final ResourceLocation CONFIG_TAB_UI_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/ui-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/ui-icon.png");
     private static final ResourceLocation CONFIG_TAB_FEATURES_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/features-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/features-icon.png");
     private static final ResourceLocation MENU_CONFIG_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/style-icon.png");
     private static final ResourceLocation MENU_EDITOR_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/editor-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/editor-icon.png");
     private static final ResourceLocation MENU_DISCORD_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/discord-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/discord-icon.png");
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
     private static final int TAB_GAP = 3;
@@ -560,7 +559,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void sendConfigToServer() {
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.UpdateServerConfig(
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.UpdateServerConfig(
                     pinnedHudPos,
                     hideQuestBookInInventory,
                     questBookInventoryButtonPosition,
@@ -664,7 +663,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics gg) {
     }
 
     @Override
@@ -864,12 +863,12 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (page == Page.CONFIG) {
             int top = configViewportTop();
             int bottom = configViewportBottom();
             if (mouseX < px || mouseX > px + pw || mouseY < top || mouseY > bottom) {
-                return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+                return super.mouseScrolled(mouseX, mouseY, scrollY);
             }
             int max = maxConfigScroll();
             if (max > 0) {
@@ -878,7 +877,7 @@ public final class QuestSettingsScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     @Override

@@ -33,9 +33,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.entity.MobCategory;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -78,17 +77,17 @@ import java.util.function.Consumer;
 @OnlyIn(Dist.CLIENT)
 public final class QuestEditorScreen extends Screen {
     private static final ResourceLocation PANEL_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
+            new ResourceLocation("boundless", "textures/gui/quest_panel.png");
     private static final ResourceLocation ROW_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget.png");
     private static final ResourceLocation BTN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button.png");
     private static final ResourceLocation BTN_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
     private static final ResourceLocation BTN_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
     private static final ResourceLocation CREATE_BTN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/button.png");
     private static final int CREATE_BTN_TEX_W = 130;
     private static final int CREATE_BTN_TEX_H = 20;
     private static final ResourceLocation VANILLA_BUTTON_SPRITE =
@@ -96,65 +95,65 @@ public final class QuestEditorScreen extends Screen {
     private static final ResourceLocation VANILLA_BUTTON_HIGHLIGHTED_SPRITE =
             ResourceLocation.withDefaultNamespace("widget/button_highlighted");
     private static final ResourceLocation TOGGLE_TEX_OFF =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/x_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/x_button.png");
     private static final ResourceLocation TOGGLE_TEX_OFF_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/x_button-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/x_button-hovered.png");
     private static final ResourceLocation TOGGLE_TEX_ON =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/complete_filter.png");
     private static final ResourceLocation DUPLICATE_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/duplicate_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/duplicate_button.png");
     private static final ResourceLocation DUPLICATE_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/duplicate_button-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/duplicate_button-hovered.png");
     private static final ResourceLocation DELETE_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/reject_filter.png");
     private static final ResourceLocation DELETE_CONFIRM_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/are_you_sure_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/are_you_sure_button.png");
     private static final ResourceLocation DELETE_CONFIRM_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/are_you_sure_button-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/are_you_sure_button-hovered.png");
     private static final ResourceLocation MOVE_UP_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_up.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/move_up.png");
     private static final ResourceLocation MOVE_DOWN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_down.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/move_down.png");
     private static final ResourceLocation MOVE_UP_HIGHLIGHTED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_up_highlighted.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/move_up_highlighted.png");
     private static final ResourceLocation MOVE_DOWN_HIGHLIGHTED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_down_highlighted.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/move_down_highlighted.png");
     private static final ResourceLocation LOCK_TEX_ENABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/locked_filter.png");
     private static final ResourceLocation LOCK_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_disabled.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/locked_filter_disabled.png");
     private static final ResourceLocation LOCK_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/locked_filter_hovered.png");
     private static final ResourceLocation HEADER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
+            new ResourceLocation("boundless", "textures/gui/3-slice-header.png");
     private static final ResourceLocation TAB_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/tab_selected.png");
     private static final ResourceLocation BACK_TAB_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/back_tab.png");
     private static final ResourceLocation BACK_TAB_HOVER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
     private static final ResourceLocation UNSAVED_POPUP_BG_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/20x20-9-slice.png");
+            new ResourceLocation("boundless", "textures/gui/20x20-9-slice.png");
     private static final ResourceLocation UNSAVED_EXCLAMATION_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/icon/exclamation.png");
+            new ResourceLocation("boundless", "textures/icon/exclamation.png");
     private static final ResourceLocation BROWSER_GUI_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/browser-gui.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/browser-gui.png");
     private static final ResourceLocation BROWSER_SLOT_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/slot.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/slot.png");
     private static final ResourceLocation BROWSER_TAB_INVENTORY_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/inventory.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/inventory.png");
     private static final ResourceLocation BROWSER_TAB_SEARCH_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/search.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/search.png");
     private static final ResourceLocation X_BUTTON_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_reject.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/popup_reject.png");
     private static final ResourceLocation QUEST_TAB_SCROLL_ICON_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/scroll-icon.png");
     private static final ResourceLocation BUILTIN_PACK_ENABLED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_confirmation.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/popup_confirmation.png");
     private static final ResourceLocation BUILTIN_PACK_DISABLED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_reject.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/popup_reject.png");
 
     private static final int TOGGLE_SIZE = 20;
     private static final int SMALL_BTN_SIZE = 20;
@@ -207,19 +206,19 @@ public final class QuestEditorScreen extends Screen {
     private static final float DEP_ENTRY_ICON_SCALE = 0.625f;
 
     private static final ResourceLocation GENERATED_PACK_ICON =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/pack.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/pack.png");
     private static final ResourceLocation IMPORT_PACK_BUTTON_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/import-button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/import-button.png");
     private static final ResourceLocation IMPORT_PACK_BUTTON_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/import-button-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/import-button-hovered.png");
     private static final ResourceLocation PLUS_BUTTON_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/plus_button.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/plus_button.png");
     private static final ResourceLocation PLUS_BUTTON_HOVER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/plus_button-hovered.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/plus_button-hovered.png");
     private static final ResourceLocation PACK_ACTION_NEEDED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/quest_widget-action-needed.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/editor/quest_widget-action-needed.png");
     private static final ResourceLocation PACK_CHANGED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_completed.png");
+            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget_completed.png");
     private static final int DEFAULT_INPUT_TEXT_COLOR = 0xE0E0E0;
     private static final int DROPDOWN_INPUT_TEXT_COLOR = 0xFFFFFF;
     private static final int INVALID_INPUT_TEXT_COLOR = 0xFF4040;
@@ -3639,6 +3638,18 @@ public final class QuestEditorScreen extends Screen {
         return v == null ? "" : v;
     }
 
+    private static String filterAllowedText(String text) {
+        if (text == null || text.isEmpty()) return "";
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (net.minecraft.SharedConstants.isAllowedChatCharacter(c)) {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
     private void attachIdSanitizer(EditBox box, boolean commaSeparated) {
         if (box == null) return;
         box.setResponder(value -> {
@@ -3720,7 +3731,7 @@ public final class QuestEditorScreen extends Screen {
     private static ItemStack iconStackFromId(String raw) {
         if (raw == null || raw.isBlank()) return ItemStack.EMPTY;
         try {
-            return new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(raw)));
+            return new ItemStack(BuiltInRegistries.ITEM.get(new ResourceLocation(raw)));
         } catch (Exception ignored) {
             return ItemStack.EMPTY;
         }
@@ -3988,7 +3999,7 @@ public final class QuestEditorScreen extends Screen {
 
     private boolean sendQuestPackEnabledToServer(String id, boolean enabled, boolean builtin) {
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
             return true;
         } catch (Throwable ignored) {
             return false;
@@ -4008,7 +4019,7 @@ public final class QuestEditorScreen extends Screen {
                 int start = i * chunkSize;
                 int end = Math.min(zipBytes.length, start + chunkSize);
                 byte[] part = java.util.Arrays.copyOfRange(zipBytes, start, end);
-                PacketDistributor.sendToServer(new BoundlessNetwork.UploadQuestPackChunk(
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.UploadQuestPackChunk(
                         pack.name,
                         enabled,
                         uploadId,
@@ -4027,7 +4038,7 @@ public final class QuestEditorScreen extends Screen {
         String normalizedName = safe(packName).trim();
         if (normalizedName.isBlank()) return false;
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
             return true;
         } catch (Throwable ignored) {
             return false;
@@ -4520,7 +4531,7 @@ public final class QuestEditorScreen extends Screen {
         pendingInitUntil = 0L;
     }
     @Override
-    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics gg) {
     }
 
     @Override
@@ -5411,7 +5422,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (scrollTypeMenu(mouseX, mouseY, scrollY)) {
             return true;
         }
@@ -5434,18 +5445,18 @@ public final class QuestEditorScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     private boolean scrollEntryFields(double mouseX, double mouseY, double scrollY) {
         for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
-            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, 0, scrollY)) return true;
+            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, scrollY)) return true;
         }
         for (ScaledMultiLineEditBox box : completionEntryBoxes) {
-            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, 0, scrollY)) return true;
+            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, scrollY)) return true;
         }
         for (ScaledMultiLineEditBox box : rewardEntryBoxes) {
-            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, 0, scrollY)) return true;
+            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, scrollY)) return true;
         }
         return false;
     }
@@ -6941,7 +6952,7 @@ public final class QuestEditorScreen extends Screen {
         String effectId = effectIdFromStack(stack);
         ResourceLocation rl = ResourceLocation.tryParse(effectId);
         if (rl != null) {
-            ResourceLocation tex = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
+            ResourceLocation tex = new ResourceLocation("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
             if (Minecraft.getInstance().getResourceManager().getResource(tex).isPresent()) {
                 gg.blit(tex, x, y, 0, 0, 16, 16, 16, 16);
                 return;
@@ -6953,12 +6964,12 @@ public final class QuestEditorScreen extends Screen {
     private ItemStack effectIconStack(String effectId) {
         ResourceLocation rl = ResourceLocation.tryParse(effectId);
         if (rl != null) {
-            ResourceLocation tex = ResourceLocation.fromNamespaceAndPath(
+            ResourceLocation tex = new ResourceLocation(
                     "boundless",
                     "textures/gui/effects/" + rl.getPath() + ".png");
             if (Minecraft.getInstance().getResourceManager().getResource(tex).isPresent()) {
                 ItemStack stack = new ItemStack(net.minecraft.world.item.Items.POTION);
-                stack.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(effectId));
+                stack.setHoverName(Component.literal(effectId));
                 return stack;
             }
         }
@@ -6968,7 +6979,7 @@ public final class QuestEditorScreen extends Screen {
     private ItemStack mobEggIconStack(String entityId) {
         ResourceLocation entityRl = ResourceLocation.tryParse(entityId);
         if (entityRl == null) return ItemStack.EMPTY;
-        ResourceLocation eggRl = ResourceLocation.fromNamespaceAndPath(entityRl.getNamespace(), entityRl.getPath() + "_spawn_egg");
+        ResourceLocation eggRl = new ResourceLocation(entityRl.getNamespace(), entityRl.getPath() + "_spawn_egg");
         if (BuiltInRegistries.ITEM.containsKey(eggRl)) {
             return new ItemStack(BuiltInRegistries.ITEM.get(eggRl));
         }
@@ -7216,7 +7227,7 @@ public final class QuestEditorScreen extends Screen {
                 for (Path entry : stream) {
                     if (entry == null || !Files.isDirectory(entry)) continue;
                     String name = entry.getFileName().toString();
-                    if (!name.startsWith("1.21")) continue;
+                    if (!name.startsWith("1.20")) continue;
                     Path candidate = entry.resolve(name + ".jar");
                     if (Files.exists(candidate)) candidates.add(candidate);
                 }
@@ -7509,7 +7520,7 @@ public final class QuestEditorScreen extends Screen {
 
         @Override
         public boolean charTyped(char codePoint, int modifiers) {
-            if (this.visible && this.isFocused() && StringUtil.isAllowedChatCharacter(codePoint)) {
+            if (this.visible && this.isFocused() && net.minecraft.SharedConstants.isAllowedChatCharacter(codePoint)) {
                 this.textField.insertText(Character.toString(codePoint));
                 return true;
             }
@@ -7517,7 +7528,7 @@ public final class QuestEditorScreen extends Screen {
         }
 
         @Override
-        public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+        public boolean mouseScrolled(double mouseX, double mouseY, double deltaY) {
             if (!this.visible || !this.active || !this.isMouseOver(mouseX, mouseY)) return false;
             double maxScroll = Math.max(0.0, this.getInnerHeight() - (this.height - this.totalInnerPadding()));
             if (maxScroll <= 0.0) return false;
@@ -7883,7 +7894,7 @@ public final class QuestEditorScreen extends Screen {
         public void insertText(String text) {
             if (!text.isEmpty() || this.hasSelection()) {
                 pushUndoState();
-                String filtered = this.truncateInsertionText(StringUtil.filterText(text, true));
+                String filtered = this.truncateInsertionText(filterAllowedText(text));
                 StringView selected = this.getSelected();
                 int len = this.value.length();
                 int begin = Mth.clamp(selected.beginIndex, 0, len);
@@ -8784,7 +8795,8 @@ public final class QuestEditorScreen extends Screen {
                     int buttonY = top + (rowH - buttonHeight) / 2;
                     boolean hovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth
                             && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
-                    gg.blitSprite(hovered ? VANILLA_BUTTON_HIGHLIGHTED_SPRITE : VANILLA_BUTTON_SPRITE, buttonX, buttonY, buttonWidth, buttonHeight);
+                    ResourceLocation texture = hovered ? VANILLA_BUTTON_HIGHLIGHTED_SPRITE : VANILLA_BUTTON_SPRITE;
+                    gg.blit(texture, buttonX, buttonY, 0, 0, buttonWidth, buttonHeight, buttonWidth, buttonHeight);
                     Font font = Minecraft.getInstance().font;
                     gg.drawCenteredString(font, entry.label, buttonX + buttonWidth / 2, buttonY + (buttonHeight - font.lineHeight) / 2 + 1, 0xFFFFFF);
                 } else {
@@ -8960,11 +8972,6 @@ public final class QuestEditorScreen extends Screen {
             if (contentHeight <= height) return false;
             scrollY = Math.max(0f, Math.min(scrollY - (float) (delta * 12), contentHeight - height));
             return true;
-        }
-
-        @Override
-        public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-            return mouseScrolled(mouseX, mouseY, deltaY);
         }
 
         @Override

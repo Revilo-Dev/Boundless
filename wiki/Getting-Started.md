@@ -2,7 +2,7 @@
 
 ## 1) Install and Launch
 
-Install Boundless like any other NeoForge mod, then start the game.
+Install Boundless like any other Forge mod, then start the game.
 
 ## 2) Get the Quest Book
 

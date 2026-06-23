@@ -1,5 +1,6 @@
 package net.revilodev.boundless.compat;
 
-import net.minecraft.resources.ResourceLocation;
-
+public final class BoundlessJeiPlugin {
+    private BoundlessJeiPlugin() {
+    }
 }
