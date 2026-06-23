@@ -16,11 +16,11 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.RenderGuiOverlayEvent;
+import net.minecraftforge.common.MinecraftForge;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.quest.QuestData;
@@ -130,8 +130,8 @@ public final class PinnedQuestHud {
     private static void ensureRegistered() {
         if (REGISTERED) return;
         REGISTERED = true;
-        NeoForge.EVENT_BUS.addListener(PinnedQuestHud::onRenderGui);
-        NeoForge.EVENT_BUS.addListener(PinnedQuestHud::onClientLogout);
+        MinecraftForge.EVENT_BUS.addListener(PinnedQuestHud::onRenderGui);
+        MinecraftForge.EVENT_BUS.addListener(PinnedQuestHud::onClientLogout);
     }
 
     private static void ensureLoaded() {
@@ -252,7 +252,7 @@ public final class PinnedQuestHud {
         resetPins(true);
     }
 
-    public static void onRenderGui(RenderGuiEvent.Post e) {
+    public static void onRenderGui(RenderGuiOverlayEvent.Post e) {
         if (Config.disableQuestPinning()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.player == null) return;
@@ -459,6 +459,13 @@ public final class PinnedQuestHud {
                 int have = Math.min(LevelUpCompat.getLevel(player), need);
                 boolean done = have >= need;
                 return new TargetView(new ItemStack(Items.EXPERIENCE_BOTTLE), have + "/" + need, done);
+            }
+
+            if (t.isFieldInput()) {
+                String key = q.id + ":field:" + t.id;
+                String value = QuestTracker.getFieldInputProgress(player, key);
+                boolean done = value != null && value.trim().equalsIgnoreCase(t.id == null ? "" : t.id.trim());
+                return new TargetView(new ItemStack(Items.NAME_TAG), done ? "1/1" : "0/1", done);
             }
         } catch (Throwable ignored) {}
         return null;

@@ -1,8 +1,7 @@
 package net.revilodev.boundless.quest;
 
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.event.tick.PlayerTickEvent;
-import net.revilodev.boundless.network.BoundlessNetwork;
+import net.minecraftforge.event.TickEvent;
 
 public final class ServerQuestTicker {
     private ServerQuestTicker() {}
@@ -10,8 +9,9 @@ public final class ServerQuestTicker {
     // check once per second per player
     private static final int CHECK_INTERVAL_TICKS = 20;
 
-    public static void onPlayerTick(PlayerTickEvent.Post e) {
-        if (!(e.getEntity() instanceof ServerPlayer sp)) return;
+    public static void onPlayerTick(TickEvent.PlayerTickEvent e) {
+        if (e.phase != TickEvent.Phase.END) return;
+        if (!(e.player instanceof ServerPlayer sp)) return;
         if (sp.level().isClientSide) return;
         if ((sp.tickCount % CHECK_INTERVAL_TICKS) != 0) return;
 

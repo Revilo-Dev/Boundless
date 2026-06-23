@@ -1,6 +1,5 @@
 package net.revilodev.boundless.quest;
 
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
@@ -53,9 +52,6 @@ public final class QuestProgressState extends SavedData {
             return (status == null || status.isBlank()) && claimCount <= 0 && !scrollRedeemed && !scrollCreated;
         }
 
-        private static QuestProgress fromLegacyStatus(String status) {
-            return new QuestProgress(status, 0, false, false);
-        }
     }
 
     private QuestProgressState() {
@@ -64,22 +60,18 @@ public final class QuestProgressState extends SavedData {
     public static QuestProgressState get(ServerLevel level) {
         ServerLevel overworld = level.getServer().overworld();
         return overworld.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(QuestProgressState::new, QuestProgressState::load),
+                QuestProgressState::load,
+                QuestProgressState::new,
                 "boundless_quests"
         );
     }
 
-    public static QuestProgressState load(CompoundTag tag, HolderLookup.Provider provider) {
+    public static QuestProgressState load(CompoundTag tag) {
         QuestProgressState s = new QuestProgressState();
         for (String playerKey : tag.getAllKeys()) {
             CompoundTag inner = tag.getCompound(playerKey);
             Map<String, QuestProgress> m = new HashMap<>();
             for (String questId : inner.getAllKeys()) {
-                if (inner.contains(questId, Tag.TAG_STRING)) {
-                    QuestProgress progress = QuestProgress.fromLegacyStatus(inner.getString(questId));
-                    if (!progress.isEmpty()) m.put(questId, progress);
-                    continue;
-                }
                 if (!inner.contains(questId, Tag.TAG_COMPOUND)) continue;
                 CompoundTag progressTag = inner.getCompound(questId);
                 QuestProgress progress = new QuestProgress(
@@ -96,7 +88,7 @@ public final class QuestProgressState extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
+    public CompoundTag save(CompoundTag tag) {
         for (Map.Entry<String, Map<String, QuestProgress>> e : byPlayer.entrySet()) {
             CompoundTag inner = new CompoundTag();
             for (Map.Entry<String, QuestProgress> q : e.getValue().entrySet()) {

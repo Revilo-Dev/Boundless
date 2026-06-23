@@ -1,6 +1,5 @@
 package net.revilodev.boundless.quest;
 
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -15,7 +14,8 @@ public final class KillCounterState extends SavedData {
     public static KillCounterState get(ServerLevel level) {
         ServerLevel overworld = level.getServer().overworld();
         return overworld.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(KillCounterState::new, KillCounterState::load),
+                KillCounterState::load,
+                KillCounterState::new,
                 "boundless_kills"
         );
     }
@@ -23,7 +23,7 @@ public final class KillCounterState extends SavedData {
     private KillCounterState() {
     }
 
-    public static KillCounterState load(CompoundTag tag, HolderLookup.Provider provider) {
+    public static KillCounterState load(CompoundTag tag) {
         KillCounterState s = new KillCounterState();
         for (String player : tag.getAllKeys()) {
             CompoundTag inner = tag.getCompound(player);
@@ -36,7 +36,7 @@ public final class KillCounterState extends SavedData {
         return s;
     }
 
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
+    public CompoundTag save(CompoundTag tag) {
         for (Map.Entry<String, Map<String, Integer>> e : byPlayer.entrySet()) {
             CompoundTag inner = new CompoundTag();
             for (Map.Entry<String, Integer> v : e.getValue().entrySet()) {

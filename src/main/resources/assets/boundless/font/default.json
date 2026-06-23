@@ -2,7 +2,7 @@
 	"providers": [
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/advancement",
+			"file": "boundless:icon/advancement.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -11,7 +11,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/chest",
+			"file": "boundless:icon/chest.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -20,7 +20,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/command",
+			"file": "boundless:icon/command.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -29,7 +29,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/effect",
+			"file": "boundless:icon/effect.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -38,7 +38,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/exp",
+			"file": "boundless:icon/exp.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -47,7 +47,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/pick",
+			"file": "boundless:icon/pick.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -56,7 +56,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/reward",
+			"file": "boundless:icon/reward.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -65,7 +65,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/sword",
+			"file": "boundless:icon/sword.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -74,7 +74,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/sword",
+			"file": "boundless:icon/sword.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -83,7 +83,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/sword",
+			"file": "boundless:icon/sword.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -92,7 +92,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/sword",
+			"file": "boundless:icon/sword.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -101,7 +101,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/sword",
+			"file": "boundless:icon/sword.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [
@@ -110,7 +110,7 @@
 		},
 		{
 			"type": "bitmap",
-			"file": "boundless:icon/sword",
+			"file": "boundless:icon/sword.png",
 			"ascent": 8,
 			"height": 16,
 			"chars": [

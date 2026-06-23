@@ -4,10 +4,9 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -23,9 +22,9 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.revilodev.boundless.BoundlessMod;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -55,12 +54,13 @@ public final class QuestTracker {
     private static final Map<String, Integer> CLIENT_STATS = new HashMap<>();
     private static final Map<String, Integer> CLIENT_ITEM_PROGRESS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_EFFECT_PROGRESS = new HashMap<>();
+    private static final Map<String, String> CLIENT_INPUT_PROGRESS = new HashMap<>();
     private static final Map<String, Integer> CLIENT_CLAIM_COUNTS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_SCROLL_REDEEMED = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_SCROLL_CREATED = new HashMap<>();
     private static final Map<String, ResourceLocation> RL_CACHE = new HashMap<>();
     private static final Map<String, Optional<Item>> ITEM_BY_ID_CACHE = new HashMap<>();
-    private static final Map<String, Holder<MobEffect>> EFFECT_BY_ID_CACHE = new HashMap<>();
+    private static final Map<String, MobEffect> EFFECT_BY_ID_CACHE = new HashMap<>();
 
     private static boolean SERVER_TOASTS_DISABLED = false;
     private static String ACTIVE_KEY = null;
@@ -120,6 +120,24 @@ public final class QuestTracker {
                     .updateEffectDone(sp.getUUID(), key, hasEffect);
         }
         return getPermanentEffectProgress(key, hasEffect);
+    }
+
+    public static void setFieldInputProgress(Player player, String key, String value) {
+        if (key == null || key.isBlank()) return;
+        String normalized = value == null ? "" : value.trim();
+        if (player instanceof ServerPlayer sp) {
+            QuestObjectiveState.get(sp.serverLevel()).setInputProgress(sp.getUUID(), key, normalized);
+        }
+        if (normalized.isBlank()) CLIENT_INPUT_PROGRESS.remove(key);
+        else CLIENT_INPUT_PROGRESS.put(key, normalized);
+    }
+
+    public static String getFieldInputProgress(Player player, String key) {
+        if (key == null || key.isBlank()) return "";
+        if (player instanceof ServerPlayer sp) {
+            return QuestObjectiveState.get(sp.serverLevel()).getInputProgress(sp.getUUID(), key);
+        }
+        return CLIENT_INPUT_PROGRESS.getOrDefault(key, "");
     }
 
     private static String sanitize(String s) {
@@ -256,12 +274,28 @@ public final class QuestTracker {
 
     public static boolean dependenciesMet(QuestData.Quest q, Player player) {
         if (q == null || q.dependencies.isEmpty()) return true;
+        if (q.lockAfterDependency) {
+            for (String depId : q.dependencies) {
+                QuestData.Quest dep = QuestData.byId(depId).orElse(null);
+                if (dep == null) return false;
+                if (hasEverClaimed(dep, player)) return false;
+            }
+            return true;
+        }
         for (String depId : q.dependencies) {
             QuestData.Quest dep = QuestData.byId(depId).orElse(null);
             if (dep == null) return false;
             if (!hasEverClaimed(dep, player)) return false;
         }
         return true;
+    }
+
+    private static boolean shouldAutoClaim(QuestData.Quest q) {
+        if (q == null) return Config.autoClaimQuestRewards();
+        if (q.autoComplete) return true;
+        QuestData.Category category = QuestData.categoryById(q.category).orElse(null);
+        if (category != null && category.autoComplete) return true;
+        return Config.autoClaimQuestRewards();
     }
 
     public static boolean isVisible(QuestData.Quest q, Player player) {
@@ -346,6 +380,11 @@ public final class QuestTracker {
             if (t.isStat() && getStatCount(player, t.id) < t.count) return false;
             if (t.isXp() && getXpAmount(player, t.id) < t.count) return false;
             if (t.isLevelUpLevel() && !LevelUpCompat.meetsLevelRequirement(player, t.count)) return false;
+            if (t.isFieldInput()) {
+                String key = q.id + ":field:" + t.id;
+                String value = getFieldInputProgress(player, key);
+                if (!safeNormalizeFieldInput(value).equals(safeNormalizeFieldInput(t.id))) return false;
+            }
         }
 
         return true;
@@ -363,6 +402,10 @@ public final class QuestTracker {
     public static String normalizeXpType(String xpType) {
         String mode = xpType == null ? "" : xpType.trim().toLowerCase(Locale.ROOT);
         return "levels".equals(mode) ? "levels" : "points";
+    }
+
+    private static String safeNormalizeFieldInput(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     public static int getStatCount(Player player, String statId) {
@@ -446,11 +489,13 @@ public final class QuestTracker {
 
     public static boolean hasEffect(Player player, String effectId) {
         if (player == null || effectId == null || effectId.isBlank()) return false;
-        Holder<MobEffect> holder = EFFECT_BY_ID_CACHE.get(effectId);
+        MobEffect holder = null;
         if (!EFFECT_BY_ID_CACHE.containsKey(effectId)) {
             ResourceLocation rl = tryParseCached(effectId);
-            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
+            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getOptional(rl).orElse(null);
             EFFECT_BY_ID_CACHE.put(effectId, holder);
+        } else {
+            holder = (MobEffect) EFFECT_BY_ID_CACHE.get(effectId);
         }
         return holder != null && player.hasEffect(holder);
     }
@@ -484,7 +529,7 @@ public final class QuestTracker {
     }
 
     private static boolean hasAdvancementServer(ServerPlayer sp, ResourceLocation rl) {
-        AdvancementHolder holder = sp.server.getAdvancements().get(rl);
+        Advancement holder = sp.server.getAdvancements().getAdvancement(rl);
         if (holder == null) return false;
 
         AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(holder);
@@ -619,8 +664,7 @@ public final class QuestTracker {
             if (rl == null) continue;
             LootTable table;
             try {
-                table = player.server.reloadableRegistries()
-                        .getLootTable(ResourceKey.create(Registries.LOOT_TABLE, rl));
+                table = player.server.getLootData().getLootTable(rl);
             } catch (Throwable ignored) {
                 table = null;
             }
@@ -630,7 +674,7 @@ public final class QuestTracker {
                     .withParameter(LootContextParams.ORIGIN, player.position())
                     .withParameter(LootContextParams.THIS_ENTITY, player)
                     .create(LootContextParamSets.GIFT);
-            ObjectArrayList<ItemStack> generated = table.getRandomItems(params, player.getRandom());
+            ObjectArrayList<ItemStack> generated = table.getRandomItems(params);
             for (ItemStack stack : generated) {
                 if (stack == null || stack.isEmpty()) continue;
                 try {
@@ -737,10 +781,10 @@ public final class QuestTracker {
 
     public static void forceCompleteWithoutRewards(QuestData.Quest q, ServerPlayer player) {
         if (q == null || player == null) return;
-        markQuestClaimed(player, q);
-        clearQuestCycle(player, q);
-        setServerStatus(player, q.id, Status.REDEEMED);
-        BoundlessNetwork.sendStatus(player, q.id, Status.REDEEMED.name());
+        Status current = getServerStatus(player, q.id);
+        if (current == Status.REDEEMED || current == Status.REJECTED) return;
+        setServerStatus(player, q.id, Status.COMPLETED);
+        BoundlessNetwork.sendStatus(player, q.id, Status.COMPLETED.name());
     }
 
     public static boolean restartRepeatable(QuestData.Quest q, ServerPlayer player) {
@@ -755,6 +799,14 @@ public final class QuestTracker {
         if (q == null || player == null) return false;
         if (!q.optional) return false;
         setServerStatus(player, q.id, Status.REJECTED);
+        return true;
+    }
+
+    public static boolean serverUndoReject(QuestData.Quest q, ServerPlayer player) {
+        if (q == null || player == null) return false;
+        if (!q.optional) return false;
+        if (getServerStatus(player, q.id) != Status.REJECTED) return false;
+        setServerStatus(player, q.id, Status.INCOMPLETE);
         return true;
     }
 
@@ -777,10 +829,17 @@ public final class QuestTracker {
         }
         if (st == Status.INCOMPLETE) {
             activeStateMap().remove(questId);
+            clearClientInputForQuest(questId);
         } else {
             activeStateMap().put(questId, st);
+            if (st == Status.REDEEMED) clearClientInputForQuest(questId);
         }
         if (FMLEnvironment.dist == Dist.CLIENT && ACTIVE_KEY != null) ClientOnly.saveClientState(ACTIVE_KEY);
+    }
+
+    private static void clearClientInputForQuest(String questId) {
+        if (questId == null || questId.isBlank()) return;
+        CLIENT_INPUT_PROGRESS.entrySet().removeIf(e -> e.getKey() != null && e.getKey().startsWith(questId + ":"));
     }
 
     public static void clientSetClaimCount(String questId, int count) {
@@ -812,6 +871,7 @@ public final class QuestTracker {
         CLIENT_STATS.clear();
         CLIENT_ITEM_PROGRESS.clear();
         CLIENT_EFFECT_PROGRESS.clear();
+        CLIENT_INPUT_PROGRESS.clear();
         CLIENT_CLAIM_COUNTS.clear();
         CLIENT_SCROLL_REDEEMED.clear();
         CLIENT_SCROLL_CREATED.clear();
@@ -866,7 +926,7 @@ public final class QuestTracker {
             boolean hasItemTargets = hasItemOrSubmitTargets(q);
 
             if (ready && cur == Status.INCOMPLETE) {
-                if (Config.autoClaimQuestRewards()) {
+                if (shouldAutoClaim(q)) {
                     BoundlessNetwork.claimQuest(sp, q);
                 } else {
                     setServerStatus(sp, q.id, Status.COMPLETED);
@@ -909,14 +969,32 @@ public final class QuestTracker {
             try {
                 var mc = net.minecraft.client.Minecraft.getInstance();
                 if (mc != null && mc.player != null) {
-                    int idx = key.indexOf(':');
-                    if (idx > 0) {
-                        String questId = key.substring(0, idx);
+                    String questId = resolveQuestIdFromProgressKey(key);
+                    if (!questId.isBlank()) {
                         if (getStatus(questId, mc.player) == Status.INCOMPLETE) return Math.min(current, required);
                     }
                 }
             } catch (Throwable ignored) {}
             return now;
+        }
+
+        private static String resolveQuestIdFromProgressKey(String key) {
+            if (key == null || key.isBlank()) return "";
+            try {
+                QuestData.loadClient(false);
+                String best = "";
+                for (QuestData.Quest quest : QuestData.all()) {
+                    if (quest == null || quest.id == null || quest.id.isBlank()) continue;
+                    String prefix = quest.id + ":";
+                    if (!key.startsWith(prefix)) continue;
+                    if (quest.id.length() > best.length()) best = quest.id;
+                }
+                if (!best.isBlank()) return best;
+            } catch (Throwable ignored) {}
+
+            int idx = key.indexOf(':');
+            if (idx > 0) return key.substring(0, idx);
+            return "";
         }
 
         private static String computeClientKey() {

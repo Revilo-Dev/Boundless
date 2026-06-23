@@ -7,21 +7,20 @@ import com.google.gson.JsonObject;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
-import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.PacketDistributor;
+import net.minecraftforge.network.simple.SimpleChannel;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.toast.QuestUnlockedToast;
 import net.revilodev.boundless.item.ModItems;
@@ -33,15 +32,22 @@ import net.revilodev.boundless.quest.QuestTracker;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 public final class BoundlessNetwork {
 
-    private static final String CHANNEL = "boundless";
     private static final String VERSION = "2";
-    private static boolean REGISTERED = false;
+    private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
+            ResourceLocation.fromNamespaceAndPath("boundless", "main"),
+            () -> VERSION,
+            VERSION::equals,
+            VERSION::equals
+    );
+    private static int NEXT_ID = 0;
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
     private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
@@ -52,238 +58,156 @@ public final class BoundlessNetwork {
     private BoundlessNetwork() {}
 
     public static void bootstrap(IEventBus bus) {
-        bus.addListener(BoundlessNetwork::register);
+        registerMessages();
     }
 
-    private static void register(RegisterPayloadHandlersEvent event) {
-        if (REGISTERED) return;
-        REGISTERED = true;
+    private static void registerMessages() {
+        CHANNEL.registerMessage(NEXT_ID++, Redeem.class, (m, b) -> b.writeUtf(m.questId), b -> new Redeem(b.readUtf()), BoundlessNetwork::handleRedeem, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(NEXT_ID++, Reject.class, (m, b) -> b.writeUtf(m.questId), b -> new Reject(b.readUtf()), BoundlessNetwork::handleReject, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(NEXT_ID++, UndoReject.class, (m, b) -> b.writeUtf(m.questId), b -> new UndoReject(b.readUtf()), BoundlessNetwork::handleUndoReject, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(NEXT_ID++, CreateScroll.class, (m, b) -> b.writeUtf(m.questId), b -> new CreateScroll(b.readUtf()), BoundlessNetwork::handleCreateScroll, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(NEXT_ID++, RestartRepeatable.class, (m, b) -> b.writeUtf(m.questId), b -> new RestartRepeatable(b.readUtf()), BoundlessNetwork::handleRestartRepeatable, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(NEXT_ID++, UpdateFieldInput.class, BoundlessNetwork::encodeUpdateFieldInput, BoundlessNetwork::decodeUpdateFieldInput, BoundlessNetwork::handleUpdateFieldInput, Optional.of(NetworkDirection.PLAY_TO_SERVER));
 
-        PayloadRegistrar r = event.registrar(CHANNEL).versioned(VERSION);
-
-        r.playToServer(Redeem.TYPE, Redeem.CODEC, BoundlessNetwork::handleRedeem);
-        r.playToServer(Reject.TYPE, Reject.CODEC, BoundlessNetwork::handleReject);
-        r.playToServer(CreateScroll.TYPE, CreateScroll.CODEC, BoundlessNetwork::handleCreateScroll);
-        r.playToServer(RestartRepeatable.TYPE, RestartRepeatable.CODEC, BoundlessNetwork::handleRestartRepeatable);
-
-        r.playToClient(SyncStatus.TYPE, SyncStatus.CODEC, BoundlessNetwork::handleSyncStatus);
-        r.playToClient(SyncStatuses.TYPE, SyncStatuses.CODEC, BoundlessNetwork::handleSyncStatuses);
-        r.playToClient(SyncProgressMeta.TYPE, SyncProgressMeta.CODEC, BoundlessNetwork::handleSyncProgressMeta);
-        r.playToClient(SyncKills.TYPE, SyncKills.CODEC, BoundlessNetwork::handleSyncKills);
-        r.playToClient(SyncClear.TYPE, SyncClear.CODEC, BoundlessNetwork::handleSyncClear);
-        r.playToClient(Toast.TYPE, Toast.CODEC, BoundlessNetwork::handleToast);
-        r.playToClient(OpenQuestBook.TYPE, OpenQuestBook.CODEC, BoundlessNetwork::handleOpenQuestBook);
-        r.playToClient(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC, BoundlessNetwork::handleSyncQuestsChunk);
+        CHANNEL.registerMessage(NEXT_ID++, SyncStatus.class, BoundlessNetwork::encodeSyncStatus, BoundlessNetwork::decodeSyncStatus, BoundlessNetwork::handleSyncStatus, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(NEXT_ID++, SyncStatuses.class, BoundlessNetwork::encodeSyncStatuses, BoundlessNetwork::decodeSyncStatuses, BoundlessNetwork::handleSyncStatuses, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(NEXT_ID++, SyncProgressMeta.class, BoundlessNetwork::encodeSyncProgressMeta, BoundlessNetwork::decodeSyncProgressMeta, BoundlessNetwork::handleSyncProgressMeta, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(NEXT_ID++, SyncKills.class, BoundlessNetwork::encodeSyncKills, BoundlessNetwork::decodeSyncKills, BoundlessNetwork::handleSyncKills, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(NEXT_ID++, SyncClear.class, (m, b) -> {}, b -> new SyncClear(), BoundlessNetwork::handleSyncClear, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(NEXT_ID++, Toast.class, (m, b) -> b.writeUtf(m.questId), b -> new Toast(b.readUtf()), BoundlessNetwork::handleToast, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(NEXT_ID++, OpenQuestBook.class, (m, b) -> {}, b -> new OpenQuestBook(), BoundlessNetwork::handleOpenQuestBook, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(NEXT_ID++, SyncQuestsChunk.class, BoundlessNetwork::encodeSyncQuestsChunk, BoundlessNetwork::decodeSyncQuestsChunk, BoundlessNetwork::handleSyncQuestsChunk, Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
-    public record Redeem(String questId) implements CustomPacketPayload {
-        public static final Type<Redeem> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "redeem"));
-        public static final StreamCodec<FriendlyByteBuf, Redeem> CODEC = StreamCodec.of(
-                (buf, p) -> buf.writeUtf(p.questId),
-                buf -> new Redeem(buf.readUtf())
-        );
-        @Override public Type<Redeem> type() { return TYPE; }
+    public record Redeem(String questId) {}
+    public record Reject(String questId) {}
+    public record UndoReject(String questId) {}
+    public record CreateScroll(String questId) {}
+    public record RestartRepeatable(String questId) {}
+    public record UpdateFieldInput(String questId, String targetId, String value) {}
+    public record SyncStatus(String questId, String status) {}
+    public record StatusEntry(String questId, String status) {}
+    public record SyncStatuses(List<StatusEntry> entries) {}
+    public record ProgressMetaEntry(String questId, int claimCount, boolean scrollRedeemed, boolean scrollCreated) {}
+    public record SyncProgressMeta(List<ProgressMetaEntry> entries) {}
+    public record KillEntry(String entityId, int count) {}
+    public record SyncKills(List<KillEntry> entries) {}
+    public record SyncClear() {}
+    public record Toast(String questId) {}
+    public record OpenQuestBook() {}
+    public record SyncQuestsChunk(int syncId, int totalParts, int index, byte[] part) {}
+
+    public static void sendToServer(Object msg) {
+        CHANNEL.sendToServer(msg);
     }
 
-    public record Reject(String questId) implements CustomPacketPayload {
-        public static final Type<Reject> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "reject"));
-        public static final StreamCodec<FriendlyByteBuf, Reject> CODEC = StreamCodec.of(
-                (buf, p) -> buf.writeUtf(p.questId),
-                buf -> new Reject(buf.readUtf())
-        );
-        @Override public Type<Reject> type() { return TYPE; }
+    private static void sendToPlayer(ServerPlayer player, Object msg) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), msg);
     }
 
-    public record CreateScroll(String questId) implements CustomPacketPayload {
-        public static final Type<CreateScroll> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "create_scroll"));
-        public static final StreamCodec<FriendlyByteBuf, CreateScroll> CODEC = StreamCodec.of(
-                (buf, p) -> buf.writeUtf(p.questId),
-                buf -> new CreateScroll(buf.readUtf())
-        );
-        @Override public Type<CreateScroll> type() { return TYPE; }
+    private static void encodeUpdateFieldInput(UpdateFieldInput p, FriendlyByteBuf buf) {
+        buf.writeUtf(p.questId);
+        buf.writeUtf(p.targetId);
+        buf.writeUtf(p.value == null ? "" : p.value);
     }
 
-    public record RestartRepeatable(String questId) implements CustomPacketPayload {
-        public static final Type<RestartRepeatable> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "restart_repeatable"));
-        public static final StreamCodec<FriendlyByteBuf, RestartRepeatable> CODEC = StreamCodec.of(
-                (buf, p) -> buf.writeUtf(p.questId),
-                buf -> new RestartRepeatable(buf.readUtf())
-        );
-        @Override public Type<RestartRepeatable> type() { return TYPE; }
+    private static UpdateFieldInput decodeUpdateFieldInput(FriendlyByteBuf buf) {
+        return new UpdateFieldInput(buf.readUtf(), buf.readUtf(), buf.readUtf());
     }
 
-    public record SyncStatus(String questId, String status) implements CustomPacketPayload {
-        public static final Type<SyncStatus> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_status"));
-        public static final StreamCodec<FriendlyByteBuf, SyncStatus> CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeUtf(p.questId);
-                    buf.writeUtf(p.status);
-                },
-                buf -> new SyncStatus(buf.readUtf(), buf.readUtf())
-        );
-        @Override public Type<SyncStatus> type() { return TYPE; }
+    private static void encodeSyncStatus(SyncStatus p, FriendlyByteBuf buf) {
+        buf.writeUtf(p.questId);
+        buf.writeUtf(p.status);
     }
 
-    public record StatusEntry(String questId, String status) {
-        public static final StreamCodec<FriendlyByteBuf, StatusEntry> CODEC = StreamCodec.of(
-                (buf, e) -> {
-                    buf.writeUtf(e.questId);
-                    buf.writeUtf(e.status);
-                },
-                buf -> new StatusEntry(buf.readUtf(), buf.readUtf())
-        );
+    private static SyncStatus decodeSyncStatus(FriendlyByteBuf buf) {
+        return new SyncStatus(buf.readUtf(), buf.readUtf());
     }
 
-    public record SyncStatuses(List<StatusEntry> entries) implements CustomPacketPayload {
-        public static final Type<SyncStatuses> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_statuses"));
-        public static final StreamCodec<FriendlyByteBuf, SyncStatuses> CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeVarInt(p.entries.size());
-                    for (StatusEntry e : p.entries) StatusEntry.CODEC.encode(buf, e);
-                },
-                buf -> {
-                    int n = buf.readVarInt();
-                    List<StatusEntry> list = new ArrayList<>(n);
-                    for (int i = 0; i < n; i++) list.add(StatusEntry.CODEC.decode(buf));
-                    return new SyncStatuses(list);
-                }
-        );
-        @Override public Type<SyncStatuses> type() { return TYPE; }
+    private static void encodeSyncStatuses(SyncStatuses p, FriendlyByteBuf buf) {
+        buf.writeVarInt(p.entries.size());
+        for (StatusEntry e : p.entries) {
+            buf.writeUtf(e.questId);
+            buf.writeUtf(e.status);
+        }
     }
 
-    public record ProgressMetaEntry(String questId, int claimCount, boolean scrollRedeemed, boolean scrollCreated) {
-        public static final StreamCodec<FriendlyByteBuf, ProgressMetaEntry> CODEC = StreamCodec.of(
-                (buf, e) -> {
-                    buf.writeUtf(e.questId);
-                    buf.writeVarInt(e.claimCount);
-                    buf.writeBoolean(e.scrollRedeemed);
-                    buf.writeBoolean(e.scrollCreated);
-                },
-                buf -> new ProgressMetaEntry(buf.readUtf(), buf.readVarInt(), buf.readBoolean(), buf.readBoolean())
-        );
+    private static SyncStatuses decodeSyncStatuses(FriendlyByteBuf buf) {
+        int n = buf.readVarInt();
+        List<StatusEntry> list = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) list.add(new StatusEntry(buf.readUtf(), buf.readUtf()));
+        return new SyncStatuses(list);
     }
 
-    public record SyncProgressMeta(List<ProgressMetaEntry> entries) implements CustomPacketPayload {
-        public static final Type<SyncProgressMeta> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_progress_meta"));
-        public static final StreamCodec<FriendlyByteBuf, SyncProgressMeta> CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeVarInt(p.entries.size());
-                    for (ProgressMetaEntry e : p.entries) ProgressMetaEntry.CODEC.encode(buf, e);
-                },
-                buf -> {
-                    int n = buf.readVarInt();
-                    List<ProgressMetaEntry> list = new ArrayList<>(n);
-                    for (int i = 0; i < n; i++) list.add(ProgressMetaEntry.CODEC.decode(buf));
-                    return new SyncProgressMeta(list);
-                }
-        );
-        @Override public Type<SyncProgressMeta> type() { return TYPE; }
+    private static void encodeSyncProgressMeta(SyncProgressMeta p, FriendlyByteBuf buf) {
+        buf.writeVarInt(p.entries.size());
+        for (ProgressMetaEntry e : p.entries) {
+            buf.writeUtf(e.questId);
+            buf.writeVarInt(e.claimCount);
+            buf.writeBoolean(e.scrollRedeemed);
+            buf.writeBoolean(e.scrollCreated);
+        }
     }
 
-    public record KillEntry(String entityId, int count) {
-        public static final StreamCodec<FriendlyByteBuf, KillEntry> CODEC = StreamCodec.of(
-                (buf, e) -> {
-                    buf.writeUtf(e.entityId);
-                    buf.writeVarInt(e.count);
-                },
-                buf -> new KillEntry(buf.readUtf(), buf.readVarInt())
-        );
+    private static SyncProgressMeta decodeSyncProgressMeta(FriendlyByteBuf buf) {
+        int n = buf.readVarInt();
+        List<ProgressMetaEntry> list = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            list.add(new ProgressMetaEntry(buf.readUtf(), buf.readVarInt(), buf.readBoolean(), buf.readBoolean()));
+        }
+        return new SyncProgressMeta(list);
     }
 
-
-
-    public record SyncKills(List<KillEntry> entries) implements CustomPacketPayload {
-        public static final Type<SyncKills> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_kills"));
-        public static final StreamCodec<FriendlyByteBuf, SyncKills> CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeVarInt(p.entries.size());
-                    for (KillEntry e : p.entries) KillEntry.CODEC.encode(buf, e);
-                },
-                buf -> {
-                    int n = buf.readVarInt();
-                    List<KillEntry> list = new ArrayList<>(n);
-                    for (int i = 0; i < n; i++) list.add(KillEntry.CODEC.decode(buf));
-                    return new SyncKills(list);
-                }
-        );
-        @Override public Type<SyncKills> type() { return TYPE; }
+    private static void encodeSyncKills(SyncKills p, FriendlyByteBuf buf) {
+        buf.writeVarInt(p.entries.size());
+        for (KillEntry e : p.entries) {
+            buf.writeUtf(e.entityId);
+            buf.writeVarInt(e.count);
+        }
     }
 
-    public record SyncClear() implements CustomPacketPayload {
-        public static final Type<SyncClear> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_clear"));
-        public static final StreamCodec<FriendlyByteBuf, SyncClear> CODEC =
-                StreamCodec.of((b, p) -> {}, b -> new SyncClear());
-        @Override public Type<SyncClear> type() { return TYPE; }
+    private static SyncKills decodeSyncKills(FriendlyByteBuf buf) {
+        int n = buf.readVarInt();
+        List<KillEntry> list = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) list.add(new KillEntry(buf.readUtf(), buf.readVarInt()));
+        return new SyncKills(list);
     }
 
-    public record Toast(String questId) implements CustomPacketPayload {
-        public static final Type<Toast> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "toast"));
-        public static final StreamCodec<FriendlyByteBuf, Toast> CODEC = StreamCodec.of(
-                (buf, p) -> buf.writeUtf(p.questId),
-                buf -> new Toast(buf.readUtf())
-        );
-        @Override public Type<Toast> type() { return TYPE; }
+    private static void encodeSyncQuestsChunk(SyncQuestsChunk p, FriendlyByteBuf buf) {
+        buf.writeVarInt(p.syncId);
+        buf.writeVarInt(p.totalParts);
+        buf.writeVarInt(p.index);
+        buf.writeVarInt(p.part.length);
+        buf.writeBytes(p.part);
     }
 
-    public record OpenQuestBook() implements CustomPacketPayload {
-        public static final Type<OpenQuestBook> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "open_quest_book"));
-        public static final StreamCodec<FriendlyByteBuf, OpenQuestBook> CODEC =
-                StreamCodec.of((buf, p) -> {}, buf -> new OpenQuestBook());
-        @Override public Type<OpenQuestBook> type() { return TYPE; }
-    }
-
-    public record SyncQuestsChunk(int syncId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
-        public static final Type<SyncQuestsChunk> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_quests_chunk"));
-        public static final StreamCodec<FriendlyByteBuf, SyncQuestsChunk> CODEC = StreamCodec.of(
-                (buf, p) -> {
-                    buf.writeVarInt(p.syncId);
-                    buf.writeVarInt(p.totalParts);
-                    buf.writeVarInt(p.index);
-                    buf.writeVarInt(p.part.length);
-                    buf.writeBytes(p.part);
-                },
-                buf -> {
-                    int syncId = buf.readVarInt();
-                    int total = buf.readVarInt();
-                    int idx = buf.readVarInt();
-                    int len = buf.readVarInt();
-                    if (len < 0 || len > 1_200_000) throw new IllegalArgumentException("chunk len " + len);
-                    byte[] bytes = new byte[len];
-                    buf.readBytes(bytes);
-                    return new SyncQuestsChunk(syncId, total, idx, bytes);
-                }
-        );
-        @Override public Type<SyncQuestsChunk> type() { return TYPE; }
+    private static SyncQuestsChunk decodeSyncQuestsChunk(FriendlyByteBuf buf) {
+        int syncId = buf.readVarInt();
+        int total = buf.readVarInt();
+        int idx = buf.readVarInt();
+        int len = buf.readVarInt();
+        if (len < 0 || len > 1_200_000) throw new IllegalArgumentException("chunk len " + len);
+        byte[] bytes = new byte[len];
+        buf.readBytes(bytes);
+        return new SyncQuestsChunk(syncId, total, idx, bytes);
     }
 
     public static void syncPlayer(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new SyncClear());
+        sendToPlayer(p, new SyncClear());
         sendQuestData(p);
 
         List<KillEntry> killEntries = new ArrayList<>();
         KillCounterState.get(p.serverLevel()).snapshotFor(p.getUUID())
                 .forEach((id, ct) -> killEntries.add(new KillEntry(id, ct)));
         if (!killEntries.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncKills(killEntries));
+            sendToPlayer(p, new SyncKills(killEntries));
         }
 
         List<StatusEntry> statuses = new ArrayList<>();
         QuestProgressState.get(p.serverLevel()).snapshotFor(p.getUUID())
                 .forEach((questId, status) -> statuses.add(new StatusEntry(questId, status)));
         if (!statuses.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncStatuses(statuses));
+            sendToPlayer(p, new SyncStatuses(statuses));
         }
 
         List<ProgressMetaEntry> metaEntries = new ArrayList<>();
@@ -295,7 +219,7 @@ public final class BoundlessNetwork {
                         progress != null && progress.scrollCreated()
                 )));
         if (!metaEntries.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncProgressMeta(metaEntries));
+            sendToPlayer(p, new SyncProgressMeta(metaEntries));
         }
 
         syncComputedCompletion(p);
@@ -304,7 +228,7 @@ public final class BoundlessNetwork {
     public static void sendProgressMeta(ServerPlayer player, String questId) {
         if (player == null || questId == null || questId.isBlank()) return;
         var progress = QuestProgressState.get(player.serverLevel()).progress(player.getUUID(), questId);
-        PacketDistributor.sendToPlayer(player, new SyncProgressMeta(List.of(
+        sendToPlayer(player, new SyncProgressMeta(List.of(
                 new ProgressMetaEntry(questId, progress.claimCount(), progress.scrollRedeemed(), progress.scrollCreated())
         )));
     }
@@ -342,6 +266,7 @@ public final class BoundlessNetwork {
             o.addProperty("order", c.order);
             o.addProperty("excludeFromAll", c.excludeFromAll);
             o.addProperty("dependency", c.dependency);
+            o.addProperty("autoComplete", c.autoComplete);
             cats.add(o);
         }
         root.add("categories", cats);
@@ -441,6 +366,9 @@ public final class BoundlessNetwork {
                     to.addProperty("kind", t.kind);
                     to.addProperty("id", t.id);
                     to.addProperty("count", t.count);
+                    if (t.hint != null && !t.hint.isBlank()) {
+                        to.addProperty("hint", t.hint);
+                    }
                     targets.add(to);
                 }
                 co.add("targets", targets);
@@ -478,20 +406,25 @@ public final class BoundlessNetwork {
             int start = i * QUEST_CHUNK_BYTES;
             int end = Math.min(bytes.length, start + QUEST_CHUNK_BYTES);
             byte[] part = start >= end ? new byte[0] : java.util.Arrays.copyOfRange(bytes, start, end);
-            PacketDistributor.sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
+            sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
         }
     }
 
     public static void sendStatus(ServerPlayer p, String questId, String status) {
-        PacketDistributor.sendToPlayer(p, new SyncStatus(questId, status));
+        sendToPlayer(p, new SyncStatus(questId, status));
     }
 
     public static void sendToast(ServerPlayer p, String questId) {
-        PacketDistributor.sendToPlayer(p, new Toast(questId));
+        sendToPlayer(p, new Toast(questId));
+    }
+
+    public static void sendKills(ServerPlayer p, List<KillEntry> entries) {
+        if (p == null || entries == null || entries.isEmpty()) return;
+        sendToPlayer(p, new SyncKills(entries));
     }
 
     public static void sendOpenQuestBook(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new OpenQuestBook());
+        sendToPlayer(p, new OpenQuestBook());
     }
 
     public static void sendToastLocal(String questId) {
@@ -500,19 +433,20 @@ public final class BoundlessNetwork {
         );
     }
 
-    private static void handleRedeem(Redeem p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
+    private static void handleRedeem(Redeem p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.get().getSender();
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
                 if (!QuestTracker.isReady(q, sp)) return;
                 claimQuest(sp, q);
             });
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleReject(Reject p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
+    private static void handleReject(Reject p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.get().getSender();
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
                 if (QuestTracker.serverReject(q, sp)) {
                     QuestTracker.setServerStatus(sp, q.id, QuestTracker.Status.REJECTED);
@@ -520,11 +454,12 @@ public final class BoundlessNetwork {
                 }
             });
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleCreateScroll(CreateScroll p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
+    private static void handleCreateScroll(CreateScroll p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.get().getSender();
             if (!Config.enableQuestScrolls()) return;
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
                 if (!QuestTracker.canCreateScroll(q, sp)) return;
@@ -536,72 +471,114 @@ public final class BoundlessNetwork {
                 sendProgressMeta(sp, q.id);
             });
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleRestartRepeatable(RestartRepeatable p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
+    private static void handleUndoReject(UndoReject p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.get().getSender();
+            QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+                if (QuestTracker.serverUndoReject(q, sp)) {
+                    sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
+                }
+            });
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleRestartRepeatable(RestartRepeatable p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.get().getSender();
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
                 if (QuestTracker.restartRepeatable(q, sp)) {
                     sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
                 }
             });
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleSyncStatus(SyncStatus p, IPayloadContext ctx) {
-        ctx.enqueueWork(() ->
+    private static void handleUpdateFieldInput(UpdateFieldInput p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.get().getSender();
+            if (sp == null || p.questId() == null || p.questId().isBlank() || p.targetId() == null || p.targetId().isBlank()) return;
+            QuestData.Quest quest = QuestData.byIdServer(sp.server, p.questId()).orElse(null);
+            if (quest == null || quest.completion == null || quest.completion.targets == null) return;
+            boolean validFieldTarget = false;
+            for (QuestData.Target t : quest.completion.targets) {
+                if (t == null || !t.isFieldInput()) continue;
+                if (!p.targetId().equals(t.id)) continue;
+                validFieldTarget = true;
+                break;
+            }
+            if (!validFieldTarget) return;
+            String key = p.questId() + ":field:" + p.targetId();
+            QuestTracker.setFieldInputProgress(sp, key, p.value());
+        });
+        ctx.get().setPacketHandled(true);
+    }
+
+    private static void handleSyncStatus(SyncStatus p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() ->
                 QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()))
         );
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleSyncStatuses(SyncStatuses p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
+    private static void handleSyncStatuses(SyncStatuses p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
             for (StatusEntry e : p.entries()) {
                 QuestTracker.clientSetStatus(e.questId(), QuestTracker.decodeStatus(e.status()));
             }
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleSyncProgressMeta(SyncProgressMeta p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
+    private static void handleSyncProgressMeta(SyncProgressMeta p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
             for (ProgressMetaEntry e : p.entries()) {
                 QuestTracker.clientSetClaimCount(e.questId(), e.claimCount());
                 QuestTracker.clientSetScrollRedeemed(e.questId(), e.scrollRedeemed());
                 QuestTracker.clientSetScrollCreated(e.questId(), e.scrollCreated());
             }
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleSyncKills(SyncKills p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
+    private static void handleSyncKills(SyncKills p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
             for (KillEntry e : p.entries())
                 QuestTracker.clientSetKill(e.entityId(), e.count());
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleSyncClear(SyncClear p, IPayloadContext ctx) {
-        ctx.enqueueWork(QuestTracker::clientClearAll);
+    private static void handleSyncClear(SyncClear p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(QuestTracker::clientClearAll);
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleToast(Toast p, IPayloadContext ctx) {
-        ctx.enqueueWork(() ->
+    private static void handleToast(Toast p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() ->
                 QuestData.byId(p.questId()).ifPresent(q ->
                         QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
                 )
         );
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleOpenQuestBook(OpenQuestBook p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            if (ctx.player().level().isClientSide() && !Config.disableQuestBook()) {
+    private static void handleOpenQuestBook(OpenQuestBook p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            if (net.minecraft.client.Minecraft.getInstance().level != null && !Config.disableQuestBook()) {
                 ClientOnly.openQuestBook();
             }
         });
+        ctx.get().setPacketHandled(true);
     }
 
-    private static void handleSyncQuestsChunk(SyncQuestsChunk p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> ClientQuestSync.accept(p));
+    private static void handleSyncQuestsChunk(SyncQuestsChunk p, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> ClientQuestSync.accept(p));
+        ctx.get().setPacketHandled(true);
     }
 
     private static boolean questHasSubmit(QuestData.Quest q) {

@@ -6,8 +6,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryTabsWidget;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
@@ -47,7 +47,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     private String selectedCategory = "all";
 
     public StandaloneQuestBookScreen() {
-        super(Component.literal("Quests"));
+        super(Component.translatable("ui.boundless.questbook.title"));
     }
 
     @Override
@@ -92,8 +92,8 @@ public final class StandaloneQuestBookScreen extends Screen {
             lastSelectedCategory = "all";
         }
 
-        searchBox = new EditBox(font, pxLeft, py, pw, 16, Component.literal("Search quests"));
-        searchBox.setHint(Component.literal("Search"));
+        searchBox = new EditBox(font, pxLeft, py, pw, 16, Component.translatable("ui.boundless.questbook.search_quests"));
+        searchBox.setHint(Component.translatable("ui.boundless.questbook.search"));
         searchBox.setMaxLength(64);
         searchBox.setValue(searchQuery);
         searchBox.setResponder(value -> {
@@ -152,7 +152,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         list.active = true;
 
         if (searchBox != null) {
-            boolean showSearch = !showingDetails && Config.enableQuestSearchBox();
+            boolean showSearch = Config.enableQuestSearchBox();
             searchBox.visible = showSearch;
             searchBox.active = showSearch;
         }
@@ -197,8 +197,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
     }
 
-    @Override
-    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
@@ -213,24 +212,23 @@ public final class StandaloneQuestBookScreen extends Screen {
         super.render(gg, mouseX, mouseY, partialTick);
     }
 
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
         boolean overSearch = searchBox != null && searchBox.visible
                 && mouseX >= searchBox.getX() && mouseX <= searchBox.getX() + searchBox.getWidth()
                 && mouseY >= searchBox.getY() && mouseY <= searchBox.getY() + searchBox.getHeight();
         if (list.visible && list.active) {
             if (!overSearch && mouseX >= list.getX() && mouseX <= list.getX() + list.getWidth()
                     && mouseY >= list.getY() && mouseY <= list.getY() + list.getHeight()) {
-                if (list.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
+                if (list.mouseScrolled(mouseX, mouseY, scrollDelta)) return true;
             }
         }
         if (details.visible && details.active) {
             if (mouseX >= details.getX() && mouseX <= details.getX() + details.getWidth()
                     && mouseY >= details.getY() && mouseY <= details.getY() + details.getHeight()) {
-                if (details.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
+                if (details.mouseScrolled(mouseX, mouseY, scrollDelta)) return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollDelta);
     }
 
     @Override

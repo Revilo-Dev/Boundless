@@ -6,8 +6,8 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 
 import java.util.function.Supplier;
 
@@ -44,7 +44,7 @@ public final class CategoryHeaderWidget extends AbstractWidget {
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         String title = titleSupplier == null ? "" : titleSupplier.get();
-        if (title == null || title.isBlank()) title = "Categories";
+        if (title == null || title.isBlank()) title = Component.translatable("ui.boundless.categories").getString();
 
         var font = Minecraft.getInstance().font;
         int textW = font.width(title);

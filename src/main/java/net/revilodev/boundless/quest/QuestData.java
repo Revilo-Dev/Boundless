@@ -12,9 +12,9 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.Item;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.fml.loading.FMLPaths;
 import net.revilodev.boundless.Config;
 
 import java.io.BufferedReader;
@@ -22,6 +22,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 
 public final class QuestData {
@@ -34,6 +37,8 @@ public final class QuestData {
     private static final String PATH_SUBCATEGORIES_ALT = "quests/sub_categories";
     private static final String PATH_SUBCATEGORY = "quests/subcategory";
     private static final String PATH_SUBCATEGORY_ALT = "quests/sub-category";
+    private static final Path INSTANCE_QUEST_PACKS_ROOT =
+            FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks");
 
     private static final Map<String, Quest> QUESTS = new LinkedHashMap<>();
     private static final Map<String, Category> CATEGORIES = new LinkedHashMap<>();
@@ -49,8 +54,10 @@ public final class QuestData {
         public final String icon;
         public final String description;
         public final List<String> dependencies;
+        public final boolean lockAfterDependency;
         public final boolean optional;
         public final boolean repeatable;
+        public final boolean autoComplete;
         public final boolean hiddenUnderDependency;
         public final Rewards rewards;
         public final String type;
@@ -60,7 +67,8 @@ public final class QuestData {
         public final String sourcePath;
 
         public Quest(String id, String name, String icon, String description,
-                     List<String> dependencies, boolean optional, boolean repeatable,
+                     List<String> dependencies, boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete,
                      boolean hiddenUnderDependency, Rewards rewards,
                      String type, Completion completion, String category,
                      String subCategory, String sourcePath) {
@@ -70,8 +78,10 @@ public final class QuestData {
             this.icon = icon == null ? "minecraft:book" : icon;
             this.description = description == null ? "" : description;
             this.dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
+            this.lockAfterDependency = lockAfterDependency;
             this.optional = optional;
             this.repeatable = repeatable;
+            this.autoComplete = autoComplete;
             this.hiddenUnderDependency = hiddenUnderDependency;
             this.rewards = rewards;
             this.type = type == null ? "collection" : type;
@@ -181,11 +191,17 @@ public final class QuestData {
         public final String kind;
         public final String id;
         public final int count;
+        public final String hint;
 
         public Target(String kind, String id, int count) {
+            this(kind, id, count, "");
+        }
+
+        public Target(String kind, String id, int count, String hint) {
             this.kind = kind;
             this.id = id;
             this.count = Math.max(1, count);
+            this.hint = hint == null ? "" : hint;
         }
 
         public boolean isItem() { return "item".equals(kind); }
@@ -196,6 +212,7 @@ public final class QuestData {
         public boolean isStat() { return "stat".equals(kind); }
         public boolean isXp() { return "xp".equals(kind); }
         public boolean isLevelUpLevel() { return "levelup_level".equals(kind); }
+        public boolean isFieldInput() { return "field".equals(kind); }
     }
 
     public static final class Category {
@@ -205,15 +222,17 @@ public final class QuestData {
         public final int order;
         public final boolean excludeFromAll;
         public final String dependency;
+        public final boolean autoComplete;
 
         public Category(String id, String icon, String name, int order,
-                        boolean excludeFromAll, String dependency) {
+                        boolean excludeFromAll, String dependency, boolean autoComplete) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
             this.name = name == null || name.isBlank() ? id : name;
             this.order = order;
             this.excludeFromAll = excludeFromAll;
             this.dependency = dependency == null ? "" : dependency;
+            this.autoComplete = autoComplete;
         }
 
         public Optional<Item> iconItem() {
@@ -372,8 +391,10 @@ public final class QuestData {
                 int order = parseIntFlexible(obj, "order", 0);
                 boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
                 String dependency = optString(obj, "dependency");
+                boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
+                        parseBoolFlexible(obj, "autoComplete", false));
 
-                CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency));
+                CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
             } catch (Exception ignored) {}
         }
 
@@ -406,45 +427,141 @@ public final class QuestData {
             } catch (Exception ignored) {}
         }
 
-        if (FMLEnvironment.dist == Dist.CLIENT && shouldScanSelectedResourcePacksData()) {
-            scanSelectedResourcePacksData();
-        }
+        loadModQuestPacksFromInstance();
 
         ensureSubCategoriesFromQuests();
 
         if (!CATEGORIES.containsKey("all")) {
             CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
-                    Integer.MIN_VALUE, false, ""));
+                    Integer.MIN_VALUE, false, "", false));
         }
     }
 
-    private static void scanSelectedResourcePacksData() {
-        try {
-            var repo = Minecraft.getInstance().getResourcePackRepository();
-            var selected = repo.getSelectedPacks();
+    private static void loadModQuestPacksFromInstance() {
+        if (!Files.isDirectory(INSTANCE_QUEST_PACKS_ROOT)) return;
 
-            for (var pack : selected) {
-                try (PackResources res = pack.open()) {
-                    Set<String> namespaces = res.getNamespaces(PackType.SERVER_DATA);
-                    for (String ns : namespaces) {
-                        if (shouldSkipNamespace(ns)) continue;
-                        listDataCategoriesFromPack(res, ns);
-                        listDataSubCategoriesFromPack(res, ns, PATH_SUBCATEGORIES);
-                        listDataSubCategoriesFromPack(res, ns, PATH_SUBCATEGORIES_ALT);
-                        listDataSubCategoriesFromPack(res, ns, PATH_SUBCATEGORY);
-                        listDataSubCategoriesFromPack(res, ns, PATH_SUBCATEGORY_ALT);
-                        listDataQuestsFromPack(res, ns);
-                    }
-                } catch (Throwable ignored) {}
+        try (DirectoryStream<Path> packs = Files.newDirectoryStream(INSTANCE_QUEST_PACKS_ROOT)) {
+            for (Path packRoot : packs) {
+                if (!Files.isDirectory(packRoot)) continue;
+                if (!isInstancePackEnabled(packRoot)) continue;
+                loadModQuestPackData(packRoot);
             }
-        } catch (Throwable ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
-    @OnlyIn(Dist.CLIENT)
-    private static boolean shouldScanSelectedResourcePacksData() {
-        if (!Config.datapackQuestPacksOnlyOnServer()) return true;
-        Minecraft mc = Minecraft.getInstance();
-        return mc != null && mc.hasSingleplayerServer();
+    private static boolean isInstancePackEnabled(Path packRoot) {
+        if (packRoot == null) return false;
+        Boolean enabledFromPackJson = readEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"));
+        if (enabledFromPackJson != null) return enabledFromPackJson;
+        Boolean enabledFromMcmeta = readEnabledFlag(packRoot.resolve("pack.mcmeta"));
+        return enabledFromMcmeta == null ? true : enabledFromMcmeta;
+    }
+
+    private static Boolean readEnabledFlag(Path metaPath) {
+        if (metaPath == null || !Files.exists(metaPath)) return null;
+        try (Reader reader = Files.newBufferedReader(metaPath, StandardCharsets.UTF_8)) {
+            JsonObject root = safeObject(reader);
+            if (root == null || !root.has("boundless") || !root.get("boundless").isJsonObject()) return null;
+            JsonObject boundless = root.getAsJsonObject("boundless");
+            if (!boundless.has("enabled")) return null;
+            JsonElement enabled = boundless.get("enabled");
+            if (enabled == null || !enabled.isJsonPrimitive()) return null;
+            JsonPrimitive p = enabled.getAsJsonPrimitive();
+            if (p.isBoolean()) return p.getAsBoolean();
+            return Boolean.parseBoolean(p.getAsString());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static void loadModQuestPackData(Path packRoot) {
+        Path dataRoot = packRoot.resolve("data");
+        if (!Files.isDirectory(dataRoot)) return;
+
+        try (DirectoryStream<Path> namespaces = Files.newDirectoryStream(dataRoot)) {
+            for (Path namespaceDir : namespaces) {
+                if (!Files.isDirectory(namespaceDir)) continue;
+                String ns = namespaceDir.getFileName() == null ? "" : namespaceDir.getFileName().toString();
+                if (shouldSkipNamespace(ns)) continue;
+
+                Path questsRoot = namespaceDir.resolve("quests");
+                if (!Files.isDirectory(questsRoot)) continue;
+
+                loadCategoriesFromPath(questsRoot.resolve("categories"), ns);
+                loadSubCategoriesFromPath(questsRoot.resolve("subcategories"), ns);
+                loadSubCategoriesFromPath(questsRoot.resolve("sub_category"), ns);
+                loadSubCategoriesFromPath(questsRoot.resolve("subcategory"), ns);
+                loadSubCategoriesFromPath(questsRoot.resolve("sub-category"), ns);
+                loadQuestsFromPath(questsRoot, ns);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void loadCategoriesFromPath(Path categoriesDir, String namespace) {
+        if (!Files.isDirectory(categoriesDir)) return;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(categoriesDir, "*.json")) {
+            for (Path file : files) {
+                try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                    JsonObject obj = safeObject(reader);
+                    if (obj == null) continue;
+                    String id = optString(obj, "id");
+                    if (id == null || id.isBlank()) continue;
+                    String icon = optString(obj, "icon");
+                    String cname = optString(obj, "name");
+                    int order = parseIntFlexible(obj, "order", 0);
+                    boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
+                    String dependency = optString(obj, "dependency");
+                    boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
+                            parseBoolFlexible(obj, "autoComplete", false));
+                    CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void loadSubCategoriesFromPath(Path subDir, String namespace) {
+        if (!Files.isDirectory(subDir)) return;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(subDir, "*.json")) {
+            for (Path file : files) {
+                try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                    JsonObject obj = safeObject(reader);
+                    if (obj == null) continue;
+                    String relPath = "quests/" + subDir.getFileName() + "/" + file.getFileName();
+                    readSubCategoryObject(obj, relPath);
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void loadQuestsFromPath(Path questsRoot, String namespace) {
+        if (!Files.isDirectory(questsRoot)) return;
+        try (var stream = Files.walk(questsRoot)) {
+            stream.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().toLowerCase(Locale.ROOT).endsWith(".json"))
+                    .forEach(path -> {
+                        try {
+                            String rel = questsRoot.relativize(path).toString().replace('\\', '/');
+                            if (rel.startsWith("categories/")) return;
+                            if (isSubCategoryPath("quests/" + rel)) return;
+                            ResourceLocation loc = ResourceLocation.fromNamespaceAndPath(namespace, "quests/" + rel);
+                            if (shouldIgnoreQuestJson(loc)) return;
+                            try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+                                JsonObject obj = safeObject(reader);
+                                if (obj == null) return;
+                                Quest q = parseQuestObject(obj, loc);
+                                if (q != null && !isQuestDisabled(q)) QUESTS.put(q.id, q);
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    });
+        } catch (Exception ignored) {
+        }
     }
 
     private static int listDataCategoriesFromPack(PackResources res, String ns) {
@@ -463,8 +580,10 @@ public final class QuestData {
                 int order = parseIntFlexible(obj, "order", 0);
                 boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
                 String dependency = optString(obj, "dependency");
+                boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
+                        parseBoolFlexible(obj, "autoComplete", false));
 
-                CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency));
+                CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
                 count[0]++;
             } catch (Exception ignored) {}
         });
@@ -669,7 +788,7 @@ public final class QuestData {
 
         if (!CATEGORIES.containsKey("all")) {
             CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
-                    Integer.MIN_VALUE, false, ""));
+                    Integer.MIN_VALUE, false, "", false));
         }
 
         List<Category> list = new ArrayList<>(CATEGORIES.values());
@@ -689,7 +808,7 @@ public final class QuestData {
 
         if (!CATEGORIES.containsKey("all")) {
             CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
-                    Integer.MIN_VALUE, false, ""));
+                    Integer.MIN_VALUE, false, "", false));
         }
 
         List<Category> list = new ArrayList<>(CATEGORIES.values());
@@ -786,6 +905,10 @@ public final class QuestData {
         List<String> deps = parseDependencies(obj);
         boolean optional = parseBoolFlexible(obj, "optional", false);
         boolean repeatable = parseBoolFlexible(obj, "repeatable", false);
+        boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
+                parseBoolFlexible(obj, "autoComplete", false));
+        boolean lockAfterDependency = parseBoolFlexible(obj, "lock_after_dependency",
+                parseBoolFlexible(obj, "lockAfterDependency", false));
         boolean hiddenUnderDependency = parseBoolFlexible(obj, "hiddenUnderDependency",
                 parseBoolFlexible(obj, "hidden_under_dependency", false));
 
@@ -802,7 +925,7 @@ public final class QuestData {
 
         String sourcePath = src == null ? "" : src.getPath();
 
-        return new Quest(id, name, icon, description, deps, optional, repeatable, hiddenUnderDependency,
+        return new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                 rewards, type, completion,
                 category, subCategory, sourcePath);
     }
@@ -1043,6 +1166,15 @@ public final class QuestData {
                                 ? obj.getAsJsonPrimitive("count").getAsInt() : 1));
                 return new Completion(out);
             }
+            if (obj.has("field")) {
+                String value = optString(obj, "field");
+                String hint = optString(obj, "field_text");
+                if (hint == null || hint.isBlank()) hint = optString(obj, "fieldText");
+                if (value != null && !value.isBlank()) {
+                    out.add(new Target("field", value, 1, hint));
+                }
+                return new Completion(out);
+            }
         }
 
         return new Completion(List.of());
@@ -1104,6 +1236,18 @@ public final class QuestData {
                 count = o.has("count") ? o.get("count").getAsInt() : 1;
             }
             out.add(new Target("levelup_level", "level", count));
+            return;
+        }
+
+        if (o.has("field")) {
+            String fieldValue = o.get("field").getAsString();
+            String hint = "";
+            if (o.has("field_text") && o.get("field_text").isJsonPrimitive()) {
+                hint = o.get("field_text").getAsString();
+            } else if (o.has("fieldText") && o.get("fieldText").isJsonPrimitive()) {
+                hint = o.get("fieldText").getAsString();
+            }
+            out.add(new Target("field", fieldValue, 1, hint));
         }
     }
 
@@ -1163,6 +1307,15 @@ public final class QuestData {
                 count = o.has("count") ? o.get("count").getAsInt() : 1;
             }
             out.add(new Target("levelup_level", "level", count));
+            return;
+        }
+
+        if (o.has("field")) {
+            String fieldValue = optString(o, "field");
+            if (fieldValue == null || fieldValue.isBlank()) return;
+            String hint = optString(o, "field_text");
+            if (hint == null || hint.isBlank()) hint = optString(o, "fieldText");
+            out.add(new Target("field", fieldValue, 1, hint));
         }
     }
 
@@ -1193,8 +1346,10 @@ public final class QuestData {
                     int order = parseIntFlexible(o, "order", 0);
                     boolean excludeFromAll = parseBoolFlexible(o, "excludeFromAll", false);
                     String dependency = optString(o, "dependency");
+                    boolean autoComplete = parseBoolFlexible(o, "auto_complete",
+                            parseBoolFlexible(o, "autoComplete", false));
 
-                    CATEGORIES.put(id, new Category(id, icon, name, order, excludeFromAll, dependency));
+                    CATEGORIES.put(id, new Category(id, icon, name, order, excludeFromAll, dependency, autoComplete));
                 }
             }
 
@@ -1253,6 +1408,10 @@ public final class QuestData {
 
                     boolean optional = parseBoolFlexible(o, "optional", false);
                     boolean repeatable = parseBoolFlexible(o, "repeatable", false);
+                    boolean autoComplete = parseBoolFlexible(o, "auto_complete",
+                            parseBoolFlexible(o, "autoComplete", false));
+                    boolean lockAfterDependency = parseBoolFlexible(o, "lock_after_dependency",
+                            parseBoolFlexible(o, "lockAfterDependency", false));
                     boolean hiddenUnderDependency = parseBoolFlexible(o, "hiddenUnderDependency", false);
 
                     Rewards rewards = new Rewards(List.of(), List.of(), List.of(), List.of(), "", 0);
@@ -1344,8 +1503,9 @@ public final class QuestData {
                                 String kind = optString(to, "kind");
                                 String tid = optString(to, "id");
                                 int count = to.has("count") ? to.get("count").getAsInt() : 1;
+                                String hint = optString(to, "hint");
                                 if (kind != null && !kind.isBlank() && tid != null && !tid.isBlank()) {
-                                    targets.add(new Target(kind, tid, count));
+                                    targets.add(new Target(kind, tid, count, hint));
                                 }
                             }
                         }
@@ -1356,7 +1516,7 @@ public final class QuestData {
                     String subCategory = optString(o, "subCategory");
                     String sourcePath = optString(o, "sourcePath");
 
-                    Quest q = new Quest(id, name, icon, description, deps, optional, repeatable, hiddenUnderDependency,
+                    Quest q = new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                             rewards, type, completion,
                             category, subCategory, sourcePath);
                     if (!isQuestDisabled(q)) QUESTS.put(q.id, q);
@@ -1365,7 +1525,7 @@ public final class QuestData {
 
             if (!CATEGORIES.containsKey("all")) {
                 CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
-                        Integer.MIN_VALUE, false, ""));
+                        Integer.MIN_VALUE, false, "", false));
             }
 
             ensureSubCategoriesFromQuests();

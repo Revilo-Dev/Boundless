@@ -1,7 +1,6 @@
 package net.revilodev.boundless.item;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,7 +9,6 @@ import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
-import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.network.BoundlessNetwork;
@@ -29,17 +27,15 @@ public final class QuestCompletionScrollItem extends Item {
 
     public static ItemStack withQuestId(ItemStack stack, String questId) {
         if (stack.isEmpty()) return stack;
-        CompoundTag tag = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        CompoundTag tag = stack.getOrCreateTag();
         tag.putString(QUEST_ID_KEY, questId == null ? "" : questId);
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
         return stack;
     }
 
     public static String getQuestId(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return "";
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        if (customData == null) return "";
-        CompoundTag tag = customData.copyTag();
+        CompoundTag tag = stack.getTag();
+        if (tag == null) return "";
         return tag.getString(QUEST_ID_KEY);
     }
 
@@ -95,7 +91,7 @@ public final class QuestCompletionScrollItem extends Item {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
+    public void appendHoverText(ItemStack stack, Level level, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
         String questId = getQuestId(stack);
         if (questId.isBlank()) {
             tooltipComponents.add(Component.literal("Empty quest scroll").withStyle(ChatFormatting.GRAY));

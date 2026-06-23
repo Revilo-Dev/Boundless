@@ -2,18 +2,19 @@ package net.revilodev.boundless.item;
 
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.registries.DeferredRegister;
-import net.neoforged.neoforge.registries.DeferredItem;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 import net.revilodev.boundless.BoundlessMod;
 
 public final class ModItems {
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(BoundlessMod.MOD_ID);
+    public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, BoundlessMod.MOD_ID);
 
-    public static final DeferredItem<Item> QUEST_BOOK =
-            ITEMS.registerItem("quest_book", QuestBookItem::new, new Item.Properties().stacksTo(1));
-    public static final DeferredItem<Item> QUEST_COMPLETION_SCROLL =
-            ITEMS.registerItem("quest_completion_scroll", QuestCompletionScrollItem::new, new Item.Properties().stacksTo(1));
+    public static final RegistryObject<Item> QUEST_BOOK =
+            ITEMS.register("quest_book", () -> new QuestBookItem(new Item.Properties().stacksTo(1)));
+    public static final RegistryObject<Item> QUEST_COMPLETION_SCROLL =
+            ITEMS.register("quest_completion_scroll", () -> new QuestCompletionScrollItem(new Item.Properties().stacksTo(1)));
 
     public static ItemStack createQuestScroll(String questId) {
         return QuestCompletionScrollItem.withQuestId(new ItemStack(QUEST_COMPLETION_SCROLL.get()), questId);

@@ -11,9 +11,9 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.client.event.ScreenEvent;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.screen.QuestSettingsScreen;
 import net.revilodev.boundless.quest.QuestData;
@@ -41,6 +41,10 @@ public final class QuestPanelClient {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
     private static final int PANEL_W = 147;
     private static final int PANEL_H = 166;
+    private static final int BTN_X_BESIDE_RECIPE = 125;
+    private static final int BTN_Y_BESIDE_RECIPE = 61;
+    private static final int BTN_X_ABOVE_OFFHAND = 76;
+    private static final int BTN_Y_ABOVE_OFFHAND = 43;
     private static final Map<Screen, State> STATES = new WeakHashMap<>();
     private static Field LEFT_FIELD;
     private static boolean lastQuestOpen = false;
@@ -56,10 +60,16 @@ public final class QuestPanelClient {
         State st = new State(inv);
         st.selectedCategory = lastSelectedCategory;
         STATES.put(s, st);
+        ImageButton recipeAtInit = findRecipeButton(inv);
+        if (recipeAtInit != null) {
+            st.recipeOffsetX = recipeAtInit.getX() - inv.getGuiLeft();
+            st.recipeOffsetY = recipeAtInit.getY() - inv.getGuiTop();
+            st.hasRecipeOffset = true;
+        }
 
         if (shouldShowInventoryQuestButton()) {
-            int btnX = inv.getGuiLeft() + 125;
-            int btnY = inv.getGuiTop() + 61;
+            int btnX = computeQuestButtonX(inv);
+            int btnY = computeQuestButtonY(inv);
             QuestToggleButton btn = new QuestToggleButton(btnX, btnY, BTN_TEX, BTN_TEX_HOVER, () -> toggle(st));
             st.btn = btn;
             e.addListener(btn);
@@ -73,8 +83,8 @@ public final class QuestPanelClient {
         st.list.setCategory(st.selectedCategory);
         e.addListener(st.list);
 
-        st.searchBox = new EditBox(Minecraft.getInstance().font, 0, 0, 127, 16, Component.literal("Search quests"));
-        st.searchBox.setHint(Component.literal("Search"));
+        st.searchBox = new EditBox(Minecraft.getInstance().font, 0, 0, 127, 16, Component.translatable("ui.boundless.questbook.search_quests"));
+        st.searchBox.setHint(Component.translatable("ui.boundless.questbook.search"));
         st.searchBox.setMaxLength(64);
         st.searchBox.setValue(st.searchQuery);
         st.searchBox.setResponder(value -> {
@@ -127,8 +137,10 @@ public final class QuestPanelClient {
 
         if (lastQuestOpen && isQuestBookEnabled()) {
             st.open = true;
-            st.originalLeft = getLeft(inv);
-            setLeft(inv, computeCenteredLeft(inv));
+            if (Config.centerInventoryWithQuestPanel()) {
+                st.originalLeft = getLeft(inv);
+                setLeft(inv, computeCenteredLeft(inv));
+            }
             updateVisibility(st);
         }
     }
@@ -159,7 +171,7 @@ public final class QuestPanelClient {
                 st.btn.setTextures(BTN_TEX, BTN_TEX_HOVER);
             }
         }
-        if (st.open) {
+        if (st.open && Config.centerInventoryWithQuestPanel()) {
             setLeft(inv, computeCenteredLeft(inv));
         }
         reposition(inv, st);
@@ -186,17 +198,34 @@ public final class QuestPanelClient {
 
         if (st.list != null && st.list.visible) {
             if (!overSearch && mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
-                double dY = e.getScrollDeltaY();
+                double dY = e.getScrollDelta();
                 used = st.list.mouseScrolled(mx, my, dY) || st.list.mouseScrolled(mx, my, 0.0, dY);
             }
         }
         if (st.details != null && st.details.visible) {
             if (mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
-                double dY = e.getScrollDeltaY();
+                double dY = e.getScrollDelta();
                 used = st.details.mouseScrolled(mx, my, dY) || st.details.mouseScrolled(mx, my, 0.0, dY) || used;
             }
         }
         if (used) e.setCanceled(true);
+    }
+
+    public static void onMouseButtonPressed(ScreenEvent.MouseButtonPressed.Pre e) {
+        if (e.getButton() != 0) return;
+        Screen s = e.getScreen();
+        State st = STATES.get(s);
+        if (st == null || !(s instanceof InventoryScreen inv)) return;
+        if (!st.open) return;
+        ImageButton recipe = findRecipeButton(inv);
+        if (recipe == null || !recipe.visible || !recipe.active) return;
+        if (!recipe.isMouseOver(e.getMouseX(), e.getMouseY())) return;
+
+        st.open = false;
+        lastQuestOpen = false;
+        if (st.originalLeft != null) setLeft(inv, st.originalLeft);
+        reposition(inv, st);
+        updateVisibility(st);
     }
 
     public static void applyConfigChanges() {
@@ -236,8 +265,16 @@ public final class QuestPanelClient {
         st.open = !st.open;
         lastQuestOpen = st.open;
         if (st.open) {
-            if (st.originalLeft == null) st.originalLeft = getLeft(st.inv);
-            setLeft(st.inv, computeCenteredLeft(st.inv));
+            if (isRecipePanelOpen(st.inv)) {
+                ImageButton recipe = findRecipeButton(st.inv);
+                if (recipe != null && recipe.visible && recipe.active) {
+                    recipe.onPress();
+                }
+            }
+            if (Config.centerInventoryWithQuestPanel()) {
+                if (st.originalLeft == null) st.originalLeft = getLeft(st.inv);
+                setLeft(st.inv, computeCenteredLeft(st.inv));
+            }
             applySelectedCategory(st);
             st.showingDetails = false;
         } else if (st.originalLeft != null) {
@@ -307,9 +344,10 @@ public final class QuestPanelClient {
     }
 
     private static void reposition(InventoryScreen inv, State st) {
+        repositionRecipeButton(inv, st);
         if (st.btn != null) {
-            int x = inv.getGuiLeft() + 125;
-            int y = inv.getGuiTop() + 61;
+            int x = computeQuestButtonX(inv);
+            int y = computeQuestButtonY(inv);
             st.btn.setPosition(x, y);
         }
         if (st.settingsButton != null) {
@@ -321,31 +359,31 @@ public final class QuestPanelClient {
     }
 
     private static void handleRecipeButtonRules(InventoryScreen inv, State st) {
-        if (!shouldShowInventoryQuestButton()) {
-            if (st.btn != null) st.btn.visible = false;
-            toggleRecipeButtonVisibility(inv, !st.open);
-            return;
-        }
-        if (st.open) {
-            if (st.btn != null) st.btn.visible = true;
-            toggleRecipeButtonVisibility(inv, false);
-        } else if (isRecipePanelOpen(inv)) {
-            if (st.btn != null) st.btn.visible = false;
-            toggleRecipeButtonVisibility(inv, true);
-        } else {
-            if (st.btn != null) st.btn.visible = true;
-            toggleRecipeButtonVisibility(inv, true);
+        if (st.btn != null) {
+            boolean show = shouldShowInventoryQuestButton();
+            st.btn.visible = show;
+            st.btn.active = show;
         }
     }
 
-    private static void toggleRecipeButtonVisibility(InventoryScreen inv, boolean visible) {
+    private static ImageButton findRecipeButton(InventoryScreen inv) {
         for (var child : inv.children()) {
-            if (child instanceof ImageButton btn) {
-                if (btn.getWidth() == 20 && btn.getHeight() == 18) {
-                    btn.visible = visible;
-                }
+            if (child instanceof ImageButton btn && btn.getWidth() == 20 && btn.getHeight() == 18) {
+                return btn;
             }
         }
+        return null;
+    }
+
+    private static void repositionRecipeButton(InventoryScreen inv, State st) {
+        ImageButton recipe = findRecipeButton(inv);
+        if (recipe == null) return;
+        if (!st.hasRecipeOffset) {
+            st.recipeOffsetX = recipe.getX() - inv.getGuiLeft();
+            st.recipeOffsetY = recipe.getY() - inv.getGuiTop();
+            st.hasRecipeOffset = true;
+        }
+        recipe.setPosition(inv.getGuiLeft() + st.recipeOffsetX, inv.getGuiTop() + st.recipeOffsetY);
     }
 
     private static boolean isRecipePanelOpen(InventoryScreen inv) {
@@ -474,6 +512,18 @@ public final class QuestPanelClient {
         return isQuestBookEnabled() && !Config.hideQuestBookInInventory();
     }
 
+    private static int computeQuestButtonX(InventoryScreen inv) {
+        String mode = Config.questBookInventoryButtonPosition();
+        int offset = "above_offhand_slot".equals(mode) ? BTN_X_ABOVE_OFFHAND : BTN_X_BESIDE_RECIPE;
+        return inv.getGuiLeft() + offset;
+    }
+
+    private static int computeQuestButtonY(InventoryScreen inv) {
+        String mode = Config.questBookInventoryButtonPosition();
+        int offset = "above_offhand_slot".equals(mode) ? BTN_Y_ABOVE_OFFHAND : BTN_Y_BESIDE_RECIPE;
+        return inv.getGuiTop() + offset;
+    }
+
     private static void openSettings(InventoryScreen inv) {
         var mc = Minecraft.getInstance();
         if (mc.player == null || !mc.player.hasPermissions(2)) return;
@@ -542,6 +592,9 @@ public final class QuestPanelClient {
         Integer originalLeft;
         String selectedCategory = "all";
         String searchQuery = "";
+        int recipeOffsetX;
+        int recipeOffsetY;
+        boolean hasRecipeOffset;
 
         State(InventoryScreen inv) {
             this.inv = inv;

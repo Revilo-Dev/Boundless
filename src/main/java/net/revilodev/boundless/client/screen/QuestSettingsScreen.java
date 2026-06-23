@@ -9,8 +9,8 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.QuestPanelClient;
@@ -65,13 +65,15 @@ public final class QuestSettingsScreen extends Screen {
 
     private ConfigRow uiPinnedRow;
     private ConfigRow uiHideInventoryRow;
+    private ConfigRow uiInventoryButtonPositionRow;
+    private ConfigRow uiCenterInventoryWithPanelRow;
     private ConfigRow uiHideHeaderRow;
     private ConfigRow uiFilterDisplayRow;
     private ConfigRow uiDisableCategoriesRow;
-    private ConfigRow uiBuiltinQuestPackRow;
     private ConfigRow uiHideQuestWidgetIconsRow;
     private ConfigRow uiEnableSearchBoxRow;
     private ConfigRow uiEnableDescriptionColorsRow;
+    private ConfigRow uiEnableQuestToastsRow;
     private ConfigRow functionalityDisablePinningRow;
     private ConfigRow functionalityAutoClaimRow;
     private ConfigRow functionalityQuestScrollsRow;
@@ -90,13 +92,15 @@ public final class QuestSettingsScreen extends Screen {
     private int gameplayHeaderBaseY;
     private int uiPinnedBaseY;
     private int uiHideInventoryBaseY;
+    private int uiInventoryButtonPositionBaseY;
+    private int uiCenterInventoryWithPanelBaseY;
     private int uiHideHeaderBaseY;
     private int uiFilterDisplayBaseY;
     private int uiDisableCategoriesBaseY;
-    private int uiBuiltinQuestPackBaseY;
     private int uiHideQuestWidgetIconsBaseY;
     private int uiEnableSearchBoxBaseY;
     private int uiEnableDescriptionColorsBaseY;
+    private int uiEnableQuestToastsBaseY;
     private int functionalityDisablePinningBaseY;
     private int functionalityAutoClaimBaseY;
     private int functionalityQuestScrollsBaseY;
@@ -105,13 +109,15 @@ public final class QuestSettingsScreen extends Screen {
 
     private String pinnedHudPos;
     private boolean hideQuestBookInInventory;
+    private String questBookInventoryButtonPosition;
+    private boolean centerInventoryWithQuestPanel;
     private boolean hideCategoryHeader;
     private String filterDisplayMode;
     private boolean disableCategories;
-    private boolean enableBuiltinQuestPack;
     private boolean hideQuestWidgetIcons;
     private boolean enableQuestSearchBox;
     private boolean enableDescriptionColors;
+    private boolean enableQuestToasts;
     private boolean disableQuestPinning;
     private boolean autoClaimQuestRewards;
     private boolean enableQuestScrolls;
@@ -123,8 +129,7 @@ public final class QuestSettingsScreen extends Screen {
         this.parent = parent;
     }
 
-    @Override
-    protected void init() {
+        protected void init() {
         var mc = Minecraft.getInstance();
         if (mc.player == null || !mc.player.hasPermissions(2)) {
             mc.setScreen(parent);
@@ -162,14 +167,16 @@ public final class QuestSettingsScreen extends Screen {
         uiHeaderBaseY = uiHeaderY;
         uiPinnedBaseY = uiRow1;
         uiHideInventoryBaseY = uiRow1 + rowGap;
-        uiHideHeaderBaseY = uiRow1 + rowGap * 2;
-        uiFilterDisplayBaseY = uiRow1 + rowGap * 3;
-        uiDisableCategoriesBaseY = uiRow1 + rowGap * 4;
-        uiBuiltinQuestPackBaseY = uiRow1 + rowGap * 5;
-        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 6;
-        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 7;
-        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 8;
-        functionalityHeaderBaseY = uiRow1 + rowGap * 9 + 4;
+        uiInventoryButtonPositionBaseY = uiRow1 + rowGap * 2;
+        uiCenterInventoryWithPanelBaseY = uiRow1 + rowGap * 3;
+        uiHideHeaderBaseY = uiRow1 + rowGap * 4;
+        uiFilterDisplayBaseY = uiRow1 + rowGap * 5;
+        uiDisableCategoriesBaseY = uiRow1 + rowGap * 6;
+        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 7;
+        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 8;
+        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 9;
+        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 10;
+        functionalityHeaderBaseY = uiRow1 + rowGap * 11 + 4;
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
         functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
@@ -187,6 +194,14 @@ public final class QuestSettingsScreen extends Screen {
                     hideQuestBookInInventory = !hideQuestBookInInventory;
                     if (hideQuestBookInInventory) disableQuestBook = false;
                 });
+        uiInventoryButtonPositionRow = new ConfigRow(px, uiInventoryButtonPositionBaseY, pw, "Quest Book Inventory Button Position",
+                "Choose where the inventory quest-book button appears.",
+                this::formatQuestBookInventoryButtonPosition,
+                this::cycleQuestBookInventoryButtonPosition);
+        uiCenterInventoryWithPanelRow = new ConfigRow(px, uiCenterInventoryWithPanelBaseY, pw, "Center Inventory With Quest Panel",
+                "Center inventory and quest panel together when the panel is open.",
+                () -> centerInventoryWithQuestPanel ? "Enabled" : "Disabled",
+                () -> centerInventoryWithQuestPanel = !centerInventoryWithQuestPanel);
         uiHideHeaderRow = new ConfigRow(px, uiHideHeaderBaseY, pw, "Hide Category Header",
                 "Hide the category header above the quest list.",
                 () -> hideCategoryHeader ? "On" : "Off",
@@ -199,10 +214,6 @@ public final class QuestSettingsScreen extends Screen {
                 "Disable category tabs and category-based filtering.",
                 () -> disableCategories ? "On" : "Off",
                 () -> disableCategories = !disableCategories);
-        uiBuiltinQuestPackRow = new ConfigRow(px, uiBuiltinQuestPackBaseY, pw, "Built-in Quest Pack",
-                "Enable or disable the built-in Boundless quest pack.",
-                () -> enableBuiltinQuestPack ? "On" : "Off",
-                () -> enableBuiltinQuestPack = !enableBuiltinQuestPack);
         uiHideQuestWidgetIconsRow = new ConfigRow(px, uiHideQuestWidgetIconsBaseY, pw, "Hide Quest Widget Icons",
                 "Hide icons in quest list widgets.",
                 () -> hideQuestWidgetIcons ? "On" : "Off",
@@ -215,6 +226,10 @@ public final class QuestSettingsScreen extends Screen {
                 "Allow Boundless color tokens to tint quest descriptions.",
                 () -> enableDescriptionColors ? "On" : "Off",
                 () -> enableDescriptionColors = !enableDescriptionColors);
+        uiEnableQuestToastsRow = new ConfigRow(px, uiEnableQuestToastsBaseY, pw, "Enable Quest Toasts",
+                "Show toast popups when quests are unlocked.",
+                () -> enableQuestToasts ? "On" : "Off",
+                () -> enableQuestToasts = !enableQuestToasts);
 
         functionalityDisablePinningRow = new ConfigRow(px, functionalityDisablePinningBaseY, pw, "Disable Quest Pinning",
                 "Disable pin buttons and pinned quest HUD.",
@@ -243,13 +258,15 @@ public final class QuestSettingsScreen extends Screen {
 
         addRenderableWidget(uiPinnedRow);
         addRenderableWidget(uiHideInventoryRow);
+        addRenderableWidget(uiInventoryButtonPositionRow);
+        addRenderableWidget(uiCenterInventoryWithPanelRow);
         addRenderableWidget(uiHideHeaderRow);
         addRenderableWidget(uiFilterDisplayRow);
         addRenderableWidget(uiDisableCategoriesRow);
-        addRenderableWidget(uiBuiltinQuestPackRow);
         addRenderableWidget(uiHideQuestWidgetIconsRow);
         addRenderableWidget(uiEnableSearchBoxRow);
         addRenderableWidget(uiEnableDescriptionColorsRow);
+        addRenderableWidget(uiEnableQuestToastsRow);
         addRenderableWidget(functionalityDisablePinningRow);
         addRenderableWidget(functionalityAutoClaimRow);
         addRenderableWidget(functionalityQuestScrollsRow);
@@ -296,20 +313,24 @@ public final class QuestSettingsScreen extends Screen {
         uiPinnedRow.active = config;
         uiHideInventoryRow.visible = config;
         uiHideInventoryRow.active = config;
+        uiInventoryButtonPositionRow.visible = config;
+        uiInventoryButtonPositionRow.active = config;
+        uiCenterInventoryWithPanelRow.visible = config;
+        uiCenterInventoryWithPanelRow.active = config;
         uiHideHeaderRow.visible = config;
         uiHideHeaderRow.active = config;
         uiFilterDisplayRow.visible = config;
         uiFilterDisplayRow.active = config;
         uiDisableCategoriesRow.visible = config;
         uiDisableCategoriesRow.active = config;
-        uiBuiltinQuestPackRow.visible = config;
-        uiBuiltinQuestPackRow.active = config;
         uiHideQuestWidgetIconsRow.visible = config;
         uiHideQuestWidgetIconsRow.active = config;
         uiEnableSearchBoxRow.visible = config;
         uiEnableSearchBoxRow.active = config;
         uiEnableDescriptionColorsRow.visible = config;
         uiEnableDescriptionColorsRow.active = config;
+        uiEnableQuestToastsRow.visible = config;
+        uiEnableQuestToastsRow.active = config;
         functionalityDisablePinningRow.visible = config;
         functionalityDisablePinningRow.active = config;
         functionalityAutoClaimRow.visible = config;
@@ -340,13 +361,15 @@ public final class QuestSettingsScreen extends Screen {
     private void refreshConfigFields() {
         pinnedHudPos = normalizeHudPos(Config.pinnedQuestHudPosition());
         hideQuestBookInInventory = Config.hideQuestBookInInventory();
+        questBookInventoryButtonPosition = normalizeQuestBookInventoryButtonPosition(Config.questBookInventoryButtonPosition());
+        centerInventoryWithQuestPanel = Config.centerInventoryWithQuestPanel();
         hideCategoryHeader = Config.hideCategoryHeader();
         filterDisplayMode = Config.filterDisplayMode();
         disableCategories = Config.disableCategories();
-        enableBuiltinQuestPack = Config.enableBuiltinQuestPack();
         hideQuestWidgetIcons = Config.hideQuestWidgetIcons();
         enableQuestSearchBox = Config.enableQuestSearchBox();
         enableDescriptionColors = Config.enableDescriptionColors();
+        enableQuestToasts = Config.enableQuestToasts();
         disableQuestPinning = Config.disableQuestPinning();
         autoClaimQuestRewards = Config.autoClaimQuestRewards();
         enableQuestScrolls = Config.enableQuestScrolls();
@@ -376,6 +399,18 @@ public final class QuestSettingsScreen extends Screen {
         };
     }
 
+    private void cycleQuestBookInventoryButtonPosition() {
+        questBookInventoryButtonPosition = "above_offhand_slot".equals(questBookInventoryButtonPosition)
+                ? "beside_recipe_book"
+                : "above_offhand_slot";
+    }
+
+    private String formatQuestBookInventoryButtonPosition() {
+        return "above_offhand_slot".equals(questBookInventoryButtonPosition)
+                ? "Above Offhand Slot"
+                : "Beside Recipe Book";
+    }
+
     private void saveConfig() {
         if (disableQuestBook && hideQuestBookInInventory) {
             hideQuestBookInInventory = false;
@@ -383,13 +418,15 @@ public final class QuestSettingsScreen extends Screen {
 
         Config.PINNED_QUEST_HUD_POSITION.set(pinnedHudPos);
         Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
+        Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
+        Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
         Config.HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
         Config.FILTER_DISPLAY_MODE.set(filterDisplayMode);
         Config.DISABLE_CATEGORIES.set(disableCategories);
-        Config.ENABLE_BUILTIN_QUEST_PACK.set(enableBuiltinQuestPack);
         Config.HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
+        Config.ENABLE_QUEST_TOASTS.set(enableQuestToasts);
         Config.DISABLE_QUEST_PINNING.set(disableQuestPinning);
         Config.AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
         Config.ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
@@ -418,6 +455,8 @@ public final class QuestSettingsScreen extends Screen {
                 false,
                 false,
                 false,
+                false,
+                false,
                 new QuestData.Rewards(List.of(), List.of(), List.of(), List.of(), "", 0),
                 "all",
                 null,
@@ -433,12 +472,18 @@ public final class QuestSettingsScreen extends Screen {
         return HUD_POSITIONS.contains(lower) ? lower : HUD_POSITIONS.get(0);
     }
 
-    @Override
-    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    private String normalizeQuestBookInventoryButtonPosition(String raw) {
+        if (raw == null) return "beside_recipe_book";
+        String lower = raw.trim().toLowerCase();
+        return ("beside_recipe_book".equals(lower) || "above_offhand_slot".equals(lower))
+                ? lower
+                : "beside_recipe_book";
     }
 
-    @Override
-    public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    }
+
+        public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         pendingTooltip = List.of();
         gg.fill(0, 0, this.width, this.height, 0xA0000000);
         gg.blit(PANEL_TEX, leftX, topY, 0, 0, PANEL_W, PANEL_H, PANEL_W, PANEL_H);
@@ -536,13 +581,15 @@ public final class QuestSettingsScreen extends Screen {
 
         layoutRow(uiPinnedRow, uiPinnedBaseY, top, bottom);
         layoutRow(uiHideInventoryRow, uiHideInventoryBaseY, top, bottom);
+        layoutRow(uiInventoryButtonPositionRow, uiInventoryButtonPositionBaseY, top, bottom);
+        layoutRow(uiCenterInventoryWithPanelRow, uiCenterInventoryWithPanelBaseY, top, bottom);
         layoutRow(uiHideHeaderRow, uiHideHeaderBaseY, top, bottom);
         layoutRow(uiFilterDisplayRow, uiFilterDisplayBaseY, top, bottom);
         layoutRow(uiDisableCategoriesRow, uiDisableCategoriesBaseY, top, bottom);
-        layoutRow(uiBuiltinQuestPackRow, uiBuiltinQuestPackBaseY, top, bottom);
         layoutRow(uiHideQuestWidgetIconsRow, uiHideQuestWidgetIconsBaseY, top, bottom);
         layoutRow(uiEnableSearchBoxRow, uiEnableSearchBoxBaseY, top, bottom);
         layoutRow(uiEnableDescriptionColorsRow, uiEnableDescriptionColorsBaseY, top, bottom);
+        layoutRow(uiEnableQuestToastsRow, uiEnableQuestToastsBaseY, top, bottom);
         layoutRow(functionalityDisablePinningRow, functionalityDisablePinningBaseY, top, bottom);
         layoutRow(functionalityAutoClaimRow, functionalityAutoClaimBaseY, top, bottom);
         layoutRow(functionalityQuestScrollsRow, functionalityQuestScrollsBaseY, top, bottom);
@@ -575,31 +622,28 @@ public final class QuestSettingsScreen extends Screen {
         gg.fill(trackX1, thumbY, trackX2, thumbY + thumbH, 0xFF909090);
     }
 
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
         if (page == Page.CONFIG) {
             int top = configViewportTop();
             int bottom = configViewportBottom();
             if (mouseX < px || mouseX > px + pw || mouseY < top || mouseY > bottom) {
-                return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+                return super.mouseScrolled(mouseX, mouseY, scrollDelta);
             }
             int max = maxConfigScroll();
             if (max > 0) {
-                configScrollY = Math.max(0f, Math.min(max, configScrollY - (float) (scrollY * 12)));
+                configScrollY = Math.max(0f, Math.min(max, configScrollY - (float) (scrollDelta * 12)));
                 applyConfigScrollLayout();
                 return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollDelta);
     }
 
-    @Override
-    public void onClose() {
+        public void onClose() {
         Minecraft.getInstance().setScreen(parent);
     }
 
-    @Override
-    public boolean isPauseScreen() {
+        public boolean isPauseScreen() {
         return false;
     }
 
@@ -624,13 +668,11 @@ public final class QuestSettingsScreen extends Screen {
             this.onPress = onPress;
         }
 
-        @Override
-        public void onPress() {
+                public void onPress() {
             if (onPress != null) onPress.run();
         }
 
-        @Override
-        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+                protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             RenderSystem.enableBlend();
             gg.blit(ROW_TEX, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
 
@@ -649,7 +691,7 @@ public final class QuestSettingsScreen extends Screen {
             int valueX = getX() + this.width - valueW - 6;
 
             String labelText = label;
-            int maxLabelW = valueX - labelX - 4;
+            int maxLabelW = valueX - labelX + 2;
             if (maxLabelW > 0 && font.width(labelText) > maxLabelW) {
                 int ellipsisW = font.width("...");
                 int allowed = Math.max(0, maxLabelW - ellipsisW);
@@ -676,8 +718,7 @@ public final class QuestSettingsScreen extends Screen {
             gg.pose().popPose();
         }
 
-        @Override
-        protected void updateWidgetNarration(NarrationElementOutput narration) {}
+                protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
     private static final class ActionButton extends AbstractButton {
@@ -688,13 +729,11 @@ public final class QuestSettingsScreen extends Screen {
             this.onPress = onPress;
         }
 
-        @Override
-        public void onPress() {
+                public void onPress() {
             if (onPress != null) onPress.run();
         }
 
-        @Override
-        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+                protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
             ResourceLocation tex = !this.active ? BTN_TEX_DISABLED : (hovered ? BTN_TEX_HOVER : BTN_TEX);
             gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
@@ -707,8 +746,7 @@ public final class QuestSettingsScreen extends Screen {
             gg.drawString(font, getMessage(), textX, textY, color, false);
         }
 
-        @Override
-        protected void updateWidgetNarration(NarrationElementOutput narration) {}
+                protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
     private static final class BackButton extends AbstractButton {
@@ -719,19 +757,16 @@ public final class QuestSettingsScreen extends Screen {
             this.onPress = onPress;
         }
 
-        @Override
-        public void onPress() {
+                public void onPress() {
             if (onPress != null) onPress.run();
         }
 
-        @Override
-        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+                protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.isMouseOver(mouseX, mouseY);
             ResourceLocation tex = hovered ? BTN_BACK_TEX_HOVER : BTN_BACK_TEX;
             gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
         }
 
-        @Override
-        protected void updateWidgetNarration(NarrationElementOutput narration) {}
+                protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 }

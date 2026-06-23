@@ -1,7 +1,7 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
-    id 'net.neoforged.gradle.userdev' version '7.0.192'
+    id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -15,38 +15,47 @@ base {
     archivesName = mod_id
 }
 
-// Mojang ships Java 21 for 1.21.1, so we target Java 21
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// Minecraft 1.20.1 targets Java 17
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 repositories {
-    // Add additional repositories if needed
+    maven { url = 'https://maven.minecraftforge.net' }
+    mavenCentral()
 }
 
-runs {
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+
+    runs {
     configureEach {
-        systemProperty 'forge.logging.markers', 'REGISTRIES'
-        systemProperty 'forge.logging.console.level', 'debug'
-        modSource project.sourceSets.main
+        property 'forge.logging.markers', 'REGISTRIES'
+        property 'forge.logging.console.level', 'debug'
+        mods {
+            "${mod_id}" {
+                source sourceSets.main
+            }
+        }
     }
 
     client {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        workingDirectory project.file('run')
     }
 
     server {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-        argument '--nogui'
+        workingDirectory project.file('run')
+        arg '--nogui'
     }
 
     gameTestServer {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        workingDirectory project.file('run')
     }
 
     data {
-        arguments.addAll '--mod', project.mod_id, '--all',
-                '--output', file('src/generated/resources/').absolutePath,
-                '--existing', file('src/main/resources/').absolutePath
+        args '--mod', project.mod_id, '--all',
+             '--output', file('src/generated/resources/').absolutePath,
+             '--existing', file('src/main/resources/').absolutePath
     }
+}
 }
 
 // Include data-generated resources in the main resource set
@@ -58,16 +67,16 @@ configurations {
 }
 
 dependencies {
-    implementation "net.neoforged:neoforge:${neo_version}"
+    minecraft "net.minecraftforge:forge:${forge_version}"
     // other mod/library dependencies can go here
 }
 
-// Replace properties inside neoforge.mods.toml with gradle.properties values
+// Replace properties inside mods.toml with gradle.properties values
 tasks.withType(ProcessResources).configureEach {
     def replaceProperties = [
             minecraft_version      : minecraft_version,
             minecraft_version_range: minecraft_version_range,
-            neo_version            : neo_version,
+            forge_version          : forge_version,
             loader_version_range   : loader_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
@@ -78,7 +87,7 @@ tasks.withType(ProcessResources).configureEach {
     ]
     inputs.properties replaceProperties
 
-    filesMatching('META-INF/neoforge.mods.toml') {
+    filesMatching(['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
         expand replaceProperties
     }
 }
@@ -102,10 +111,10 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-// IntelliJ IDEA sources + javadoc download
-idea {
-    module {
-        downloadSources = true
-        downloadJavadoc = true
-    }
+// Compatibility task expected by older IDE run configs.
+tasks.register('ideBeforeRun') {
+    group = 'forgegradle runs'
+    description = 'Generates IntelliJ run configurations before running from IDE.'
+    dependsOn 'genIntellijRuns'
 }
+
