@@ -7162,9 +7162,6 @@ public final class QuestEditorScreen extends Screen {
 
     private void ensureAdvancementIdCache() {
         if (!advancementIdCache.isEmpty()) return;
-        for (String id : AdvancementDisplayCache.ids()) {
-            if (id != null && !id.isBlank() && !advancementIdCache.contains(id)) advancementIdCache.add(id);
-        }
         for (QuestData.Quest q : QuestData.all()) {
             if (q == null || q.completion == null || q.completion.targets == null) continue;
             for (QuestData.Target t : q.completion.targets) {
