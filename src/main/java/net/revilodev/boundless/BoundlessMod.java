@@ -150,4 +150,11 @@ public final class BoundlessMod {
             net.revilodev.boundless.quest.QuestTracker.serverTickPlayer(sp);
         }
     }
+
+    @SubscribeEvent
+    public void onAdvancementEarned(AdvancementEvent.AdvancementEarnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer sp) {
+            net.revilodev.boundless.quest.QuestTracker.serverTickPlayer(sp);
+        }
+    }
 }

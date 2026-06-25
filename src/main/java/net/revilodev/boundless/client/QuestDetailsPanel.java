@@ -544,6 +544,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     int color = has ? 0x55FF55 : 0xFF5555;
 
                     ResourceLocation tex = new ResourceLocation("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
+                    ResourceLocation tex = new ResourceLocation("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
                     if (textureExists(tex)) {
                         renderScaledTextureIcon(gg, tex, x + 4, curY[0]);
                     } else {
