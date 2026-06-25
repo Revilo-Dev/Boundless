@@ -197,6 +197,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void initMenu() {
         menuList = new QuestListWidget(px + 2, py, pw, ph, this::handleMenuClick);
+        menuList.setUseConfigScaling(false);
         menuList.setQuests(buildMenuQuests());
         menuList.setCategory("all");
         menuList.setBypassFilters(true);

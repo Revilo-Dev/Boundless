@@ -281,18 +281,25 @@ public final class QuestTracker {
         if (q == null || q.dependencies.isEmpty()) return true;
         if (q.lockAfterDependency) {
             for (String depId : q.dependencies) {
-                QuestData.Quest dep = QuestData.byId(depId).orElse(null);
+                QuestData.Quest dep = questByIdForPlayer(depId, player);
                 if (dep == null) return false;
                 if (hasEverClaimed(dep, player)) return false;
             }
             return true;
         }
         for (String depId : q.dependencies) {
-            QuestData.Quest dep = QuestData.byId(depId).orElse(null);
+            QuestData.Quest dep = questByIdForPlayer(depId, player);
             if (dep == null) return false;
             if (!hasEverClaimed(dep, player)) return false;
         }
         return true;
+    }
+
+    private static QuestData.Quest questByIdForPlayer(String questId, Player player) {
+        if (player instanceof ServerPlayer sp) {
+            return QuestData.byIdServer(sp.server, questId).orElse(null);
+        }
+        return QuestData.byId(questId).orElse(null);
     }
 
     private static boolean shouldAutoClaim(QuestData.Quest q) {
