@@ -1616,6 +1616,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private JsonObject buildQuestJson(String id) {
+        syncEntryBackingValues();
         String questId = safe(id).trim();
         if (questId.isBlank()) {
             setError("Quest id required");
@@ -2121,7 +2122,7 @@ public final class QuestEditorScreen extends Screen {
             case "achieve", "advancement" -> {
                 String normalizedId = normalizeNamespacedId(id, false);
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
-                obj.addProperty("achieve", normalizedId);
+                obj.addProperty("advancement", normalizedId);
             }
             case "effect" -> {
                 String normalizedId = normalizeNamespacedId(id, false);
@@ -3138,7 +3139,24 @@ public final class QuestEditorScreen extends Screen {
                 addRenderableWidget(box);
             }
             while (countBoxes.size() > rows.size()) removeWidget(countBoxes.remove(countBoxes.size() - 1));
-            for (int i = 0; i < countBoxes.size(); i++) countBoxes.get(i).setRow(i);
+            syncEntryCountBoxes(kind);
+        }
+    }
+
+    private void syncEntryCountBoxes(EntryRowKind kind) {
+        if (kind == EntryRowKind.DEPENDENCY) return;
+        List<ScaledMultiLineEditBox> rows = entryRows(kind);
+        List<EntryCountBox> countBoxes = entryCountBoxes(kind);
+        int limit = Math.min(rows.size(), countBoxes.size());
+        for (int i = 0; i < limit; i++) {
+            EntryCountBox countBox = countBoxes.get(i);
+            ScaledMultiLineEditBox row = rows.get(i);
+            countBox.setRow(i);
+            int count = entryCount(row);
+            entryCountByBox.put(row, count);
+            if (!countBox.isFocused()) {
+                countBox.setValueSilently(Integer.toString(count));
+            }
         }
     }
 
@@ -4159,6 +4177,7 @@ public final class QuestEditorScreen extends Screen {
 
     private ScreenState captureState() {
         if (leftList == null) return null;
+        syncEntryBackingValues();
         ScreenState state = new ScreenState();
         state.mode = mode;
         state.editorType = editorType;
@@ -9467,8 +9486,8 @@ public final class QuestEditorScreen extends Screen {
             setMaxLength(3);
             setBordered(true);
             setTooltip(Tooltip.create(Component.literal("count")));
-            setResponder(this::handleValueChanged);
             setValue("1");
+            setResponder(this::handleValueChanged);
         }
 
         void setRow(int row) {

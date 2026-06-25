@@ -605,7 +605,8 @@ public final class BoundlessNetwork {
     }
 
     private static void syncComputedCompletion(ServerPlayer p) {
-        for (QuestData.Quest q : QuestData.allServer(p.server)) {
+        List<QuestData.Quest> quests = new ArrayList<>(QuestData.allServer(p.server));
+        for (QuestData.Quest q : quests) {
             if (q == null) continue;
             QuestTracker.Status st = QuestTracker.getStatus(q, p);
             if (st == QuestTracker.Status.REDEEMED || st == QuestTracker.Status.REJECTED) continue;
