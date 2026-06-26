@@ -195,7 +195,8 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void initMenu() {
-        menuList = new QuestListWidget(px + 4, py, pw, ph, this::handleMenuClick);
+        menuList = new QuestListWidget(px + 2, py, pw, ph, this::handleMenuClick);
+        menuList.setUseConfigScaling(false);
         menuList.setQuests(buildMenuQuests());
         menuList.setCategory("all");
         menuList.setBypassFilters(true);
@@ -278,7 +279,7 @@ public final class QuestSettingsScreen extends Screen {
                 () -> enableQuestSearchBox ? "On" : "Off",
                 () -> enableQuestSearchBox = !enableQuestSearchBox);
         uiEnableDescriptionColorsRow = new ConfigRow(px, uiEnableDescriptionColorsBaseY, pw, "Text coloring",
-                "Allow Boundless color tokens to tint quest descriptions.",
+                "Allow formated text to color quest descriptions.",
                 () -> enableDescriptionColors ? "On" : "Off",
                 () -> enableDescriptionColors = !enableDescriptionColors);
         uiEnableQuestToastsRow = new ConfigRow(px, uiEnableQuestToastsBaseY, pw, "Quest Toasts",
@@ -287,7 +288,7 @@ public final class QuestSettingsScreen extends Screen {
                 () -> enableQuestToasts = !enableQuestToasts);
 
         functionalityDisablePinningRow = new ConfigRow(px, functionalityDisablePinningBaseY, pw, "Quest pinning",
-                "Disable pin buttons and pinned quest HUD.",
+                "Enable / Disable Quest pinning feature.",
                 () -> disableQuestPinning ? "Disabled" : "Enabled",
                 () -> disableQuestPinning = !disableQuestPinning);
         functionalityAutoClaimRow = new ConfigRow(px, functionalityAutoClaimBaseY, pw, "Auto Claim Rewards",
@@ -295,12 +296,12 @@ public final class QuestSettingsScreen extends Screen {
                 () -> autoClaimQuestRewards ? "On" : "Off",
                 () -> autoClaimQuestRewards = !autoClaimQuestRewards);
         functionalityQuestScrollsRow = new ConfigRow(px, functionalityQuestScrollsBaseY, pw, "Quest scrolls",
-                "Show and allow quest completion scrolls.",
+                "Multiplayer quest scrolls to Gift quests",
                 () -> enableQuestScrolls ? "On" : "Off",
                 () -> enableQuestScrolls = !enableQuestScrolls);
 
         gameplayDisableQuestBookRow = new ConfigRow(px, gameplayDisableQuestBookBaseY, pw, "Quest book",
-                "Disable opening the quest book from key/item/network open.",
+                "Access to the questbook item and keybind",
                 () -> disableQuestBook ? "Disabled" : "Enabled",
                 () -> {
                     disableQuestBook = !disableQuestBook;
@@ -985,10 +986,9 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean selected = configTab == tab;
-            boolean hovered = this.isMouseOver(mouseX, mouseY);
-            int renderX = getX() + (selected && !hovered ? -2 : 0);
-            gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, getY(), 0, 0, this.width, this.height, TAB_W, TAB_H);
-            gg.blit(icon, renderX + (this.width - 16) / 2, getY() + (this.height - 16) / 2, 0, 0, 16, 16, 16, 16);
+            int renderX = getX();
+            gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, getY(), 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
+            gg.blit(icon, renderX + (TAB_W - 16) / 2, getY() + (TAB_H - 16) / 2, 0, 0, 16, 16, 16, 16);
             if (this.isMouseOver(mouseX, mouseY)) {
                 queueTooltip(List.of(Component.literal(tooltip)), mouseX, mouseY);
             }
@@ -1027,12 +1027,10 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             RenderSystem.enableBlend();
-            gg.blit(ROW_TEX, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
-
             boolean hovered = this.isMouseOver(mouseX, mouseY);
-            if (hovered) {
-                gg.fill(getX() + 1, getY() + 1, getX() + this.width - 1, getY() + this.height - 1, 0x20FFFFFF);
-            }
+            if (hovered) RenderSystem.setShaderColor(1.1f, 1.1f, 1.1f, 1.0f);
+            gg.blit(ROW_TEX, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            if (hovered) RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
 
             var font = Minecraft.getInstance().font;
             String valueText = value == null ? "" : value.get();

@@ -58,6 +58,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             new ResourceLocation("boundless", "textures/gui/sprites/unpin-hovered.png");
     private static final ResourceLocation TEX_SCROLL =
             new ResourceLocation("boundless", "textures/gui/sprites/scroll-icon.png");
+    private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
 
     private final Minecraft mc = Minecraft.getInstance();
     private QuestData.Quest quest;
@@ -117,7 +118,10 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         this.complete = new CompleteButton(getX(), getY(), () -> {
             if (quest != null && mc.player != null) {
-                if (QuestTracker.canRestartRepeatable(quest, mc.player)) {
+                QuestTracker.Status status = QuestTracker.getStatus(quest, mc.player);
+                if (status == QuestTracker.Status.REJECTED && quest.optional) {
+                    BoundlessNetwork.sendToServer(new BoundlessNetwork.UndoReject(quest.id));
+                } else if (QuestTracker.canRestartRepeatable(quest, mc.player)) {
                     BoundlessNetwork.sendToServer(new BoundlessNetwork.RestartRepeatable(quest.id));
                 } else {
                     BoundlessNetwork.sendToServer(new BoundlessNetwork.Redeem(quest.id));
@@ -540,7 +544,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     int color = has ? 0x55FF55 : 0xFF5555;
 
                     ResourceLocation tex = new ResourceLocation("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
-                    renderScaledTextureIcon(gg, tex, x + 4, curY[0]);
+                    if (textureExists(tex)) {
+                        renderScaledTextureIcon(gg, tex, x + 4, curY[0]);
+                    } else {
+                        renderScaledItem(gg, new ItemStack(Items.POTION), x + 4, curY[0]);
+                    }
                     drawScaledString(gg, eName, x + 26, curY[0] + 6, color);
 
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
@@ -783,10 +791,13 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean done = red || rej;
         boolean ready = depsMet && !done
                 && (status == QuestTracker.Status.COMPLETED || QuestTracker.isReady(quest, mc.player));
+        boolean canUndoReject = rej && quest.optional;
 
-        complete.setMessage(Component.translatable(canRepeat ? "ui.boundless.questbook.repeat" : "quest.boundless.complete"));
-        complete.active = canRepeat || ready;
-        complete.visible = !rej && (canRepeat || !red);
+        complete.setMessage(canUndoReject
+                ? Component.literal("Undo Reject")
+                : Component.translatable(canRepeat ? "ui.boundless.questbook.repeat" : "quest.boundless.complete"));
+        complete.active = canUndoReject || canRepeat || ready;
+        complete.visible = canUndoReject || (!rej && (canRepeat || !red));
 
         reject.setOptionalAllowed(quest.optional);
         reject.active = !done && !canRepeat && quest.optional;
@@ -991,6 +1002,19 @@ public final class QuestDetailsPanel extends AbstractWidget {
         gg.pose().scale(scale, scale, 1f);
         gg.blit(texture, 0, 0, 0, 0, 16, 16, 16, 16);
         gg.pose().popPose();
+    }
+
+    private boolean textureExists(ResourceLocation texture) {
+        if (texture == null) return false;
+        Boolean cached = TEXTURE_EXISTS_CACHE.get(texture);
+        if (cached != null) return cached;
+        boolean exists = false;
+        try {
+            exists = mc.getResourceManager().getResource(texture).isPresent();
+        } catch (Exception ignored) {
+        }
+        TEXTURE_EXISTS_CACHE.put(texture, exists);
+        return exists;
     }
 
     private void addDescriptionItemRegions(String text, int x, int y, int maxWidth) {

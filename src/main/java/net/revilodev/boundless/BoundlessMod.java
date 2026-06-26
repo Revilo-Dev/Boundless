@@ -13,16 +13,17 @@ import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.OnDatapackSyncEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.player.AdvancementEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.revilodev.boundless.client.QuestBookKeybinds;
 import net.revilodev.boundless.client.ClientQuestEvents;
 import net.revilodev.boundless.client.QuestPanelClient;
@@ -70,6 +71,7 @@ public final class BoundlessMod {
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenClosing);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseScrolled);
+        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseButtonPressed);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLevelUnload);
@@ -140,5 +142,12 @@ public final class BoundlessMod {
         BoundlessNetwork.KillEntry entry = new BoundlessNetwork.KillEntry(rl.toString(), count);
         BoundlessNetwork.SyncKills payload = new BoundlessNetwork.SyncKills(List.of(entry));
         BoundlessNetwork.sendToPlayer(sp, payload);
+    }
+
+    @SubscribeEvent
+    public void onAdvancementEarned(AdvancementEvent.AdvancementEarnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer sp) {
+            net.revilodev.boundless.quest.QuestTracker.serverTickPlayer(sp);
+        }
     }
 }

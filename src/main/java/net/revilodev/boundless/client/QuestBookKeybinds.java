@@ -5,8 +5,8 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.event.TickEvent;
 import net.revilodev.boundless.Config;
 import org.lwjgl.glfw.GLFW;
 
@@ -29,6 +29,7 @@ public final class QuestBookKeybinds {
     }
 
     public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         if (openQuestBook == null) return;
         if (Config.disableQuestBook()) return;
 

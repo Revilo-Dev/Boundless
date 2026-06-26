@@ -19,9 +19,7 @@ public final class QuestObjectiveState extends SavedData {
     public static QuestObjectiveState get(ServerLevel level) {
         ServerLevel overworld = level.getServer().overworld();
         return overworld.getDataStorage().computeIfAbsent(
-                QuestObjectiveState::load,
-                QuestObjectiveState::new,
-                "boundless_quest_objectives"
+                QuestObjectiveState::load, QuestObjectiveState::new, "boundless_quest_objectives"
         );
     }
 

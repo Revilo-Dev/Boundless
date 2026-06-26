@@ -79,6 +79,7 @@ public final class BoundlessNetwork {
         int id = 0;
         register(id++, Redeem.class, Redeem.CODEC::encode, Redeem.CODEC::decode, BoundlessNetwork::handleRedeem, NetworkDirection.PLAY_TO_SERVER);
         register(id++, Reject.class, Reject.CODEC::encode, Reject.CODEC::decode, BoundlessNetwork::handleReject, NetworkDirection.PLAY_TO_SERVER);
+        register(id++, UndoReject.class, UndoReject.CODEC::encode, UndoReject.CODEC::decode, BoundlessNetwork::handleUndoReject, NetworkDirection.PLAY_TO_SERVER);
         register(id++, CreateScroll.class, CreateScroll.CODEC::encode, CreateScroll.CODEC::decode, BoundlessNetwork::handleCreateScroll, NetworkDirection.PLAY_TO_SERVER);
         register(id++, RestartRepeatable.class, RestartRepeatable.CODEC::encode, RestartRepeatable.CODEC::decode, BoundlessNetwork::handleRestartRepeatable, NetworkDirection.PLAY_TO_SERVER);
         register(id++, UpdateFieldInput.class, UpdateFieldInput.CODEC::encode, UpdateFieldInput.CODEC::decode, BoundlessNetwork::handleUpdateFieldInput, NetworkDirection.PLAY_TO_SERVER);
@@ -144,6 +145,16 @@ public final class BoundlessNetwork {
                 buf -> new Reject(buf.readUtf())
         );
         @Override public Type<Reject> type() { return TYPE; }
+    }
+
+    public record UndoReject(String questId) implements CustomPacketPayload {
+        public static final Type<UndoReject> TYPE =
+                new Type<>(new ResourceLocation("boundless", "undo_reject"));
+        public static final StreamCodec<FriendlyByteBuf, UndoReject> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.questId),
+                buf -> new UndoReject(buf.readUtf())
+        );
+        @Override public Type<UndoReject> type() { return TYPE; }
     }
 
     public record CreateScroll(String questId) implements CustomPacketPayload {
@@ -625,7 +636,8 @@ public final class BoundlessNetwork {
     }
 
     private static void syncComputedCompletion(ServerPlayer p) {
-        for (QuestData.Quest q : QuestData.allServer(p.server)) {
+        List<QuestData.Quest> quests = new ArrayList<>(QuestData.allServer(p.server));
+        for (QuestData.Quest q : quests) {
             if (q == null) continue;
             QuestTracker.Status st = QuestTracker.getStatus(q, p);
             if (st == QuestTracker.Status.REDEEMED || st == QuestTracker.Status.REJECTED) continue;
@@ -863,6 +875,17 @@ public final class BoundlessNetwork {
                     sp.drop(stack, false);
                 }
                 sendProgressMeta(sp, q.id);
+            });
+        });
+    }
+
+    private static void handleUndoReject(UndoReject p, PayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            ServerPlayer sp = (ServerPlayer) ctx.player();
+            QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+                if (QuestTracker.serverUndoReject(q, sp)) {
+                    sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
+                }
             });
         });
     }

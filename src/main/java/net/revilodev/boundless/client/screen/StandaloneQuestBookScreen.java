@@ -176,12 +176,10 @@ public final class StandaloneQuestBookScreen extends Screen {
         tabs.visible = showTabs;
         tabs.active = showTabs;
 
-        header.visible = true;
-        header.active = false;
-
         if (header != null) {
-            boolean showHeader = showingDetails || (!Config.hideCategoryHeader() && !Config.disableCategories());
+            boolean showHeader = !showingDetails && !Config.hideCategoryHeader() && !Config.disableCategories();
             header.visible = showHeader;
+            header.active = false;
         }
 
         if (filter != null) {
@@ -232,9 +230,6 @@ public final class StandaloneQuestBookScreen extends Screen {
     }
 
     private String sectionTitle() {
-        if (showingDetails && details != null) {
-            return details.currentQuestTitle();
-        }
         return tabs == null ? "" : tabs.getSelectedName();
     }
 

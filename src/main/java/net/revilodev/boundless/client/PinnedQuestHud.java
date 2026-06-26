@@ -19,7 +19,7 @@ import net.minecraft.world.item.Items;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.client.event.RenderGuiOverlayEvent;
+import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -252,7 +252,7 @@ public final class PinnedQuestHud {
         resetPins(true);
     }
 
-    public static void onRenderGui(RenderGuiOverlayEvent.Post e) {
+    public static void onRenderGui(RenderGuiEvent.Post e) {
         if (Config.disableQuestPinning()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.player == null) return;

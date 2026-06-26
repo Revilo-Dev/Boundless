@@ -93,8 +93,9 @@ public final class QuestData {
 
         public Optional<Item> iconItem() {
             try {
+                if (icon == null || icon.isBlank() || icon.contains("textures/")) return Optional.empty();
                 ResourceLocation rl = new ResourceLocation(icon);
-                return Optional.ofNullable(BuiltInRegistries.ITEM.get(rl));
+                return BuiltInRegistries.ITEM.getOptional(rl);
             } catch (Exception ignored) {
                 return Optional.empty();
             }
@@ -237,8 +238,9 @@ public final class QuestData {
 
         public Optional<Item> iconItem() {
             try {
+                if (icon == null || icon.isBlank() || icon.contains("textures/")) return Optional.empty();
                 ResourceLocation rl = new ResourceLocation(icon);
-                return Optional.ofNullable(BuiltInRegistries.ITEM.get(rl));
+                return BuiltInRegistries.ITEM.getOptional(rl);
             } catch (Exception ignored) {
                 return Optional.empty();
             }
@@ -281,8 +283,9 @@ public final class QuestData {
 
         public Optional<Item> iconItem() {
             try {
+                if (icon == null || icon.isBlank() || icon.contains("textures/")) return Optional.empty();
                 ResourceLocation rl = new ResourceLocation(icon);
-                return Optional.ofNullable(BuiltInRegistries.ITEM.get(rl));
+                return BuiltInRegistries.ITEM.getOptional(rl);
             } catch (Exception ignored) {
                 return Optional.empty();
             }
@@ -781,34 +784,34 @@ public final class QuestData {
         loadedServer = true;
     }
 
-    public static boolean isEmpty() { return QUESTS.isEmpty(); }
+    public static synchronized boolean isEmpty() { return QUESTS.isEmpty(); }
 
-    public static Collection<Quest> all() {
+    public static synchronized Collection<Quest> all() {
         if (!loadedClient) loadClient(false);
-        return Collections.unmodifiableCollection(QUESTS.values());
+        return Collections.unmodifiableList(new ArrayList<>(QUESTS.values()));
     }
 
-    public static Collection<Quest> allServer(MinecraftServer server) {
+    public static synchronized Collection<Quest> allServer(MinecraftServer server) {
         loadServer(server, false);
-        return Collections.unmodifiableCollection(QUESTS.values());
+        return Collections.unmodifiableList(new ArrayList<>(QUESTS.values()));
     }
 
-    public static Optional<Quest> byId(String id) {
+    public static synchronized Optional<Quest> byId(String id) {
         if (!loadedClient) loadClient(false);
         return Optional.ofNullable(QUESTS.get(id));
     }
 
-    public static Optional<Quest> byIdServer(MinecraftServer server, String id) {
+    public static synchronized Optional<Quest> byIdServer(MinecraftServer server, String id) {
         if (!loadedServer) loadServer(server, false);
         return Optional.ofNullable(QUESTS.get(id));
     }
 
-    public static Optional<Category> categoryById(String id) {
+    public static synchronized Optional<Category> categoryById(String id) {
         if (!loadedClient) loadClient(false);
         return Optional.ofNullable(CATEGORIES.get(id));
     }
 
-    public static boolean isCategoryUnlocked(Category c, net.minecraft.world.entity.player.Player player) {
+    public static synchronized boolean isCategoryUnlocked(Category c, net.minecraft.world.entity.player.Player player) {
         if (c == null) return true;
         if (c.dependency == null || c.dependency.isBlank()) return true;
 
@@ -818,7 +821,7 @@ public final class QuestData {
         return QuestTracker.getStatus(q, player) == QuestTracker.Status.REDEEMED;
     }
 
-    public static boolean includeQuestInAll(Quest q, net.minecraft.world.entity.player.Player player) {
+    public static synchronized boolean includeQuestInAll(Quest q, net.minecraft.world.entity.player.Player player) {
         if (q == null) return false;
 
         Category c = CATEGORIES.getOrDefault(q.category, null);
@@ -828,7 +831,7 @@ public final class QuestData {
         return isCategoryUnlocked(c, player);
     }
 
-    public static List<Category> categoriesOrdered() {
+    public static synchronized List<Category> categoriesOrdered() {
         if (!loadedClient) loadClient(false);
 
         if (!CATEGORIES.containsKey("all")) {
@@ -868,7 +871,7 @@ public final class QuestData {
         return list;
     }
 
-    public static List<SubCategory> subCategoriesAllOrdered() {
+    public static synchronized List<SubCategory> subCategoriesAllOrdered() {
         if (!loadedClient) loadClient(false);
         ensureSubCategoriesFromQuests();
         return buildSubCategoryList(null);
@@ -880,7 +883,7 @@ public final class QuestData {
         return buildSubCategoryList(null);
     }
 
-    public static List<SubCategory> subCategoriesForCategory(String categoryId) {
+    public static synchronized List<SubCategory> subCategoriesForCategory(String categoryId) {
         if (!loadedClient) loadClient(false);
         ensureSubCategoriesFromQuests();
         return buildSubCategoryList(categoryId);
@@ -1247,8 +1250,8 @@ public final class QuestData {
             return;
         }
 
-        if (o.has("achieve")) {
-            String adv = o.get("achieve").getAsString();
+        if (o.has("achieve") || o.has("advancement")) {
+            String adv = o.has("advancement") ? o.get("advancement").getAsString() : o.get("achieve").getAsString();
             out.add(new Target("advancement", adv, 1));
             return;
         }

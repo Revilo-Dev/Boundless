@@ -1,7 +1,7 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
-    id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+    id 'net.minecraftforge.gradle' version '6.0.54'
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -20,6 +20,7 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 repositories {
     maven { url = 'https://maven.minecraftforge.net' }
+    maven { url = 'https://maven.blamejared.com' }
     mavenCentral()
 }
 
@@ -68,7 +69,8 @@ configurations {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${forge_version}"
-    // other mod/library dependencies can go here
+    compileOnly fg.deobf("mezz.jei:jei-1.20.1-common-api:15.20.0.132")
+    compileOnly fg.deobf("mezz.jei:jei-1.20.1-forge-api:15.20.0.132")
 }
 
 // Replace properties inside mods.toml with gradle.properties values

@@ -5,8 +5,6 @@
 
   "quest.boundless.toggle": "Quest completed!",
 
-<<<<<<< HEAD
-=======
   "ui.boundless.questbook.title": "Quests",
   "ui.boundless.questbook.search": "Search",
   "ui.boundless.questbook.search_quests": "Search quests",
@@ -106,7 +104,6 @@
   "ui.boundless.editor.status.place_questpacks": "Place questpacks in config/boundless/questpacks",
   "ui.boundless.editor.error.update_questpack_failed": "Failed to update questpack",
 
->>>>>>> 707d34a (Update 9: final patch and push)
   "item.boundless.quest_book": "Quest Book",
   "item.boundless.quest_completion_scroll": "Quest Completion Scroll",
   "key.categories.boundless": "Boundless",

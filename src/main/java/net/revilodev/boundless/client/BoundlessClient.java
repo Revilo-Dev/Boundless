@@ -13,5 +13,6 @@ public final class BoundlessClient {
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenClosing);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseScrolled);
+        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseButtonPressed);
     }
 }

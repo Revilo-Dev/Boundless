@@ -1,6 +1,20 @@
 package net.revilodev.boundless.compat;
 
-public final class BoundlessJeiPlugin {
-    private BoundlessJeiPlugin() {
+import mezz.jei.api.IModPlugin;
+import mezz.jei.api.JeiPlugin;
+import mezz.jei.api.runtime.IJeiRuntime;
+import net.minecraft.resources.ResourceLocation;
+
+@JeiPlugin
+public final class BoundlessJeiPlugin implements IModPlugin {
+    @Override
+    public ResourceLocation getPluginUid() {
+        return new ResourceLocation("boundless", "jei_plugin");
+    }
+
+    @Override
+    public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
+        JeiCompat.setRuntime(jeiRuntime);
     }
 }
+

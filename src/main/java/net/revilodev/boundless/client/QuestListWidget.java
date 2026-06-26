@@ -38,6 +38,7 @@ public final class QuestListWidget extends AbstractWidget {
             new ResourceLocation("boundless", "textures/gui/sprites/quest_widget_completed.png");
     private static final ResourceLocation ROW_TEX_DISCARDED =
             new ResourceLocation("boundless", "textures/gui/sprites/quest_widget_discarded.png");
+    private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
 
     private final Minecraft mc = Minecraft.getInstance();
     private final List<QuestData.Quest> quests = new ArrayList<>();
@@ -61,6 +62,7 @@ public final class QuestListWidget extends AbstractWidget {
     private boolean cachedAllowLocked = true;
     private String searchQuery = "";
     private int topInset = 0;
+    private boolean useConfigScaling = true;
 
     public QuestListWidget(int x, int y, int w, int h, Consumer<QuestData.Quest> onClick) {
         super(x, y, w, h, Component.empty());
@@ -103,6 +105,18 @@ public final class QuestListWidget extends AbstractWidget {
 
     public void setTopInset(int topInset) {
         this.topInset = Math.max(0, topInset);
+    }
+
+    public void setUseConfigScaling(boolean useConfigScaling) {
+        this.useConfigScaling = useConfigScaling;
+    }
+
+    private float configuredTextScale() {
+        return useConfigScaling ? Config.questTextScale() : 1.0f;
+    }
+
+    private float configuredIconScale() {
+        return useConfigScaling ? Config.questIconScale() : 1.0f;
     }
 
     private static final class RowEntry {
@@ -373,7 +387,7 @@ public final class QuestListWidget extends AbstractWidget {
                 QuestData.SubCategory sc = row.subCategory;
                 boolean open = isSubOpen(sc);
 
-                float iconScale = 0.45f * Config.questIconScale();
+                float iconScale = 0.45f * configuredIconScale();
                 int iconSize = (int) (16 * iconScale);
                 int iconX = getX() + 2;
                 int iconY = top + (h - iconSize) / 2;
@@ -389,7 +403,7 @@ public final class QuestListWidget extends AbstractWidget {
                     });
                 }
 
-                float textScale = 0.66f * Config.questTextScale();
+                float textScale = 0.66f * configuredTextScale();
                 String name = sc.name;
                 int textX = iconX + textIconSize + 2;
                 int textH = (int) (mc.font.lineHeight * textScale);
@@ -441,7 +455,7 @@ public final class QuestListWidget extends AbstractWidget {
                     textX = getX() + 6;
                 }
 
-                float textScale = Config.questTextScale();
+                float textScale = configuredTextScale();
                 String name = q.name == null ? "" : q.name;
                 int maxW = getX() + width - textX - 4;
                 int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
@@ -478,7 +492,7 @@ public final class QuestListWidget extends AbstractWidget {
 
     private void renderScaledItem(GuiGraphics gg, ItemStack stack, int x, int y) {
         if (stack == null || stack.isEmpty()) return;
-        float scale = Config.questIconScale();
+        float scale = configuredIconScale();
         int size = Math.max(1, Math.round(16 * scale));
         int dx = x + (16 - size) / 2;
         int dy = y + (16 - size) / 2;
@@ -503,14 +517,28 @@ public final class QuestListWidget extends AbstractWidget {
         if (icon == null || icon.isBlank()) return null;
         try {
             ResourceLocation rl = new ResourceLocation(icon);
-            return rl.getPath().startsWith("textures/") ? rl : null;
+            if (!rl.getPath().startsWith("textures/")) return null;
+            return textureExists(rl) ? rl : null;
         } catch (Exception ignored) {
             return null;
         }
     }
 
+    private boolean textureExists(ResourceLocation texture) {
+        if (texture == null) return false;
+        Boolean cached = TEXTURE_EXISTS_CACHE.get(texture);
+        if (cached != null) return cached;
+        boolean exists = false;
+        try {
+            exists = mc.getResourceManager().getResource(texture).isPresent();
+        } catch (Exception ignored) {
+        }
+        TEXTURE_EXISTS_CACHE.put(texture, exists);
+        return exists;
+    }
+
     private void renderScaledTextureIcon(GuiGraphics gg, ResourceLocation texture, int x, int y) {
-        float scale = Config.questIconScale();
+        float scale = configuredIconScale();
         int size = Math.max(1, Math.round(16 * scale));
         int dx = x + (16 - size) / 2;
         int dy = y + (16 - size) / 2;

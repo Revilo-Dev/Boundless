@@ -136,7 +136,8 @@ public final class CategoryTabsWidget extends AbstractWidget {
         pendingTooltip = null;
     }
 
-        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    @Override
+    protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         if (!visible) return;
 
         pendingTooltip = null;
@@ -171,7 +172,8 @@ public final class CategoryTabsWidget extends AbstractWidget {
         renderPageControls(gg, mouseX, mouseY, getX(), y + visibleCount * (cellH + gap));
     }
 
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (!visible || !active) return false;
         if (button != 0) return false;
 
@@ -211,7 +213,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         return false;
     }
 
@@ -309,5 +311,6 @@ public final class CategoryTabsWidget extends AbstractWidget {
         gg.pose().popPose();
     }
 
-        protected void updateWidgetNarration(NarrationElementOutput narration) {}
+    @Override
+    protected void updateWidgetNarration(NarrationElementOutput narration) {}
 }

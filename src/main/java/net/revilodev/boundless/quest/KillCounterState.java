@@ -14,9 +14,7 @@ public final class KillCounterState extends SavedData {
     public static KillCounterState get(ServerLevel level) {
         ServerLevel overworld = level.getServer().overworld();
         return overworld.getDataStorage().computeIfAbsent(
-                KillCounterState::load,
-                KillCounterState::new,
-                "boundless_kills"
+                KillCounterState::load, KillCounterState::new, "boundless_kills"
         );
     }
 
