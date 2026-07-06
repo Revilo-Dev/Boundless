@@ -25,6 +25,7 @@
   "ui.boundless.questbook.xp_amount": "XP: %s",
   "ui.boundless.questbook.levels_amount": "Levels: %s",
   "ui.boundless.questbook.levelup_xp_amount": "LevelUP XP: %s",
+  "ui.boundless.questbook.levelup_levels_amount": "LevelUP Levels: %s",
   "ui.boundless.questbook.levelup_level_progress": "LevelUP Level: %s/%s",
   "ui.boundless.questbook.loot_table": "Loot Table: %s",
   "ui.boundless.questbook.repeat": "Repeat",
