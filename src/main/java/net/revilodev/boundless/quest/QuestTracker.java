@@ -652,6 +652,10 @@ public final class QuestTracker {
                 LevelUpCompat.awardXp(player, amount);
                 return;
             }
+            if ("levelup_levels".equalsIgnoreCase(rewards.expType)) {
+                LevelUpCompat.awardLevels(player, amount);
+                return;
+            }
             if ("levels".equalsIgnoreCase(rewards.expType)) {
                 player.giveExperienceLevels(amount);
             } else {

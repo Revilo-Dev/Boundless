@@ -487,7 +487,7 @@ public final class QuestPanelClient {
         }
 
         if (st.header != null) {
-            boolean showHeader = st.open && !st.showingDetails && !Config.hideCategoryHeader() && !Config.disableCategories();
+            boolean showHeader = st.open && !Config.hideCategoryHeader() && !Config.disableCategories();
             st.header.visible = showHeader;
             st.header.active = false;
         }

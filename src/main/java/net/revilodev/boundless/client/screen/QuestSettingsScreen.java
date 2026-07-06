@@ -986,7 +986,7 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean selected = configTab == tab;
-            int renderX = getX();
+            int renderX = getX() + 1 - (selected ? 1 : 0);
             gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, getY(), 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
             gg.blit(icon, renderX + (TAB_W - 16) / 2, getY() + (TAB_H - 16) / 2, 0, 0, 16, 16, 16, 16);
             if (this.isMouseOver(mouseX, mouseY)) {

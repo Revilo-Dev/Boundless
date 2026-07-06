@@ -29,6 +29,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.SharedConstants;
 import net.minecraft.util.StringUtil;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
@@ -235,14 +236,14 @@ public final class QuestEditorScreen extends Screen {
     private static final int ID_SUGGESTION_SCROLL_THUMB_COLOR = 0xFFFFFFFF;
     private static final int ID_SUGGESTION_SCROLL_W = 3;
     private static final long DELETE_HOLD_MS = 2000L;
-    private static final int ENTRY_ROW_H = 12;
+    private static final int ENTRY_ROW_H = 14;
     private static final int ENTRY_ROW_GAP = 2;
-    private static final float ENTRY_INPUT_TEXT_SCALE = 0.4f;
+    private static final float ENTRY_INPUT_TEXT_SCALE = 0.5f;
     private static final int ENTRY_REMOVE_BTN_W = 10;
     private static final int ENTRY_TYPE_BTN_W = 21;
     private static final int ENTRY_ITEM_PICK_BTN_W = 12;
     private static final int ENTRY_COUNT_BTN_W = 12;
-    private static final float ENTRY_COUNT_TEXT_SCALE = 0.5f;
+    private static final float ENTRY_COUNT_TEXT_SCALE = 0.55f;
     private static final int ITEM_PICKER_COLS = 9;
     private static final int ITEM_PICKER_ROWS = 4;
     private static final int ITEM_PICKER_CELL = 18;
@@ -262,7 +263,7 @@ public final class QuestEditorScreen extends Screen {
     private static final int ITEM_PICKER_SIDE_TAB_X = -TAB_W + 4;
     private static final int ITEM_PICKER_SIDE_TAB_Y = 17;
     private static final int ITEM_PICKER_SIDE_TAB_ICON_SIZE = 16;
-    private static final float ENTRY_TYPE_TEXT_SCALE = 0.5f;
+    private static final float ENTRY_TYPE_TEXT_SCALE = 0.55f;
     private static final int EDITOR_SUBHEADER_H = 12;
     private static final int EDITOR_SUBHEADER_GAP = 3;
 
@@ -375,6 +376,7 @@ public final class QuestEditorScreen extends Screen {
     private Path editingPath;
     private String loadedQuestType = "";
     private final List<String> itemIdCache = new ArrayList<>();
+    private final List<String> itemTagIdCache = new ArrayList<>();
     private final List<String> entityIdCache = new ArrayList<>();
     private final List<String> effectIdCache = new ArrayList<>();
     private final List<String> advancementIdCache = new ArrayList<>();
@@ -386,6 +388,7 @@ public final class QuestEditorScreen extends Screen {
     private final List<String> categorySuggestionCache = new ArrayList<>();
     private final List<String> subCategorySuggestionCache = new ArrayList<>();
     private final List<String> questSuggestionCache = new ArrayList<>();
+    private final List<String> questPackDependencySuggestionCache = new ArrayList<>();
     private final Map<String, List<String>> subCategoryByCategorySuggestion = new HashMap<>();
     private final Map<String, QuestPack> stagedPacks = new LinkedHashMap<>();
     private final Set<String> stagedDeletedPackNames = new LinkedHashSet<>();
@@ -577,6 +580,9 @@ public final class QuestEditorScreen extends Screen {
 
     private void initDescriptionFormatterButtons() {
         descriptionFormatButtons.clear();
+        descriptionFormatButtons.add(createDescriptionInsertButton("<", "__undo__", 0xFF4A4A4A, 9, 0.75f));
+        descriptionFormatButtons.add(createDescriptionInsertButton(">", "__redo__", 0xFF4A4A4A, 9, 0.75f));
+        descriptionFormatButtons.add(createDescriptionInsertButton("X", "/x", 0xFF4A4A4A, 9, 0.75f));
         descriptionFormatButtons.add(createDescriptionInsertButton("", "/r", 0xFFFF5555, 8));
         descriptionFormatButtons.add(createDescriptionInsertButton("", "/g", 0xFF55FF55, 8));
         descriptionFormatButtons.add(createDescriptionInsertButton("", "/b", 0xFF5555FF, 8));
@@ -585,10 +591,10 @@ public final class QuestEditorScreen extends Screen {
         descriptionFormatButtons.add(createDescriptionInsertButton("", "/o", 0xFFFFAA00, 8));
         descriptionFormatButtons.add(createDescriptionInsertButton("", "/a", 0xFFAAAAAA, 8));
         descriptionFormatButtons.add(createDescriptionInsertButton("", "/p", 0xFFAA55FF, 8));
-        descriptionFormatButtons.add(createDescriptionInsertButton("X", "/x", 0xFF4A4A4A, 11, 0.8f));
-        descriptionFormatButtons.add(createDescriptionInsertButton("B", "/l", 0xFF555555, 11, 0.8f));
-        descriptionFormatButtons.add(createDescriptionInsertButton("I", "/i", 0xFF555555, 11, 0.8f));
-        descriptionFormatButtons.add(createDescriptionInsertButton("E", "/e", 0xFF555555, 11, 0.8f));
+        descriptionFormatButtons.add(createDescriptionInsertButton("B", "/l", 0xFF555555, 9, 0.75f));
+        descriptionFormatButtons.add(createDescriptionInsertButton("I", "/i", 0xFF555555, 9, 0.75f));
+        descriptionFormatButtons.add(createDescriptionInsertButton("E", "/e", 0xFF555555, 9, 0.75f));
+        descriptionFormatButtons.add(createDescriptionInsertButton("H", "/h", 0xFF777733, 9, 0.75f));
     }
 
     private TextInsertButton createDescriptionInsertButton(String label, String insertText, int fillColor, int width) {
@@ -2101,13 +2107,13 @@ public final class QuestEditorScreen extends Screen {
         JsonObject obj = new JsonObject();
         switch (type) {
             case "collect", "item" -> {
-                String normalizedId = normalizeItemIdWithComponents(id, false);
+                String normalizedId = normalizeItemIdWithComponents(id, true);
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
                 obj.addProperty("collect", normalizedId);
                 obj.addProperty("count", count);
             }
             case "submit" -> {
-                String normalizedId = normalizeItemIdWithComponents(id, false);
+                String normalizedId = normalizeItemIdWithComponents(id, true);
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
                 obj.addProperty("submit", normalizedId);
                 obj.addProperty("count", count);
@@ -2187,6 +2193,18 @@ public final class QuestEditorScreen extends Screen {
                     if (v.isBlank()) v = "points";
                     if (!v.equals("points") && !v.equals("levels") && !v.equals("levelup")) return failReward(line, raiseErrors);
                     expType = v;
+                    expAmount = parsed.count;
+                }
+                case "levelup" -> {
+                    String v = parsed.id.toLowerCase(Locale.ROOT);
+                    if (v.isBlank() || v.equals("points")) v = "xp";
+                    if (v.equals("xp")) {
+                        expType = "levelup";
+                    } else if (v.equals("level") || v.equals("levels")) {
+                        expType = "levelup_levels";
+                    } else {
+                        return failReward(line, raiseErrors);
+                    }
                     expAmount = parsed.count;
                 }
                 case "command" -> {
@@ -2396,7 +2414,9 @@ public final class QuestEditorScreen extends Screen {
         String exp = optString(obj, "exp", "");
         if (!exp.isBlank()) {
             int count = parseIntFlexible(obj, "count", 0);
-            out.add("xp: " + exp + " " + count);
+            if ("levelup".equalsIgnoreCase(exp)) out.add("levelup: xp " + count);
+            else if ("levelup_levels".equalsIgnoreCase(exp)) out.add("levelup: levels " + count);
+            else out.add("xp: " + exp + " " + count);
         }
         return String.join("\n", out);
     }
@@ -2917,8 +2937,7 @@ public final class QuestEditorScreen extends Screen {
     private ScaledMultiLineEditBox createEntryRowBox(EntryRowKind kind) {
         String hint = switch (kind) {
             case DEPENDENCY -> "boundless:quest_id";
-            case REWARD -> "item: minecraft:item 1";
-            case COMPLETION -> "collect: minecraft:item 1";
+            case REWARD, COMPLETION -> "minecraft:item 1";
         };
         ScaledMultiLineEditBox box = new ScaledMultiLineEditBox(font, 0, 0, pw - 4, ENTRY_ROW_H,
                 Component.literal(hint), Component.empty(), ENTRY_INPUT_TEXT_SCALE, false);
@@ -3028,7 +3047,9 @@ public final class QuestEditorScreen extends Screen {
                             itemId = parsedId.substring(0, compStart).trim();
                             components = parsedId.substring(compStart).trim();
                         }
-                        itemId = normalizeNamespacedId(itemId, false);
+                        itemId = itemId.startsWith("#")
+                                ? normalizeNamespacedId(itemId, true)
+                                : normalizeNamespacedId(itemId, false);
                         selectedItemIdByBox.put(box, itemId);
                         if (!components.isBlank()) selectedItemComponentsByBox.put(box, components);
                         else selectedItemComponentsByBox.remove(box);
@@ -3251,6 +3272,9 @@ public final class QuestEditorScreen extends Screen {
         if (kind == EntryRowKind.DEPENDENCY) return raw;
         String type = effectiveRowType(kind, box);
         if (raw.isBlank()) return "";
+        if (kind == EntryRowKind.COMPLETION && "levelup".equals(type)) {
+            return type + ": levels " + entryCount(box);
+        }
         if (hasRowBrowser(kind, type)) {
             String itemId = safe(selectedItemIdByBox.get(box)).trim();
             String components = safe(selectedItemComponentsByBox.get(box)).trim();
@@ -3274,9 +3298,31 @@ public final class QuestEditorScreen extends Screen {
             }
         } else {
             body = entryBodyWithoutType(raw);
+            if (rowHasCount(kind, type)) {
+                body = bodyWithEntryCount(body, entryCount(box));
+            }
         }
         body = safe(body).trim();
         return body.isBlank() ? "" : type + ": " + body;
+    }
+
+    private String bodyWithEntryCount(String body, int count) {
+        String value = safe(body).trim();
+        if (value.isBlank()) return value;
+        String[] tokens = value.split("\\s+");
+        if (tokens.length > 0) {
+            try {
+                Integer.parseInt(tokens[tokens.length - 1]);
+                StringBuilder withoutCount = new StringBuilder();
+                for (int i = 0; i < tokens.length - 1; i++) {
+                    if (i > 0) withoutCount.append(' ');
+                    withoutCount.append(tokens[i]);
+                }
+                value = withoutCount.toString().trim();
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return value.isBlank() ? value : value + " " + Math.max(1, count);
     }
 
     private String entryBodyWithoutType(String raw) {
@@ -3353,7 +3399,8 @@ public final class QuestEditorScreen extends Screen {
     private int entryRowHeight(EntryRowKind kind, ScaledMultiLineEditBox box) {
         if (kind == EntryRowKind.DEPENDENCY || box == null) return ENTRY_ROW_H;
         int content = (int) Math.ceil(Math.max(1, box.getLineCount()) * box.getLineHeight()) + 4;
-        return Math.max(ENTRY_ROW_H, Math.min(BOX_H_TALL, content));
+        int maxHeight = Math.max(ENTRY_ROW_H, ph - (font.lineHeight + FIELD_LABEL_GAP + FIELD_ROW_GAP + 6));
+        return Math.max(ENTRY_ROW_H, Math.min(maxHeight, content));
     }
 
     private void updateEntryRowFocusDisplays(EntryRowKind kind) {
@@ -3584,8 +3631,21 @@ public final class QuestEditorScreen extends Screen {
 
     private void applyDescriptionFormat(String formatCode) {
         if (questDescriptionBox == null) return;
+        if ("__undo__".equals(formatCode)) {
+            questDescriptionBox.undo();
+            questDescriptionBox.setFocused(true);
+            markCurrentEditorUnsaved();
+            return;
+        }
+        if ("__redo__".equals(formatCode)) {
+            questDescriptionBox.redo();
+            questDescriptionBox.setFocused(true);
+            markCurrentEditorUnsaved();
+            return;
+        }
         questDescriptionBox.insertText(formatCode);
         questDescriptionBox.setFocused(true);
+        markCurrentEditorUnsaved();
     }
 
     private boolean shouldWarnForUnsavedChanges(EditorEntry entry) {
@@ -3884,6 +3944,7 @@ public final class QuestEditorScreen extends Screen {
                 for (Path path : stream) {
                     if (!Files.isDirectory(path)) continue;
                     String name = path.getFileName().toString();
+                    if (!isVisibleQuestPackDirectoryName(name)) continue;
                     String namespace = findNamespace(path);
                     boolean enabled = readPackMeta(path, name).enabled;
                     packs.add(new QuestPack(name, namespace, path, false, enabled));
@@ -3912,6 +3973,16 @@ public final class QuestEditorScreen extends Screen {
 
         packs.sort(Comparator.comparing(a -> a.name.toLowerCase(Locale.ROOT)));
         return packs;
+    }
+
+    private boolean isVisibleQuestPackDirectoryName(String name) {
+        String value = safe(name).trim();
+        if (value.isBlank()) return false;
+        String lower = value.toLowerCase(Locale.ROOT);
+        return !value.startsWith(".")
+                && !lower.endsWith(".upload")
+                && !lower.endsWith(".tmp")
+                && !lower.endsWith(".temp");
     }
 
     private void migrateLegacyResourcePackQuestPacks() {
@@ -4652,13 +4723,13 @@ public final class QuestEditorScreen extends Screen {
         if (tooltip == null || tooltip.isEmpty()) return;
         pendingEditorTooltip = tooltip;
         pendingEditorTooltipX = mouseX;
-        pendingEditorTooltipY = Math.max(4, Math.min(mouseY, py - 8));
+        pendingEditorTooltipY = mouseY;
     }
 
     private void renderPendingEditorTooltip(GuiGraphics gg) {
         if (pendingEditorTooltip == null || pendingEditorTooltip.isEmpty()) return;
         gg.pose().pushPose();
-        gg.pose().translate(0f, 0f, 500f);
+        gg.pose().translate(0f, 0f, 650f);
         gg.renderComponentTooltip(font, pendingEditorTooltip, pendingEditorTooltipX, pendingEditorTooltipY);
         gg.pose().popPose();
         pendingEditorTooltip = List.of();
@@ -5050,7 +5121,7 @@ public final class QuestEditorScreen extends Screen {
     private List<String> idSuggestionValuesForMultiField(ScaledMultiLineEditBox field) {
         if (field == null) return List.of();
         if (isDependencyEntryField(field)) {
-            return questSuggestionCache;
+            return questPackDependencySuggestionCache;
         }
         EntryRowKind rowKind = rowKindForField(field);
         if ((rowKind == EntryRowKind.COMPLETION || rowKind == EntryRowKind.REWARD)
@@ -5064,7 +5135,9 @@ public final class QuestEditorScreen extends Screen {
                     ? (LevelUpCompat.isAvailable()
                         ? List.of("collect", "submit", "kill", "achieve", "effect", "xp", "levelup", "field")
                         : List.of("collect", "submit", "kill", "achieve", "effect", "xp", "field"))
-                    : List.of("item", "xp", "command", "loot");
+                    : (LevelUpCompat.isAvailable()
+                        ? List.of("item", "xp", "levelup", "command", "loot")
+                        : List.of("item", "xp", "command", "loot"));
         }
         return switch (ctx.type) {
             case "collect", "submit", "item" -> itemSuggestions();
@@ -5073,7 +5146,7 @@ public final class QuestEditorScreen extends Screen {
             case "achieve", "advancement" -> advancementSuggestions();
             case "loot", "loottable" -> lootTableSuggestions();
             case "xp", "exp" -> List.of("points", "levels");
-            case "levelup" -> LevelUpCompat.isAvailable() ? List.of("points", "levels") : List.of();
+            case "levelup" -> LevelUpCompat.isAvailable() ? List.of("xp", "levels") : List.of();
             case "field", "input" -> List.of("\"expected text\" \"input hint text\"");
             case "icon" -> itemSuggestions();
             default -> List.of();
@@ -5397,7 +5470,7 @@ public final class QuestEditorScreen extends Screen {
                 }
             }
             if (field.widget == questDescriptionBox) {
-                layoutDescriptionFormatterButtons(boxX, boxY + field.widget.getHeight() + FORMAT_BAR_GAP, clipTop, clipBottom);
+                layoutDescriptionFormatterButtons(boxX, labelY, boxY + widgetHeight + FORMAT_BAR_GAP, widgetWidth, clipTop, clipBottom);
             }
 
             if (labelY + font.lineHeight > clipTop && labelY < clipBottom) {
@@ -5426,6 +5499,9 @@ public final class QuestEditorScreen extends Screen {
                 }
             }
             yCursor += font.lineHeight + FIELD_LABEL_GAP + widgetHeight + FIELD_ROW_GAP;
+            if (field.widget == questDescriptionBox) {
+                yCursor += FORMAT_BAR_GAP + FORMAT_BAR_H;
+            }
             if (editorType == EditorType.PACK_OPTIONS && field.widget == packNameBox && exportPackButton != null) {
                 int exportX = boxX;
                 int exportY = yCursor;
@@ -5436,9 +5512,6 @@ public final class QuestEditorScreen extends Screen {
                 exportPackButton.visible = true;
                 exportPackButton.active = true;
                 yCursor += exportPackButton.getHeight() + FIELD_ROW_GAP;
-            }
-            if (field.widget == questDescriptionBox) {
-                yCursor += FORMAT_BAR_GAP + FORMAT_BAR_H;
             }
         }
         renderDependencyRowIcons(gg);
@@ -5710,7 +5783,7 @@ public final class QuestEditorScreen extends Screen {
             boolean hovered = mouseX >= segmentX && mouseX <= segmentX + segmentWidth
                     && mouseY >= y && mouseY <= y + totalHeight;
             if (!isItemPickerOpen() && hovered) {
-                queueEditorTooltip(List.of(Component.literal(tooltips[i][0]), Component.literal(tooltips[i][1])), mouseX, y - 10);
+                queueEditorTooltip(List.of(Component.literal(tooltips[i][0]), Component.literal(tooltips[i][1])), mouseX, mouseY);
             }
         }
         return totalHeight;
@@ -5736,7 +5809,8 @@ public final class QuestEditorScreen extends Screen {
     private boolean isInvalidQuestDependencies() {
         if (currentPack == null) return false;
         for (String dependency : collectDependencyEntries()) {
-            if (!questIdCache.contains(dependency)) return true;
+            if (dependency.isBlank()) continue;
+            if (!questPackDependencySuggestionCache.contains(dependency)) return true;
         }
         return false;
     }
@@ -5855,10 +5929,12 @@ public final class QuestEditorScreen extends Screen {
         categorySuggestionCache.clear();
         subCategorySuggestionCache.clear();
         questSuggestionCache.clear();
+        questPackDependencySuggestionCache.clear();
         subCategoryByCategorySuggestion.clear();
         advancementIdCache.clear();
         lootTableIdCache.clear();
 
+        Set<String> questPackDependencySuggestions = new LinkedHashSet<>();
         if (questIndex != null) {
             categoryIdCache.addAll(questIndex.categoryIds);
             subCategoryIdCache.addAll(questIndex.subCategoryIds);
@@ -5880,7 +5956,7 @@ public final class QuestEditorScreen extends Screen {
                 addSubCategorySuggestion(id, category);
             }
             for (String id : questIndex.questIds) {
-                if (!questSuggestionCache.contains(id)) questSuggestionCache.add(id);
+                if (id != null && !id.isBlank()) questPackDependencySuggestions.add(id);
             }
         } else if (currentPack != null) {
             List<NamedEntry> localCategoryEntries = listCategoryEntries(currentPack);
@@ -5904,6 +5980,7 @@ public final class QuestEditorScreen extends Screen {
             for (NamedEntry entry : localQuestEntries) {
                 if (entry != null && entry.id != null && !entry.id.isBlank()) {
                     questIdCache.add(entry.id);
+                    questPackDependencySuggestions.add(entry.id);
                     if (entry.icon != null && !entry.icon.isBlank()) {
                         questIconByIdCache.put(entry.id, entry.icon);
                     }
@@ -5913,9 +5990,10 @@ public final class QuestEditorScreen extends Screen {
 
         List<String> localCategories = sortedIds(categoryIdCache);
         List<String> localSubCategories = sortedIds(subCategoryIdCache);
-        List<String> localQuests = sortedIds(questIdCache);
+        List<String> localQuests = sortedIds(questPackDependencySuggestions);
         categorySuggestionCache.addAll(localCategories);
         questSuggestionCache.addAll(localQuests);
+        questPackDependencySuggestionCache.addAll(localQuests);
 
         for (String localSub : localSubCategories) {
             if (!subCategorySuggestionCache.contains(localSub)) subCategorySuggestionCache.add(localSub);
@@ -5942,20 +6020,49 @@ public final class QuestEditorScreen extends Screen {
         }
     }
 
-    private void layoutDescriptionFormatterButtons(int startX, int y, int clipTop, int clipBottom) {
+    private void layoutDescriptionFormatterButtons(int startX, int undoY, int formatY, int width, int clipTop, int clipBottom) {
         boolean visible = editorType == EditorType.QUEST
                 && questDescriptionBox != null
-                && questDescriptionBox.visible
+                && questDescriptionBox.visible;
+        layoutDescriptionButtonGroup(startX, undoY, width, clipTop, clipBottom, visible, true);
+        layoutDescriptionButtonGroup(startX, formatY, width, clipTop, clipBottom, visible, false);
+    }
+
+    private void layoutDescriptionButtonGroup(int startX, int y, int width, int clipTop, int clipBottom, boolean baseVisible, boolean undoRedo) {
+        boolean visible = baseVisible
                 && y + FORMAT_BAR_H > clipTop
                 && y < clipBottom;
-        int x = startX;
+        int totalWidth = 0;
+        int count = 0;
         for (TextInsertButton button : descriptionFormatButtons) {
+            if (isDescriptionUndoRedoButton(button) != undoRedo) continue;
+            totalWidth += button.getWidth();
+            count++;
+        }
+        totalWidth += Math.max(0, count - 1) * FORMAT_BTN_GAP;
+        int x = startX + Math.max(0, width - totalWidth);
+        for (TextInsertButton button : descriptionFormatButtons) {
+            if (isDescriptionUndoRedoButton(button) != undoRedo) continue;
             button.setX(x);
             button.setY(y);
             button.visible = visible;
-            button.active = visible;
+            button.active = visible && descriptionFormatButtonActive(button);
             x += button.getWidth() + FORMAT_BTN_GAP;
         }
+    }
+
+    private boolean isDescriptionUndoRedoButton(TextInsertButton button) {
+        if (button == null) return false;
+        String action = button.insertText();
+        return "__undo__".equals(action) || "__redo__".equals(action);
+    }
+
+    private boolean descriptionFormatButtonActive(TextInsertButton button) {
+        if (button == null) return false;
+        String action = button.insertText();
+        if ("__undo__".equals(action)) return questDescriptionBox != null && questDescriptionBox.canUndo();
+        if ("__redo__".equals(action)) return questDescriptionBox != null && questDescriptionBox.canRedo();
+        return true;
     }
 
     private List<String> sortedIds(Set<String> ids) {
@@ -6091,10 +6198,10 @@ public final class QuestEditorScreen extends Screen {
         if (clickedToolbar) {
             return true;
         }
-        if (clickDependencyRows(mouseX, mouseY, button)) {
+        if (button == 0 && clickIdSuggestion(mouseX, mouseY)) {
             return true;
         }
-        if (button == 0 && clickIdSuggestion(mouseX, mouseY)) {
+        if (clickDependencyRows(mouseX, mouseY, button)) {
             return true;
         }
         if (button == 0 && clickDropdownFields(mouseX, mouseY)) {
@@ -6443,6 +6550,8 @@ public final class QuestEditorScreen extends Screen {
     private void renderTypeMenu(GuiGraphics gg, int mouseX, int mouseY) {
         if (openTypeMenuKind == null || openTypeMenuRow < 0) return;
         List<String> options = entryTypeOptions(openTypeMenuKind);
+        gg.pose().pushPose();
+        gg.pose().translate(0.0f, 0.0f, 650.0f);
         gg.fill(openTypeMenuX, openTypeMenuY, openTypeMenuX + openTypeMenuW, openTypeMenuY + openTypeMenuH, ID_SUGGESTION_BG_COLOR);
         gg.fill(openTypeMenuX, openTypeMenuY, openTypeMenuX + openTypeMenuW, openTypeMenuY + 1, ID_SUGGESTION_BORDER_COLOR);
         gg.fill(openTypeMenuX, openTypeMenuY + openTypeMenuH - 1, openTypeMenuX + openTypeMenuW, openTypeMenuY + openTypeMenuH, ID_SUGGESTION_BORDER_COLOR);
@@ -6469,11 +6578,12 @@ public final class QuestEditorScreen extends Screen {
             int thumbY = trackY0 + (maxStart <= 0 ? 0 : (openTypeMenuScroll * thumbTravel) / maxStart);
             gg.fill(trackX0, thumbY, trackX0 + ID_SUGGESTION_SCROLL_W, thumbY + thumbH, ID_SUGGESTION_SCROLL_THUMB_COLOR);
         }
+        gg.pose().popPose();
     }
 
     private boolean scrollTypeMenu(double mouseX, double mouseY, double delta) {
         if (openTypeMenuKind == null || openTypeMenuRow < 0) return false;
-        if (mouseX < openTypeMenuX || mouseX > openTypeMenuX + openTypeMenuW || mouseY < openTypeMenuY || mouseY > openTypeMenuY + openTypeMenuH) return false;
+        if (mouseX < openTypeMenuX || mouseX > openTypeMenuX + openTypeMenuW || mouseY < openTypeMenuY || mouseY > openTypeMenuY + openTypeMenuH) return true;
         List<String> options = entryTypeOptions(openTypeMenuKind);
         int visible = Math.min(5, options.size());
         int maxStart = Math.max(0, options.size() - visible);
@@ -6519,6 +6629,8 @@ public final class QuestEditorScreen extends Screen {
     private void renderDropdownMenu(GuiGraphics gg, int mouseX, int mouseY) {
         if (openDropdownTarget == null) return;
         List<String> options = dropdownOptions(openDropdownTarget);
+        gg.pose().pushPose();
+        gg.pose().translate(0.0f, 0.0f, 650.0f);
         gg.fill(openDropdownX, openDropdownY, openDropdownX + openDropdownW, openDropdownY + openDropdownH, ID_SUGGESTION_BG_COLOR);
         gg.fill(openDropdownX, openDropdownY, openDropdownX + openDropdownW, openDropdownY + 1, ID_SUGGESTION_BORDER_COLOR);
         gg.fill(openDropdownX, openDropdownY + openDropdownH - 1, openDropdownX + openDropdownW, openDropdownY + openDropdownH, ID_SUGGESTION_BORDER_COLOR);
@@ -6545,11 +6657,12 @@ public final class QuestEditorScreen extends Screen {
             int thumbY = trackY0 + (maxStart <= 0 ? 0 : (openDropdownScroll * thumbTravel) / maxStart);
             gg.fill(trackX0, thumbY, trackX0 + ID_SUGGESTION_SCROLL_W, thumbY + thumbH, ID_SUGGESTION_SCROLL_THUMB_COLOR);
         }
+        gg.pose().popPose();
     }
 
     private boolean scrollDropdownMenu(double mouseX, double mouseY, double delta) {
         if (openDropdownTarget == null) return false;
-        if (mouseX < openDropdownX || mouseX > openDropdownX + openDropdownW || mouseY < openDropdownY || mouseY > openDropdownY + openDropdownH) return false;
+        if (mouseX < openDropdownX || mouseX > openDropdownX + openDropdownW || mouseY < openDropdownY || mouseY > openDropdownY + openDropdownH) return true;
         List<String> options = dropdownOptions(openDropdownTarget);
         int visible = Math.min(5, options.size());
         int maxStart = Math.max(0, options.size() - visible);
@@ -6617,8 +6730,16 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private List<String> entryTypeOptions(EntryRowKind kind) {
-        if (kind == EntryRowKind.COMPLETION) return List.of("collect", "submit", "kill", "achieve", "effect", "xp", "levelup", "field");
-        if (kind == EntryRowKind.REWARD) return List.of("item", "xp", "command", "loot");
+        if (kind == EntryRowKind.COMPLETION) {
+            return LevelUpCompat.isAvailable()
+                    ? List.of("collect", "submit", "kill", "achieve", "effect", "xp", "levelup", "field")
+                    : List.of("collect", "submit", "kill", "achieve", "effect", "xp", "field");
+        }
+        if (kind == EntryRowKind.REWARD) {
+            return LevelUpCompat.isAvailable()
+                    ? List.of("item", "xp", "levelup", "command", "loot")
+                    : List.of("item", "xp", "command", "loot");
+        }
         return List.of();
     }
 
@@ -6641,12 +6762,21 @@ public final class QuestEditorScreen extends Screen {
         return itemPickerIconTarget != null || (itemPickerKind != null && itemPickerRow >= 0);
     }
 
+    private boolean itemPickerAllowsTags() {
+        if (pickerMode != PickerMode.ITEMS || itemPickerIconTarget != null || itemPickerKind != EntryRowKind.COMPLETION) return false;
+        List<ScaledMultiLineEditBox> rows = entryRows(itemPickerKind);
+        if (itemPickerRow < 0 || itemPickerRow >= rows.size()) return false;
+        String type = effectiveRowType(itemPickerKind, rows.get(itemPickerRow));
+        return "collect".equals(type) || "submit".equals(type) || "item".equals(type);
+    }
+
     private void openIconItemPicker(EditBox target) {
         if (target == null) return;
         itemPickerIconTarget = target;
         itemPickerKind = null;
         itemPickerRow = -1;
         pickerMode = PickerMode.ITEMS;
+        itemPickerTab = ItemPickerTab.CREATIVE;
         itemPickerPage = 0;
         if (itemPickerSearchBox == null) {
             itemPickerSearchBox = new EditBox(font, 0, 0, ITEM_PICKER_SEARCH_W, ITEM_PICKER_SEARCH_H, Component.literal("Search"));
@@ -6669,6 +6799,9 @@ public final class QuestEditorScreen extends Screen {
         itemPickerKind = kind;
         itemPickerRow = row;
         pickerMode = mode;
+        if (!itemPickerAllowsTags() && itemPickerTab == ItemPickerTab.TAGS) {
+            itemPickerTab = ItemPickerTab.CREATIVE;
+        }
         itemPickerPage = 0;
         if (itemPickerSearchBox == null) {
             itemPickerSearchBox = new EditBox(font, 0, 0, ITEM_PICKER_SEARCH_W, ITEM_PICKER_SEARCH_H, Component.literal("Search"));
@@ -6724,7 +6857,10 @@ public final class QuestEditorScreen extends Screen {
             int start = itemPickerPage * (ITEM_PICKER_COLS * ITEM_PICKER_ROWS);
             int at = start + idx;
             if (at >= 0 && at < items.size()) {
-                if (pickerMode == PickerMode.MOBS) {
+                if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
+                    List<String> tagIds = itemTagPickerIds();
+                    if (at < tagIds.size()) applyPickedItemTag(tagIds.get(at));
+                } else if (pickerMode == PickerMode.MOBS) {
                     List<String> mobIds = mobPickerIds();
                     if (at < mobIds.size()) applyPickedMob(mobIds.get(at));
                 } else {
@@ -6758,7 +6894,7 @@ public final class QuestEditorScreen extends Screen {
         String title = switch (pickerMode) {
             case EFFECTS -> "Effect Browser";
             case MOBS -> "Mob Browser";
-            default -> "Item Browser";
+            default -> itemPickerTab == ItemPickerTab.TAGS ? "Item groups" : "Item Browser";
         };
         gg.drawString(font, title, x + (ITEM_PICKER_W - font.width(title)) / 2, y + 4, 0xFF000000, false);
         int closeX = pickerCloseX(x);
@@ -6766,17 +6902,19 @@ public final class QuestEditorScreen extends Screen {
         gg.blit(X_BUTTON_TEX, closeX, closeY, 0, 0, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE);
         if (pickerMode == PickerMode.ITEMS) {
             renderPickerSideTab(gg, mouseX, mouseY, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16);
+            if (itemPickerAllowsTags()) renderPickerSideTab(gg, mouseX, mouseY, x, y, ItemPickerTab.TAGS, QUEST_TAB_SCROLL_ICON_TEX, 16, 16);
             renderPickerSideTab(gg, mouseX, mouseY, x, y, ItemPickerTab.INVENTORY, BROWSER_TAB_INVENTORY_TEX, 16, 16);
         }
         if (itemPickerSearchBox != null) {
             itemPickerSearchBox.setX(x + ITEM_PICKER_SEARCH_X);
-            itemPickerSearchBox.setY(y + ITEM_PICKER_SEARCH_Y);
+            itemPickerSearchBox.setY(y + ITEM_PICKER_SEARCH_Y + 1);
             itemPickerSearchBox.setWidth(ITEM_PICKER_SEARCH_W);
             itemPickerSearchBox.setTextColor(0xFFFFFFFF);
             itemPickerSearchBox.visible = true;
         }
         List<ItemStack> items = itemPickerDisplayItems();
         List<String> mobIds = pickerMode == PickerMode.MOBS ? mobPickerIds() : List.of();
+        List<String> tagIds = pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags() ? itemTagPickerIds() : List.of();
         int gridX = x + ITEM_PICKER_GRID_X;
         int gridY = y + ITEM_PICKER_GRID_Y;
         int start = itemPickerPage * (ITEM_PICKER_COLS * ITEM_PICKER_ROWS);
@@ -6794,6 +6932,8 @@ public final class QuestEditorScreen extends Screen {
                 ItemStack stack = items.get(at);
                 if (pickerMode == PickerMode.EFFECTS) {
                     renderEffectPickerIcon(gg, stack, sx + 1, sy + 1);
+                } else if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
+                    gg.renderItem(stack, sx + 1, sy + 1);
                 } else {
                     gg.renderItem(stack, sx + 1, sy + 1);
                 }
@@ -6804,7 +6944,10 @@ public final class QuestEditorScreen extends Screen {
             }
         }
         if (!hovered.isEmpty()) {
-            if (pickerMode == PickerMode.MOBS && hoveredIndex >= 0 && hoveredIndex < items.size()) {
+            if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags() && hoveredIndex >= 0) {
+                String tagId = hoveredIndex < tagIds.size() ? tagIds.get(hoveredIndex) : "";
+                gg.renderTooltip(font, Component.literal(tagId), mouseX, mouseY);
+            } else if (pickerMode == PickerMode.MOBS && hoveredIndex >= 0 && hoveredIndex < items.size()) {
                 String mobId = hoveredIndex < mobIds.size() ? mobIds.get(hoveredIndex) : "";
                 Component mobName = mobDisplayNameForMobId(mobId);
                 gg.renderTooltip(font, mobName, mouseX, mouseY);
@@ -6820,6 +6963,8 @@ public final class QuestEditorScreen extends Screen {
         if (pickerMode == PickerMode.ITEMS) {
             if (isMouseOverPickerSideTab(mouseX, mouseY, x, y, ItemPickerTab.CREATIVE)) {
                 gg.renderTooltip(font, Component.literal("All Items"), mouseX, mouseY);
+            } else if (itemPickerAllowsTags() && isMouseOverPickerSideTab(mouseX, mouseY, x, y, ItemPickerTab.TAGS)) {
+                gg.renderTooltip(font, Component.literal("Item Tags"), mouseX, mouseY);
             } else if (isMouseOverPickerSideTab(mouseX, mouseY, x, y, ItemPickerTab.INVENTORY)) {
                 gg.renderTooltip(font, Component.literal("Inventory"), mouseX, mouseY);
             }
@@ -6838,6 +6983,11 @@ public final class QuestEditorScreen extends Screen {
     private boolean clickPickerSideTab(double mouseX, double mouseY, int pickerX, int pickerY) {
         if (isMouseOverPickerSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE)) {
             itemPickerTab = ItemPickerTab.CREATIVE;
+            itemPickerPage = 0;
+            return true;
+        }
+        if (itemPickerAllowsTags() && isMouseOverPickerSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.TAGS)) {
+            itemPickerTab = ItemPickerTab.TAGS;
             itemPickerPage = 0;
             return true;
         }
@@ -6860,7 +7010,7 @@ public final class QuestEditorScreen extends Screen {
         boolean selected = itemPickerTab == tab;
         int tabX = pickerSideTabX(pickerX, tab);
         int tabY = pickerSideTabY(pickerY, tab);
-        int renderX = tabX;
+        int renderX = tabX + 1 - (selected ? 1 : 0);
         gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, tabY, 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
         int iconSize = Math.min(ITEM_PICKER_SIDE_TAB_ICON_SIZE, Math.min(iconTexW, iconTexH));
         int iconX = renderX + (TAB_W - iconSize) / 2;
@@ -6873,7 +7023,12 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private int pickerSideTabY(int pickerY, ItemPickerTab tab) {
-        return pickerY + ITEM_PICKER_SIDE_TAB_Y + (tab == ItemPickerTab.INVENTORY ? TAB_H + TAB_GAP : 0);
+        int index = switch (tab) {
+            case CREATIVE -> 0;
+            case TAGS -> 1;
+            case INVENTORY -> itemPickerAllowsTags() ? 2 : 1;
+        };
+        return pickerY + ITEM_PICKER_SIDE_TAB_Y + index * (TAB_H + TAB_GAP);
     }
 
     private int pickerCloseX(int pickerX) {
@@ -6908,6 +7063,12 @@ public final class QuestEditorScreen extends Screen {
             }
             return out;
         }
+        if (itemPickerTab == ItemPickerTab.TAGS) {
+            for (String tagId : itemTagPickerIds()) {
+                out.add(itemTagIconStack(tagId));
+            }
+            return out;
+        }
         if (minecraft.player == null) return out;
         for (ItemStack stack : minecraft.player.getInventory().items) {
             if (stack == null || stack.isEmpty()) continue;
@@ -6917,6 +7078,41 @@ public final class QuestEditorScreen extends Screen {
             out.add(stack.copy());
         }
         return out;
+    }
+
+    private List<String> itemTagPickerIds() {
+        ensureItemTagIdCache();
+        String query = safe(itemPickerSearchBox == null ? "" : itemPickerSearchBox.getValue()).trim().toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (String tagId : itemTagIdCache) {
+            if (!query.isBlank() && !tagId.toLowerCase(Locale.ROOT).contains(query)) continue;
+            out.add(tagId);
+        }
+        return out;
+    }
+
+    private ItemStack itemTagIconStack(String tagId) {
+        ResourceLocation tagRl = ResourceLocation.tryParse(stripTagPrefix(tagId));
+        if (tagRl != null) {
+            TagKey<Item> tag = TagKey.create(net.minecraft.core.registries.Registries.ITEM, tagRl);
+            List<Item> matching = new ArrayList<>();
+            for (Item item : BuiltInRegistries.ITEM) {
+                if (item == null || item == net.minecraft.world.item.Items.AIR) continue;
+                ItemStack stack = new ItemStack(item);
+                if (stack.is(tag)) {
+                    matching.add(item);
+                }
+            }
+            if (!matching.isEmpty()) {
+                int index = (int) ((Util.getMillis() / 900L) % matching.size());
+                ItemStack stack = new ItemStack(matching.get(index));
+                stack.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(tagId));
+                return stack;
+            }
+        }
+        ItemStack fallback = new ItemStack(net.minecraft.world.item.Items.PAPER);
+        fallback.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(tagId));
+        return fallback;
     }
 
     private List<ItemStack> itemPickerDisplayItems() {
@@ -7007,6 +7203,30 @@ public final class QuestEditorScreen extends Screen {
             entryCountByBox.put(box, Math.max(1, picked.getCount()));
         }
         box.setValue(value);
+        box.setFocused(true);
+        entryRowsDirty = true;
+        syncEntryBackingValues();
+    }
+
+    private void applyPickedItemTag(String tagId) {
+        if (!isItemPickerOpen()) return;
+        String normalized = normalizeNamespacedId(tagId, true);
+        if (normalized.isBlank() || !normalized.startsWith("#")) return;
+        if (itemPickerIconTarget != null) {
+            itemPickerIconTarget.setValue(normalized);
+            itemPickerIconTarget.setCursorPosition(normalized.length());
+            markCurrentEditorUnsaved();
+            return;
+        }
+        List<ScaledMultiLineEditBox> rows = entryRows(itemPickerKind);
+        if (itemPickerRow < 0 || itemPickerRow >= rows.size()) return;
+        ScaledMultiLineEditBox box = rows.get(itemPickerRow);
+        selectedItemIdByBox.put(box, normalized);
+        selectedItemComponentsByBox.remove(box);
+        if (rowHasCount(itemPickerKind, effectiveRowType(itemPickerKind, box))) {
+            entryCountByBox.put(box, 1);
+        }
+        box.setValue(normalized);
         box.setFocused(true);
         entryRowsDirty = true;
         syncEntryBackingValues();
@@ -7124,9 +7344,13 @@ public final class QuestEditorScreen extends Screen {
             if (parsed == null || parsed.id.isBlank()) return ItemStack.EMPTY;
             idPart = QuestItemSpec.stripComponents(parsed.id.trim().split("\\s+")[0]);
         }
+        if (idPart.startsWith("#")) return itemTagIconStack(idPart);
         if ("effect".equals(type)) return effectIconStack(idPart);
         if ("kill".equals(type) || "entity".equals(type)) return mobEggIconStack(idPart);
-        String normalized = normalizeNamespacedId(QuestItemSpec.stripComponents(idPart), false);
+        String strippedId = QuestItemSpec.stripComponents(idPart);
+        String normalized = strippedId.startsWith("#")
+                ? normalizeNamespacedId(strippedId.substring(1), false)
+                : normalizeNamespacedId(strippedId, false);
         ResourceLocation rl = ResourceLocation.tryParse(normalized);
         if (rl == null) return ItemStack.EMPTY;
         if (!BuiltInRegistries.ITEM.containsKey(rl)) return ItemStack.EMPTY;
@@ -7157,6 +7381,23 @@ public final class QuestEditorScreen extends Screen {
             if (rl != null) itemIdCache.add(rl.toString());
         }
         itemIdCache.sort(String::compareTo);
+    }
+
+    private void ensureItemTagIdCache() {
+        if (!itemTagIdCache.isEmpty()) return;
+        BuiltInRegistries.ITEM.getTagNames()
+                .map(TagKey::location)
+                .filter(Objects::nonNull)
+                .filter(rl -> !"c".equals(rl.getNamespace()))
+                .map(rl -> "#" + rl)
+                .distinct()
+                .sorted(String::compareTo)
+                .forEach(itemTagIdCache::add);
+    }
+
+    private String stripTagPrefix(String tagId) {
+        String value = safe(tagId).trim();
+        return value.startsWith("#") ? value.substring(1).trim() : value;
     }
 
     private void ensureEntityIdCache() {
@@ -7476,7 +7717,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private static final class ScaledMultiLineEditBox extends AbstractScrollWidget {
-        private static final int CURSOR_INSERT_COLOR = -3092272;
+        private static final int CURSOR_INSERT_COLOR = 0xFFFFFFFF;
         private static final int TEXT_COLOR = -2039584;
         private static final int PLACEHOLDER_TEXT_COLOR = -857677600;
         private static final int CURSOR_BLINK_INTERVAL_MS = 300;
@@ -7641,6 +7882,16 @@ public final class QuestEditorScreen extends Screen {
         }
 
         @Override
+        protected void renderBackground(GuiGraphics guiGraphics) {
+            int border = this.isFocused() ? 0xFFFFFFFF : 0xFF8A8A8A;
+            guiGraphics.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, 0xFF000000);
+            guiGraphics.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + 1, border);
+            guiGraphics.fill(this.getX(), this.getY() + this.height - 1, this.getX() + this.width, this.getY() + this.height, border);
+            guiGraphics.fill(this.getX(), this.getY(), this.getX() + 1, this.getY() + this.height, border);
+            guiGraphics.fill(this.getX() + this.width - 1, this.getY(), this.getX() + this.width, this.getY() + this.height, border);
+        }
+
+        @Override
         protected void renderContents(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
             String text = this.textField.value();
             float invScale = 1.0f / this.textScale;
@@ -7660,28 +7911,24 @@ public final class QuestEditorScreen extends Screen {
             int activeColor = this.textColor;
             double lineScreenY = this.getY() + this.innerPadding();
             double lastLineScreenY = lineScreenY;
+            int cursorRenderX = -1;
+            int cursorRenderY = -1;
 
             for (ScaledTextField.StringView line : this.textField.iterateLines()) {
                 boolean visible = this.withinContentAreaTopBottom((int) lineScreenY, (int) (lineScreenY + this.lineHeight));
-                if (showCursor && cursorInText && cursor >= line.beginIndex() && cursor <= line.endIndex()) {
-                    if (visible) {
-                        int drawY = Math.round((float) (lineScreenY * invScale));
-                        long beforeCursor = drawFormattedString(guiGraphics, text.substring(line.beginIndex(), cursor), baseX, drawY, activeColor);
-                        drawX = unpackEndX(beforeCursor) - 1;
-                        activeColor = unpackFinalColor(beforeCursor);
-                        guiGraphics.fill(drawX, drawY - 1, drawX + 1, drawY + 1 + this.font.lineHeight, CURSOR_INSERT_COLOR);
-                        long afterCursor = drawFormattedString(guiGraphics, text.substring(cursor, line.endIndex()), drawX, drawY, activeColor);
-                        activeColor = unpackFinalColor(afterCursor);
+                String lineText = text.substring(line.beginIndex(), line.endIndex());
+                int lineInitialColor = activeColor;
+                if (visible) {
+                    int drawY = Math.round((float) (lineScreenY * invScale));
+                    long lineRender = drawFormattedString(guiGraphics, lineText, baseX, drawY, activeColor);
+                    drawX = unpackEndX(lineRender);
+                    activeColor = unpackFinalColor(lineRender);
+                    if (cursor >= line.beginIndex() && cursor <= line.endIndex()) {
+                        cursorRenderX = cursorXForLine(text, line, cursor, baseX, lineInitialColor);
+                        cursorRenderY = drawY;
                     }
                 } else {
-                    if (visible) {
-                        int drawY = Math.round((float) (lineScreenY * invScale));
-                        long lineRender = drawFormattedString(guiGraphics, text.substring(line.beginIndex(), line.endIndex()), baseX, drawY, activeColor);
-                        drawX = unpackEndX(lineRender) - 1;
-                        activeColor = unpackFinalColor(lineRender);
-                    } else {
-                        activeColor = unpackFinalColor(drawFormattedString(null, text.substring(line.beginIndex(), line.endIndex()), baseX, 0, activeColor));
-                    }
+                    activeColor = unpackFinalColor(drawFormattedString(null, lineText, baseX, 0, activeColor));
                 }
 
                 lastLineScreenY = lineScreenY;
@@ -7691,7 +7938,8 @@ public final class QuestEditorScreen extends Screen {
             if (showCursor && !cursorInText
                     && this.withinContentAreaTopBottom((int) lastLineScreenY, (int) (lastLineScreenY + this.lineHeight))) {
                 int drawY = Math.round((float) (lastLineScreenY * invScale));
-                guiGraphics.drawString(this.font, "_", drawX, drawY, CURSOR_INSERT_COLOR, false);
+                cursorRenderX = drawX;
+                cursorRenderY = drawY;
             }
 
             if (this.textField.hasSelection()) {
@@ -7723,11 +7971,13 @@ public final class QuestEditorScreen extends Screen {
                     selScreenY += this.lineHeight;
                 }
             }
+            if (showCursor && cursorRenderX >= 0 && cursorRenderY >= 0) {
+                renderCursor(guiGraphics, cursorRenderX, cursorRenderY);
+            }
         }
 
         @Override
         protected void renderDecorations(GuiGraphics guiGraphics) {
-            super.renderDecorations(guiGraphics);
         }
 
         @Override
@@ -7748,6 +7998,16 @@ public final class QuestEditorScreen extends Screen {
 
         private void renderHighlight(GuiGraphics guiGraphics, int minX, int minY, int maxX, int maxY) {
             guiGraphics.fill(RenderType.guiTextHighlight(), minX, minY, maxX, maxY, -16776961);
+        }
+
+        private void renderCursor(GuiGraphics guiGraphics, int x, int y) {
+            guiGraphics.fill(x, y - 1, x + 1, y + 1 + this.font.lineHeight, CURSOR_INSERT_COLOR);
+        }
+
+        private int cursorXForLine(String fullText, ScaledTextField.StringView line, int cursor, int baseX, int initialColor) {
+            int boundedCursor = Mth.clamp(cursor, line.beginIndex(), line.endIndex());
+            String beforeCursor = fullText.substring(line.beginIndex(), boundedCursor);
+            return unpackEndX(drawFormattedString(null, beforeCursor, baseX, 0, initialColor));
         }
 
         private void scrollToCursor() {
@@ -7794,19 +8054,13 @@ public final class QuestEditorScreen extends Screen {
             boolean bold = false;
             boolean italic = false;
             boolean encrypted = false;
+            boolean highlight = false;
             StringBuilder segment = new StringBuilder();
             for (int i = 0; i < text.length(); i++) {
                 if (startsWithColorToken(text, i)) {
                     if (!segment.isEmpty()) {
                         if (guiGraphics != null) {
-                            drawX = guiGraphics.drawString(
-                                    this.font,
-                                    Component.literal(segment.toString()).withStyle(Style.EMPTY.withColor(color).withBold(bold).withItalic(italic).withObfuscated(encrypted)),
-                                    drawX,
-                                    y,
-                                    color,
-                                    false
-                            );
+                            drawX = drawStyledSegment(guiGraphics, segment.toString(), drawX, y, color, bold, italic, encrypted, highlight);
                         } else {
                             drawX += this.font.width(segment.toString());
                         }
@@ -7825,11 +8079,14 @@ public final class QuestEditorScreen extends Screen {
                         italic = !italic;
                     } else if (code == 'e') {
                         encrypted = !encrypted;
+                    } else if (code == 'h') {
+                        highlight = !highlight;
                     } else if (code == 'x') {
                         color = this.textColor & 0xFFFFFF;
                         bold = false;
                         italic = false;
                         encrypted = false;
+                        highlight = false;
                     } else {
                         color = formatColor(code, this.textColor);
                     }
@@ -7840,19 +8097,53 @@ public final class QuestEditorScreen extends Screen {
             }
             if (!segment.isEmpty()) {
                 if (guiGraphics != null) {
-                    drawX = guiGraphics.drawString(
-                            this.font,
-                            Component.literal(segment.toString()).withStyle(Style.EMPTY.withColor(color).withBold(bold).withItalic(italic).withObfuscated(encrypted)),
-                            drawX,
-                            y,
-                            color,
-                            false
-                    );
+                    drawX = drawStyledSegment(guiGraphics, segment.toString(), drawX, y, color, bold, italic, encrypted, highlight);
                 } else {
                     drawX += this.font.width(segment.toString());
                 }
             }
             return packRenderResult(drawX, color);
+        }
+
+        private int drawStyledSegment(GuiGraphics guiGraphics, String text, int x, int y, int color,
+                                      boolean bold, boolean italic, boolean encrypted, boolean highlight) {
+            if (!highlight || text == null || text.isEmpty()) {
+                return guiGraphics.drawString(
+                        this.font,
+                        Component.literal(text).withStyle(Style.EMPTY.withColor(color).withBold(bold).withItalic(italic).withObfuscated(encrypted)),
+                        x,
+                        y,
+                        color,
+                        false
+                );
+            }
+            int drawX = x;
+            int length = Math.max(1, text.length());
+            float phase = (Util.getMillis() % 1800L) / 1800.0f;
+            for (int i = 0; i < text.length(); i++) {
+                String ch = String.valueOf(text.charAt(i));
+                float position = i / (float) length;
+                float distance = Math.abs(position - phase);
+                distance = Math.min(distance, 1.0f - distance);
+                float shine = Mth.clamp(1.0f - distance / 0.22f, 0.0f, 1.0f);
+                int shineColor = lightenColor(color, 44 + Math.round(110.0f * shine));
+                drawX = guiGraphics.drawString(
+                        this.font,
+                        Component.literal(ch).withStyle(Style.EMPTY.withColor(shineColor).withBold(bold).withItalic(italic).withObfuscated(encrypted)),
+                        drawX,
+                        y,
+                        shineColor,
+                        false
+                );
+            }
+            return drawX;
+        }
+
+        private int lightenColor(int color, int amount) {
+            int r = Math.min(255, ((color >>> 16) & 0xFF) + amount);
+            int g = Math.min(255, ((color >>> 8) & 0xFF) + amount);
+            int b = Math.min(255, (color & 0xFF) + amount);
+            return (r << 16) | (g << 8) | b;
         }
 
         private boolean startsWithColorToken(String text, int index) {
@@ -7878,7 +8169,7 @@ public final class QuestEditorScreen extends Screen {
 
         private boolean isColorTokenCode(char code) {
             return switch (Character.toLowerCase(code)) {
-                case 'w', 'r', 'g', 'b', 'y', 'o', 'a', 'p', 'x', 'l', 'i', 'e' -> true;
+                case 'w', 'r', 'g', 'b', 'y', 'o', 'a', 'p', 'x', 'l', 'i', 'e', 'h' -> true;
                 default -> false;
             };
         }
@@ -8677,6 +8968,7 @@ public final class QuestEditorScreen extends Screen {
 
     private enum ItemPickerTab {
         CREATIVE,
+        TAGS,
         INVENTORY
     }
 
@@ -9191,7 +9483,7 @@ public final class QuestEditorScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean selected = mode == targetMode;
-            int renderX = getX();
+            int renderX = getX() + 1 - (selected ? 1 : 0);
             gg.blit(selected ? TAB_SELECTED_TEX : TAB_TEX, renderX, getY(), 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
             int iconX = renderX + (TAB_W - 16) / 2;
             int iconY = getY() + 5;
@@ -9262,6 +9554,10 @@ public final class QuestEditorScreen extends Screen {
         @Override
         public void onPress() {
             if (onPress != null) onPress.accept(insertText);
+        }
+
+        String insertText() {
+            return insertText;
         }
 
         @Override
