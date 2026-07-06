@@ -177,7 +177,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         tabs.active = showTabs;
 
         if (header != null) {
-            boolean showHeader = !showingDetails && !Config.hideCategoryHeader() && !Config.disableCategories();
+            boolean showHeader = !Config.hideCategoryHeader() && !Config.disableCategories();
             header.visible = showHeader;
             header.active = false;
         }

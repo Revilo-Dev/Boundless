@@ -43,8 +43,10 @@ public final class CategoryTabsWidget extends AbstractWidget {
     private String selected = "";
     private int pageIndex = 0;
 
-    private int cellW = 26;
-    private int cellH = 26;
+    private static final int TAB_W = 35;
+    private static final int TAB_H = 27;
+    private int cellW = TAB_W;
+    private int cellH = TAB_H;
     private int gap = 2;
 
     // Tooltip state (rendered later, on top)
@@ -159,8 +161,9 @@ public final class CategoryTabsWidget extends AbstractWidget {
             boolean sel = !selected.isBlank() && c.id.equalsIgnoreCase(selected);
             ResourceLocation tex = sel ? TAB_SELECTED : TAB;
 
-            gg.blit(tex, x, top, 0, 0, cellW, cellH, cellW, cellH);
-            c.iconItem().ifPresent(it -> gg.renderItem(new ItemStack(it), x + 5, top + 5));
+            int renderX = x + 2 - (sel ? 1 : 0);
+            gg.blit(tex, renderX, top, 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
+            c.iconItem().ifPresent(it -> gg.renderItem(new ItemStack(it), renderX + 10, top + 5));
 
             boolean hover = mouseX >= x && mouseX < x + cellW && mouseY >= top && mouseY < top + cellH;
             if (hover) {

@@ -14,6 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.Util;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.entity.EntityType;
@@ -183,6 +184,24 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    private static final class StyledDescriptionChar {
+        final char value;
+        final int color;
+        final boolean bold;
+        final boolean italic;
+        final boolean encrypted;
+        final boolean highlight;
+
+        StyledDescriptionChar(char value, int color, boolean bold, boolean italic, boolean encrypted, boolean highlight) {
+            this.value = value;
+            this.color = color;
+            this.bold = bold;
+            this.italic = italic;
+            this.encrypted = encrypted;
+            this.highlight = highlight;
+        }
+    }
+
     public AbstractButton backButton() { return back; }
     public AbstractButton completeButton() { return complete; }
     public AbstractButton rejectButton() { return reject; }
@@ -299,10 +318,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 shown = full.substring(0, cut) + "...";
             }
 
-            Component shownComponent = formatColorCodes(shown, 0xCFCFCF);
-            drawScaledWordWrap(gg, shownComponent, x + 4, curY[0], w - 8, 0xCFCFCF);
+            int wrapHeight = drawFormattedDescription(gg, shown, x + 4, curY[0], w - 8, 0xCFCFCF);
             addDescriptionItemRegions(stripColorTokens(shown), x + 4, curY[0], w - 8);
-            int wrapHeight = scaledWrappedHeight(shownComponent, w - 8);
 
             if (needsMore) {
                 int toggleY = curY[0] + wrapHeight + 2;
@@ -768,6 +785,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             String txt = switch (quest.rewards.expType) {
                 case "levels" -> Component.translatable("ui.boundless.questbook.levels_amount", quest.rewards.expAmount).getString();
                 case "levelup" -> Component.translatable("ui.boundless.questbook.levelup_xp_amount", quest.rewards.expAmount).getString();
+                case "levelup_levels" -> Component.translatable("ui.boundless.questbook.levelup_levels_amount", quest.rewards.expAmount).getString();
                 default -> Component.translatable("ui.boundless.questbook.xp_amount", quest.rewards.expAmount).getString();
             };
             drawScaledString(gg, txt, x + 24, lineY + 6, 0xA8FFA8);
@@ -832,7 +850,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 shown = full.substring(0, cut) + "...";
             }
 
-            int wrapH = scaledWrappedHeight(formatColorCodes(shown, 0xCFCFCF), w - 8);
+            int wrapH = formattedDescriptionHeight(shown, w - 8, 0xCFCFCF);
             if (needsMore) y += wrapH + scaledLineHeight() + 6;
             else y += wrapH + 8;
         }
@@ -985,6 +1003,131 @@ public final class QuestDetailsPanel extends AbstractWidget {
         gg.pose().popPose();
     }
 
+    private int drawFormattedDescription(GuiGraphics gg, String raw, int x, int y, int physicalWidth, int defaultColor) {
+        if (physicalWidth <= 0) return 0;
+        if (!Config.enableDescriptionColors()) {
+            Component plain = Component.literal(stripColorTokens(raw)).withStyle(Style.EMPTY.withColor(defaultColor));
+            drawScaledWordWrap(gg, plain, x, y, physicalWidth, defaultColor);
+            return scaledWrappedHeight(plain, physicalWidth);
+        }
+        List<List<StyledDescriptionChar>> lines = wrapFormattedDescription(raw, scaledWrapWidth(physicalWidth), defaultColor);
+        if (lines.isEmpty()) return scaledLineHeight();
+
+        float scale = textScale();
+        float inv = 1.0f / scale;
+        int baseX = (int) (x * inv);
+        int baseY = (int) (y * inv);
+        gg.pose().pushPose();
+        gg.pose().scale(scale, scale, 1f);
+        int globalIndex = 0;
+        for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
+            int drawX = baseX;
+            int drawY = baseY + lineIndex * mc.font.lineHeight;
+            for (StyledDescriptionChar ch : lines.get(lineIndex)) {
+                int color = ch.highlight ? highlightColor(ch.color, globalIndex) : ch.color;
+                drawX = gg.drawString(mc.font,
+                        Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
+                                .withColor(color)
+                                .withBold(ch.bold)
+                                .withItalic(ch.italic)
+                                .withObfuscated(ch.encrypted)),
+                        drawX,
+                        drawY,
+                        color,
+                        false);
+                globalIndex++;
+            }
+        }
+        gg.pose().popPose();
+        return Math.max(1, Math.round(lines.size() * mc.font.lineHeight * scale));
+    }
+
+    private int formattedDescriptionHeight(String raw, int physicalWidth, int defaultColor) {
+        if (physicalWidth <= 0) return 0;
+        if (!Config.enableDescriptionColors()) {
+            return scaledWrappedHeight(Component.literal(stripColorTokens(raw)).withStyle(Style.EMPTY.withColor(defaultColor)), physicalWidth);
+        }
+        return Math.max(1, Math.round(wrapFormattedDescription(raw, scaledWrapWidth(physicalWidth), defaultColor).size() * mc.font.lineHeight * textScale()));
+    }
+
+    private List<List<StyledDescriptionChar>> wrapFormattedDescription(String raw, int wrapWidth, int defaultColor) {
+        List<StyledDescriptionChar> chars = parseDescriptionChars(raw, defaultColor);
+        List<List<StyledDescriptionChar>> lines = new ArrayList<>();
+        List<StyledDescriptionChar> line = new ArrayList<>();
+        int lineWidth = 0;
+        for (StyledDescriptionChar ch : chars) {
+            if (ch.value == '\n') {
+                lines.add(line);
+                line = new ArrayList<>();
+                lineWidth = 0;
+                continue;
+            }
+            int charWidth = mc.font.width(String.valueOf(ch.value));
+            if (!line.isEmpty() && lineWidth + charWidth > wrapWidth) {
+                lines.add(line);
+                line = new ArrayList<>();
+                lineWidth = 0;
+                if (ch.value == ' ') continue;
+            }
+            line.add(ch);
+            lineWidth += charWidth;
+        }
+        if (!line.isEmpty() || lines.isEmpty()) lines.add(line);
+        return lines;
+    }
+
+    private List<StyledDescriptionChar> parseDescriptionChars(String raw, int defaultColor) {
+        List<StyledDescriptionChar> chars = new ArrayList<>();
+        String text = raw == null ? "" : raw;
+        int color = defaultColor;
+        boolean bold = false;
+        boolean italic = false;
+        boolean encrypted = false;
+        boolean highlight = false;
+        for (int i = 0; i < text.length(); i++) {
+            if (startsWithColorToken(text, i)) {
+                char code = Character.toLowerCase(text.charAt(i + 1));
+                if (code == 'l') {
+                    bold = !bold;
+                } else if (code == 'i') {
+                    italic = !italic;
+                } else if (code == 'e') {
+                    encrypted = !encrypted;
+                } else if (code == 'h') {
+                    highlight = !highlight;
+                } else if (code == 'x') {
+                    color = defaultColor;
+                    bold = false;
+                    italic = false;
+                    encrypted = false;
+                    highlight = false;
+                } else {
+                    color = formatColor(code, defaultColor);
+                }
+                i += 1;
+                continue;
+            }
+            chars.add(new StyledDescriptionChar(text.charAt(i), color, bold, italic, encrypted, highlight));
+        }
+        return chars;
+    }
+
+    private int highlightColor(int baseColor, int index) {
+        float phase = (Util.getMillis() % 1800L) / 1800.0f;
+        float position = (index % 36) / 36.0f;
+        float distance = Math.abs(position - phase);
+        distance = Math.min(distance, 1.0f - distance);
+        float shine = Mth.clamp(1.0f - distance / 0.22f, 0.0f, 1.0f);
+        return lightenColor(baseColor, 44 + Math.round(110.0f * shine));
+    }
+
+    private int lightenColor(int color, int amount) {
+        int r = Math.min(255, ((color >>> 16) & 0xFF) + amount);
+        int g = Math.min(255, ((color >>> 8) & 0xFF) + amount);
+        int b = Math.min(255, (color & 0xFF) + amount);
+        return (r << 16) | (g << 8) | b;
+    }
+
     private void renderScaledItem(GuiGraphics gg, ItemStack stack, int x, int y) {
         if (stack == null || stack.isEmpty()) return;
         float scale = Config.questIconScale();
@@ -1088,6 +1231,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     italic = !italic;
                 } else if (code == 'e') {
                     encrypted = !encrypted;
+                } else if (code == 'h') {
+                    // Highlight animation is rendered by drawFormattedDescription.
                 } else if (code == 'x') {
                     current = defaultColor;
                     bold = false;
@@ -1128,7 +1273,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private boolean isColorTokenCode(char code) {
         return switch (Character.toLowerCase(code)) {
-            case 'w', 'r', 'g', 'b', 'y', 'o', 'a', 'p', 'x', 'l', 'i', 'e' -> true;
+            case 'w', 'r', 'g', 'b', 'y', 'o', 'a', 'p', 'x', 'l', 'i', 'e', 'h' -> true;
             default -> false;
         };
     }
