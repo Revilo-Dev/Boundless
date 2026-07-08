@@ -564,6 +564,7 @@ public final class QuestEditorScreen extends Screen {
         initEntryRowBoxes();
         initDescriptionFormatterButtons();
 
+        attachPackNameSanitizer(packNameBox);
         attachIdSanitizer(packNamespaceBox, false);
         attachIdSanitizer(packIconPathBox, false);
         attachIdSanitizer(catIdBox, false);
@@ -1415,7 +1416,8 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void savePackCreate() {
-        String name = safe(packNameBox.getValue()).trim();
+        String name = normalizeQuestPackNameInput(packNameBox.getValue()).trim();
+        if (packNameBox != null && !name.equals(packNameBox.getValue())) packNameBox.setValue(name);
         String namespace = namespaceFromPackName(name);
         if (name.isBlank()) {
             setError("Pack name required");
@@ -1454,7 +1456,8 @@ public final class QuestEditorScreen extends Screen {
     private void savePackOptions() {
         if (currentPack == null) return;
 
-        String requestedName = safe(packNameBox.getValue()).trim();
+        String requestedName = normalizeQuestPackNameInput(packNameBox.getValue()).trim();
+        if (packNameBox != null && !requestedName.equals(packNameBox.getValue())) packNameBox.setValue(requestedName);
         String requestedNamespace = namespaceFromPackName(requestedName);
         if (requestedName.isBlank()) {
             setError("Pack name required");
@@ -3747,6 +3750,21 @@ public final class QuestEditorScreen extends Screen {
         });
     }
 
+    private void attachPackNameSanitizer(EditBox box) {
+        if (box == null) return;
+        box.setResponder(value -> {
+            if (suppressIdSanitizer) return;
+            String normalized = normalizeQuestPackNameInput(value);
+            if (normalized.equals(value)) return;
+            int cursor = box.getCursorPosition();
+            suppressIdSanitizer = true;
+            box.setValue(normalized);
+            box.setCursorPosition(Math.min(cursor, normalized.length()));
+            box.setHighlightPos(box.getCursorPosition());
+            suppressIdSanitizer = false;
+        });
+    }
+
     private String normalizeIdInput(String value, boolean commaSeparated) {
         String raw = safe(value);
         if (raw.isEmpty()) return raw;
@@ -3761,6 +3779,28 @@ public final class QuestEditorScreen extends Screen {
             String trimmedLeading = p.replaceAll("^\\s+", "");
             String normalized = trimmedLeading.toLowerCase(Locale.ROOT).replace(' ', '-');
             out.append(normalized);
+        }
+        return out.toString();
+    }
+
+    private String normalizeQuestPackNameInput(String value) {
+        String raw = safe(value);
+        if (raw.isEmpty()) return raw;
+        StringBuilder out = new StringBuilder(raw.length());
+        boolean lastWasDash = false;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = Character.toLowerCase(raw.charAt(i));
+            if (Character.isWhitespace(c)) {
+                if (!lastWasDash) {
+                    out.append('-');
+                    lastWasDash = true;
+                }
+                continue;
+            }
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-') {
+                out.append(c);
+                lastWasDash = c == '-';
+            }
         }
         return out.toString();
     }
@@ -3896,7 +3936,7 @@ public final class QuestEditorScreen extends Screen {
 
     private boolean isInvalidPackFolderName(String name) {
         String value = safe(name).trim();
-        return value.isBlank() || value.matches(".*[<>:\"/\\\\|?*].*");
+        return value.isBlank() || !value.equals(normalizeQuestPackNameInput(value)) || !value.matches("[a-z0-9_.-]+");
     }
 
     private boolean isInvalidNamespace(String namespace) {
@@ -3905,10 +3945,9 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private String namespaceFromPackName(String packName) {
-        String value = safe(packName).trim().toLowerCase(Locale.ROOT);
+        String value = normalizeQuestPackNameInput(packName).trim();
         if (value.isBlank()) return "pack";
-        String normalized = value.replaceAll("[^a-z0-9_.-]", "_");
-        normalized = normalized.replaceAll("_+", "_");
+        String normalized = value.replaceAll("-+", "-");
         normalized = normalized.replaceAll("^[_\\.-]+|[_\\.-]+$", "");
         if (normalized.isBlank()) return "pack";
         return normalized;
