@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "darkerdepths:item/void_soul_spawn_egg"
+  }
+}

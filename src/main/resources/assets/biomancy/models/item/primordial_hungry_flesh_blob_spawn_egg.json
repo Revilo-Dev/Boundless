@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "biomancy:item/primordial_hungry_flesh_blob_spawn_egg"
+  }
+}

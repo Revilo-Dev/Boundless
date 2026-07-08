@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "creeperoverhaul:item/jungle_creeper_spawn_egg"
+  }
+}

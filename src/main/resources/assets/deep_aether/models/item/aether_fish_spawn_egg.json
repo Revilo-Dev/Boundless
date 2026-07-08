@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "deep_aether:item/aether_fish_spawn_egg"
+  }
+}

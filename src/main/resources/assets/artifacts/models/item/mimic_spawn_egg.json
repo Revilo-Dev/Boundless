@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "artifacts:item/mimic_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "companions:item/broken_dinamo_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "benssharks:item/sawshark_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "nomansland:item/billhook_bass_spawn_egg"
+  }
+}

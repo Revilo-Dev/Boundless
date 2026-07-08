@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mysticsbiomes:item/sea_otter_spawn_egg"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "category": "minecraft",
+  "sub-category": "mid_game",
+  "id": "enchanting",
+  "name": "Enchanting",
+  "icon": "minecraft:enchanting_table",
+  "description": "Craft an enchanting table and begin empowering your gear.",
+  "dependencies": "diamonds",
+  "optional": "false",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:enchanting_table", "count": 1 }
+    ]
+  },
+  "reward": {
+    "items": [
+      { "item": "minecraft:bookshelf", "count": 5 },
+      { "item": "minecraft:book", "count": 3 }
+    ],
+    "exp": "points",
+    "count": 120
+  }
+}

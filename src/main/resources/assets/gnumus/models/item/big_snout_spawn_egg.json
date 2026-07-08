@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "gnumus:item/big_snout_spawn_egg"
+  }
+}

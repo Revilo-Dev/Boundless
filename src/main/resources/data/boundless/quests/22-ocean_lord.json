@@ -1,0 +1,23 @@
+{
+  "category": "minecraft",
+  "sub-category": "extra",
+  "id": "Ocean Monuments",
+  "name": "Ocean Monuments",
+  "icon": "minecraft:conduit",
+  "description": "Defeat an ocean monument and gather precious wet sponges.",
+  "dependencies": "treasure_hunter",
+  "optional": "true",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:sponge", "count": 10 },
+      { "kill": "minecraft:elder_guardian", "count": 3 }
+    ]
+  },
+  "reward": {
+    "items": [
+      { "item": "minecraft:trident", "count": 1 }
+    ],
+    "exp": "points",
+    "count": 200
+  }
+}

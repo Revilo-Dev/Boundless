@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "soulsweapons:item/day_stalker_spawn_egg"
+  }
+}

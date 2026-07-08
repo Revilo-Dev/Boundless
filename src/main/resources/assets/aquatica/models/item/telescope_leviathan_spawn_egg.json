@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "aquatica:item/telescope_leviathan_spawn_egg"
+  }
+}

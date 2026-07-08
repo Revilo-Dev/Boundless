@@ -1,0 +1,47 @@
+{
+  "//CATEGORY": "The category this quest belongs to. Use 'minecraft' or your own custom category.",
+  "category": "minecraft",
+
+  "//SUB-CATEGORY": "Define a sub category for this quest to appear under, define subs under a sub-category folder in the quest folder.",
+  "sub-category": "getting_started",
+
+  "//ID": "A unique id for this quest. Do NOT use spaces or caps.",
+  "id": "example_quest",
+
+  "//NAME": "The display name of the quest shown to the player.",
+  "name": "Example Quest",
+
+  "//ICON": "The icon displayed in the UI. Format: namespace:item",
+  "icon": "minecraft:stone",
+
+  "//DESCRIPTION": "Explain what the player should do, or teach the player something.",
+  "description": "This is an example quest showing the correct format.",
+
+  "//DEPENDENCIES": "A list OR string of quest IDs required before this quest unlocks, blank = no dependencies required.",
+  "dependencies": "quest1, quest2",
+
+  "//OPTIONAL": "Whether the quest is optional. Not recommended to set a quest with dependencies as optional.",
+  "optional": "true",
+
+
+  "//COMPLETION": "The quest objective can be multiple or a single goal.",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:crafting_table", "count": 1 },
+      { "submit": "minecraft:diamond", "count": 5 },
+      { "kill": "minecraft:zombie", "count": 3 },
+      { "achieve": "minecraft:story/mine_stone" },
+      { "effect": "minecraft:haste" }
+    ]
+  },
+
+  "//REWARD": "Rewards granted when completing the quest. Supports items, commands, and XP.",
+  "reward": {
+    "items": [{ "item": "minecraft:diamond", "count": 1 }],
+    "commands": [{ "command": "give @s minecraft:apple", "icon": "namespace:item", "title": "" }],
+    "functions": [{ "function": "function_example:test", "icon": "namespace:item", "title": "" }],
+    "exp": "points", "//EXP": "Either points or levels", "count": 50
+  },
+
+  "//TIP": "When naming quests, prefix with numbers (01-, 02-, 03-) to control the order."
+}

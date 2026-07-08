@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "bygonenether:item/wex_spawn_egg"
+  }
+}

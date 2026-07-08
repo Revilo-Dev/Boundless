@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "mowziesmobs:item/naga_spawn_egg"
+  }
+}

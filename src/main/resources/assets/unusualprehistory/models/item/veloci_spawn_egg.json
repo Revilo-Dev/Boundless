@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "unusualprehistory:item/veloci_spawn_egg"
+  }
+}

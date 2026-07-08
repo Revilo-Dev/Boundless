@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "minecraft:item/drowned_spawn_egg"
+  }
+}

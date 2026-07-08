@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "eeeabsmobs:item/guling_sentinel_egg"
+  }
+}

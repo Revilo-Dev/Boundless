@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "friendsandfoes:item/wildfire_spawn_egg"
+  }
+}

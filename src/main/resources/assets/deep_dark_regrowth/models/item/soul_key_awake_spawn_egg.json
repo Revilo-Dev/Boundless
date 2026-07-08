@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "deep_dark_regrowth:item/soul_key_awake_spawn_egg"
+  }
+}

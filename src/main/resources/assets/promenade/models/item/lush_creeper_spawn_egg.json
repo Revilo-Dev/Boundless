@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "promenade:item/lush_creeper_spawn_egg"
+  }
+}

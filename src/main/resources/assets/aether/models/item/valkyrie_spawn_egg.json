@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "aether:item/miscellaneous/valkyrie_spawn_egg"
+  }
+}

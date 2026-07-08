@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "terramity:item/hellrok_spawn_egg"
+  }
+}

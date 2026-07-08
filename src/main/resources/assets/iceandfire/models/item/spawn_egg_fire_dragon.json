@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "iceandfire:item/spawn_egg_fire_dragon"
+  }
+}

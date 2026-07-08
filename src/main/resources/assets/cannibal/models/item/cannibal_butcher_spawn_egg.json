@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "cannibal:item/cannibal_butcher_spawn_egg"
+  }
+}

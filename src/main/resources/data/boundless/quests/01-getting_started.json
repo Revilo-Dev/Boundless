@@ -1,0 +1,22 @@
+{
+  "category": "minecraft",
+  "sub-category": "getting_started",
+  "id": "getting_started",
+  "name": "Getting Started",
+  "icon": "minecraft:crafting_table",
+  "description": "Craft a crafting table to unlock most basic recipes.",
+  "dependencies": "",
+  "optional": "false",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:crafting_table", "count": 1 }
+    ]
+  },
+  "reward": {
+    "items": [
+      { "item": "minecraft:cooked_beef", "count": 16 }
+    ],
+    "exp": "points",
+    "count": 20
+  }
+}

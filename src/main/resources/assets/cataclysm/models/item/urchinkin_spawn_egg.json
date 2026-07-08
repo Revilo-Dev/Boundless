@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "cataclysm:item/urchinkin_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "frostrealm:item/venochem_spawn_egg"
+  }
+}

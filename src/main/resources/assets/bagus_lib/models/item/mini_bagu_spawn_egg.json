@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "bagus_lib:item/mini_bagu_spawn_egg"
+  }
+}

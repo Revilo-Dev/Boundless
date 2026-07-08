@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "create_confectionery:item/little_gingerbread_man_spawn_egg"
+  }
+}

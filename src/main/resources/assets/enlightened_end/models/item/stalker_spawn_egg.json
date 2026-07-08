@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "enlightened_end:item/stalker_spawn_egg"
+  }
+}

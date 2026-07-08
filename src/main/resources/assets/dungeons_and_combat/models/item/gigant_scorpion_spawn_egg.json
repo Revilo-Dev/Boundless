@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "dungeons_and_combat:item/gigant_scorpion_spawn_egg"
+  }
+}

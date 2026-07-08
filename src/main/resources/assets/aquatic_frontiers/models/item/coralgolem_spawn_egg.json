@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "aquatic_frontiers:item/coralgolem_spawn_egg"
+  }
+}

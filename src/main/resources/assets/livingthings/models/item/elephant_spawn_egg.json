@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "livingthings:item/elephant_spawn_egg"
+  }
+}

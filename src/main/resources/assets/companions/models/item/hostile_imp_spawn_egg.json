@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "companions:item/hostile_imp_spawn_egg"
+  }
+}

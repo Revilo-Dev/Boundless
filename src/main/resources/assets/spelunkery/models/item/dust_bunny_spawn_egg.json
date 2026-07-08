@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "spelunkery:item/dust_bunny_spawn_egg"
+  }
+}

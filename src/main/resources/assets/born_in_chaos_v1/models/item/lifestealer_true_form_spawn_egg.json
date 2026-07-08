@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "born_in_chaos_v1:item/lifestealer_true_form_spawn_egg"
+  }
+}

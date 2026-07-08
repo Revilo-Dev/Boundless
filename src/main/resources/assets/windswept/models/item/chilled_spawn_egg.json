@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "windswept:item/chilled_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "iter_rpg:item/weeper_spawn_egg"
+  }
+}

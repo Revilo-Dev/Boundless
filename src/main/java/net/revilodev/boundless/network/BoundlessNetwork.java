@@ -1,0 +1,1480 @@
+package net.revilodev.boundless.network;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.loader.api.FabricLoader;
+import net.revilodev.boundless.Config;
+import net.revilodev.boundless.client.toast.QuestUnlockedToast;
+import net.revilodev.boundless.item.ModItems;
+import net.revilodev.boundless.quest.KillCounterState;
+import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestItemSpec;
+import net.revilodev.boundless.quest.QuestProgressState;
+import net.revilodev.boundless.quest.QuestTracker;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+public final class BoundlessNetwork {
+
+    private static final String CHANNEL = "boundless";
+    private static final String VERSION = "2";
+    private static boolean REGISTERED = false;
+
+    private static final Gson GSON = new GsonBuilder().setLenient().create();
+    private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
+    private static final ConcurrentHashMap<String, QuestPackUploadSession> QUESTPACK_UPLOADS = new ConcurrentHashMap<>();
+
+    private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
+    private static final int QUEST_CHUNK_BYTES = 60000;
+    private static final Path INSTANCE_QUEST_PACKS_ROOT =
+            FabricLoader.getInstance().getGameDir().resolve("config").resolve("boundless").resolve("questpacks").normalize();
+
+    private BoundlessNetwork() {}
+
+    public static void bootstrap() {
+        if (REGISTERED) return;
+        REGISTERED = true;
+
+        PayloadTypeRegistry.playC2S().register(Redeem.TYPE, Redeem.CODEC);
+        PayloadTypeRegistry.playC2S().register(Reject.TYPE, Reject.CODEC);
+        PayloadTypeRegistry.playC2S().register(UndoReject.TYPE, UndoReject.CODEC);
+        PayloadTypeRegistry.playC2S().register(CreateScroll.TYPE, CreateScroll.CODEC);
+        PayloadTypeRegistry.playC2S().register(RestartRepeatable.TYPE, RestartRepeatable.CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateFieldInput.TYPE, UpdateFieldInput.CODEC);
+        PayloadTypeRegistry.playC2S().register(SetQuestPackEnabled.TYPE, SetQuestPackEnabled.CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateServerConfig.TYPE, UpdateServerConfig.CODEC);
+        PayloadTypeRegistry.playC2S().register(UploadQuestPackChunk.TYPE, UploadQuestPackChunk.CODEC);
+        PayloadTypeRegistry.playC2S().register(DeleteQuestPack.TYPE, DeleteQuestPack.CODEC);
+
+        PayloadTypeRegistry.playS2C().register(SyncStatus.TYPE, SyncStatus.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncStatuses.TYPE, SyncStatuses.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncProgressMeta.TYPE, SyncProgressMeta.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncKills.TYPE, SyncKills.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncClear.TYPE, SyncClear.CODEC);
+        PayloadTypeRegistry.playS2C().register(Toast.TYPE, Toast.CODEC);
+        PayloadTypeRegistry.playS2C().register(OpenQuestBook.TYPE, OpenQuestBook.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncConfig.TYPE, SyncConfig.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC);
+
+        ServerPlayNetworking.registerGlobalReceiver(Redeem.TYPE, (payload, context) ->
+                context.server().execute(() -> handleRedeem(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(Reject.TYPE, (payload, context) ->
+                context.server().execute(() -> handleReject(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UndoReject.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUndoReject(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(CreateScroll.TYPE, (payload, context) ->
+                context.server().execute(() -> handleCreateScroll(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(RestartRepeatable.TYPE, (payload, context) ->
+                context.server().execute(() -> handleRestartRepeatable(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UpdateFieldInput.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUpdateFieldInput(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(SetQuestPackEnabled.TYPE, (payload, context) ->
+                context.server().execute(() -> handleSetQuestPackEnabled(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UpdateServerConfig.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUpdateServerConfig(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UploadQuestPackChunk.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUploadQuestPackChunk(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(DeleteQuestPack.TYPE, (payload, context) ->
+                context.server().execute(() -> handleDeleteQuestPack(payload, context.player())));
+    }
+
+    @Environment(EnvType.CLIENT)
+    public static void bootstrapClient() {
+        ClientPlayNetworking.registerGlobalReceiver(SyncStatus.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncStatus(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncStatuses.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncStatuses(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncProgressMeta.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncProgressMeta(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncKills.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncKills(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncClear.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncClear(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(Toast.TYPE, (payload, context) ->
+                context.client().execute(() -> handleToast(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(OpenQuestBook.TYPE, (payload, context) ->
+                context.client().execute(() -> handleOpenQuestBook(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncConfig.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncConfig(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncQuestsChunk.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncQuestsChunk(payload)));
+    }
+
+    public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
+        if (player != null && payload != null) {
+            ServerPlayNetworking.send(player, payload);
+        }
+    }
+
+    @Environment(EnvType.CLIENT)
+    public static void sendToServer(CustomPacketPayload payload) {
+        if (payload != null) {
+            ClientPlayNetworking.send(payload);
+        }
+    }
+
+    public record Redeem(String questId) implements CustomPacketPayload {
+        public static final Type<Redeem> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "redeem"));
+        public static final StreamCodec<FriendlyByteBuf, Redeem> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.questId),
+                buf -> new Redeem(buf.readUtf())
+        );
+        @Override public Type<Redeem> type() { return TYPE; }
+    }
+
+    public record Reject(String questId) implements CustomPacketPayload {
+        public static final Type<Reject> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "reject"));
+        public static final StreamCodec<FriendlyByteBuf, Reject> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.questId),
+                buf -> new Reject(buf.readUtf())
+        );
+        @Override public Type<Reject> type() { return TYPE; }
+    }
+
+    public record UndoReject(String questId) implements CustomPacketPayload {
+        public static final Type<UndoReject> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "undo_reject"));
+        public static final StreamCodec<FriendlyByteBuf, UndoReject> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.questId),
+                buf -> new UndoReject(buf.readUtf())
+        );
+        @Override public Type<UndoReject> type() { return TYPE; }
+    }
+
+    public record CreateScroll(String questId) implements CustomPacketPayload {
+        public static final Type<CreateScroll> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "create_scroll"));
+        public static final StreamCodec<FriendlyByteBuf, CreateScroll> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.questId),
+                buf -> new CreateScroll(buf.readUtf())
+        );
+        @Override public Type<CreateScroll> type() { return TYPE; }
+    }
+
+    public record RestartRepeatable(String questId) implements CustomPacketPayload {
+        public static final Type<RestartRepeatable> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "restart_repeatable"));
+        public static final StreamCodec<FriendlyByteBuf, RestartRepeatable> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.questId),
+                buf -> new RestartRepeatable(buf.readUtf())
+        );
+        @Override public Type<RestartRepeatable> type() { return TYPE; }
+    }
+
+    public record UpdateFieldInput(String questId, String targetId, String value) implements CustomPacketPayload {
+        public static final Type<UpdateFieldInput> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_field_input"));
+        public static final StreamCodec<FriendlyByteBuf, UpdateFieldInput> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.questId);
+                    buf.writeUtf(p.targetId);
+                    buf.writeUtf(p.value == null ? "" : p.value);
+                },
+                buf -> new UpdateFieldInput(buf.readUtf(), buf.readUtf(), buf.readUtf())
+        );
+        @Override public Type<UpdateFieldInput> type() { return TYPE; }
+    }
+
+    public record SetQuestPackEnabled(String id, boolean enabled, boolean builtin) implements CustomPacketPayload {
+        public static final Type<SetQuestPackEnabled> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "set_questpack_enabled"));
+        public static final StreamCodec<FriendlyByteBuf, SetQuestPackEnabled> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.id == null ? "" : p.id);
+                    buf.writeBoolean(p.enabled);
+                    buf.writeBoolean(p.builtin);
+                },
+                buf -> new SetQuestPackEnabled(buf.readUtf(), buf.readBoolean(), buf.readBoolean())
+        );
+        @Override public Type<SetQuestPackEnabled> type() { return TYPE; }
+    }
+
+    public record UpdateServerConfig(
+            String pinnedQuestHudPosition,
+            boolean hideQuestBookInInventory,
+            String questBookInventoryButtonPosition,
+            boolean centerInventoryWithQuestPanel,
+            boolean hideCategoryHeader,
+            String filterDisplayMode,
+            boolean disableCategories,
+            boolean hideQuestWidgetIcons,
+            double questTextScale,
+            double questIconScale,
+            boolean enableQuestSearchBox,
+            boolean enableDescriptionColors,
+            boolean enableQuestToasts,
+            boolean disableQuestPinning,
+            boolean autoClaimQuestRewards,
+            boolean enableQuestScrolls,
+            boolean disableQuestBook,
+            boolean spawnWithQuestBook) implements CustomPacketPayload {
+        public static final Type<UpdateServerConfig> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_server_config"));
+        public static final StreamCodec<FriendlyByteBuf, UpdateServerConfig> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.pinnedQuestHudPosition == null ? "" : p.pinnedQuestHudPosition);
+                    buf.writeBoolean(p.hideQuestBookInInventory);
+                    buf.writeUtf(p.questBookInventoryButtonPosition == null ? "" : p.questBookInventoryButtonPosition);
+                    buf.writeBoolean(p.centerInventoryWithQuestPanel);
+                    buf.writeBoolean(p.hideCategoryHeader);
+                    buf.writeUtf(p.filterDisplayMode == null ? "" : p.filterDisplayMode);
+                    buf.writeBoolean(p.disableCategories);
+                    buf.writeBoolean(p.hideQuestWidgetIcons);
+                    buf.writeDouble(p.questTextScale);
+                    buf.writeDouble(p.questIconScale);
+                    buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeBoolean(p.enableQuestToasts);
+                    buf.writeBoolean(p.disableQuestPinning);
+                    buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.disableQuestBook);
+                    buf.writeBoolean(p.spawnWithQuestBook);
+                },
+                buf -> new UpdateServerConfig(
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readDouble(),
+                        buf.readDouble(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean())
+        );
+        @Override public Type<UpdateServerConfig> type() { return TYPE; }
+    }
+
+    public record UploadQuestPackChunk(String id, boolean enabled, int uploadId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
+        public static final Type<UploadQuestPackChunk> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "upload_questpack_chunk"));
+        public static final StreamCodec<FriendlyByteBuf, UploadQuestPackChunk> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.id == null ? "" : p.id);
+                    buf.writeBoolean(p.enabled);
+                    buf.writeVarInt(p.uploadId);
+                    buf.writeVarInt(p.totalParts);
+                    buf.writeVarInt(p.index);
+                    byte[] safe = p.part == null ? new byte[0] : p.part;
+                    buf.writeVarInt(safe.length);
+                    buf.writeBytes(safe);
+                },
+                buf -> {
+                    String id = buf.readUtf();
+                    boolean enabled = buf.readBoolean();
+                    int uploadId = buf.readVarInt();
+                    int totalParts = buf.readVarInt();
+                    int index = buf.readVarInt();
+                    int len = buf.readVarInt();
+                    if (len < 0 || len > 1_200_000) throw new IllegalArgumentException("questpack chunk len " + len);
+                    byte[] bytes = new byte[len];
+                    buf.readBytes(bytes);
+                    return new UploadQuestPackChunk(id, enabled, uploadId, totalParts, index, bytes);
+                }
+        );
+        @Override public Type<UploadQuestPackChunk> type() { return TYPE; }
+    }
+
+    public record DeleteQuestPack(String id) implements CustomPacketPayload {
+        public static final Type<DeleteQuestPack> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "delete_questpack"));
+        public static final StreamCodec<FriendlyByteBuf, DeleteQuestPack> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.id == null ? "" : p.id),
+                buf -> new DeleteQuestPack(buf.readUtf())
+        );
+        @Override public Type<DeleteQuestPack> type() { return TYPE; }
+    }
+
+    public record SyncStatus(String questId, String status) implements CustomPacketPayload {
+        public static final Type<SyncStatus> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_status"));
+        public static final StreamCodec<FriendlyByteBuf, SyncStatus> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.questId);
+                    buf.writeUtf(p.status);
+                },
+                buf -> new SyncStatus(buf.readUtf(), buf.readUtf())
+        );
+        @Override public Type<SyncStatus> type() { return TYPE; }
+    }
+
+    public record StatusEntry(String questId, String status) {
+        public static final StreamCodec<FriendlyByteBuf, StatusEntry> CODEC = StreamCodec.of(
+                (buf, e) -> {
+                    buf.writeUtf(e.questId);
+                    buf.writeUtf(e.status);
+                },
+                buf -> new StatusEntry(buf.readUtf(), buf.readUtf())
+        );
+    }
+
+    public record SyncStatuses(List<StatusEntry> entries) implements CustomPacketPayload {
+        public static final Type<SyncStatuses> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_statuses"));
+        public static final StreamCodec<FriendlyByteBuf, SyncStatuses> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeVarInt(p.entries.size());
+                    for (StatusEntry e : p.entries) StatusEntry.CODEC.encode(buf, e);
+                },
+                buf -> {
+                    int n = buf.readVarInt();
+                    List<StatusEntry> list = new ArrayList<>(n);
+                    for (int i = 0; i < n; i++) list.add(StatusEntry.CODEC.decode(buf));
+                    return new SyncStatuses(list);
+                }
+        );
+        @Override public Type<SyncStatuses> type() { return TYPE; }
+    }
+
+    public record ProgressMetaEntry(String questId, int claimCount, boolean scrollRedeemed, boolean scrollCreated) {
+        public static final StreamCodec<FriendlyByteBuf, ProgressMetaEntry> CODEC = StreamCodec.of(
+                (buf, e) -> {
+                    buf.writeUtf(e.questId);
+                    buf.writeVarInt(e.claimCount);
+                    buf.writeBoolean(e.scrollRedeemed);
+                    buf.writeBoolean(e.scrollCreated);
+                },
+                buf -> new ProgressMetaEntry(buf.readUtf(), buf.readVarInt(), buf.readBoolean(), buf.readBoolean())
+        );
+    }
+
+    public record SyncProgressMeta(List<ProgressMetaEntry> entries) implements CustomPacketPayload {
+        public static final Type<SyncProgressMeta> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_progress_meta"));
+        public static final StreamCodec<FriendlyByteBuf, SyncProgressMeta> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeVarInt(p.entries.size());
+                    for (ProgressMetaEntry e : p.entries) ProgressMetaEntry.CODEC.encode(buf, e);
+                },
+                buf -> {
+                    int n = buf.readVarInt();
+                    List<ProgressMetaEntry> list = new ArrayList<>(n);
+                    for (int i = 0; i < n; i++) list.add(ProgressMetaEntry.CODEC.decode(buf));
+                    return new SyncProgressMeta(list);
+                }
+        );
+        @Override public Type<SyncProgressMeta> type() { return TYPE; }
+    }
+
+    public record KillEntry(String entityId, int count) {
+        public static final StreamCodec<FriendlyByteBuf, KillEntry> CODEC = StreamCodec.of(
+                (buf, e) -> {
+                    buf.writeUtf(e.entityId);
+                    buf.writeVarInt(e.count);
+                },
+                buf -> new KillEntry(buf.readUtf(), buf.readVarInt())
+        );
+    }
+
+
+
+    public record SyncKills(List<KillEntry> entries) implements CustomPacketPayload {
+        public static final Type<SyncKills> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_kills"));
+        public static final StreamCodec<FriendlyByteBuf, SyncKills> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeVarInt(p.entries.size());
+                    for (KillEntry e : p.entries) KillEntry.CODEC.encode(buf, e);
+                },
+                buf -> {
+                    int n = buf.readVarInt();
+                    List<KillEntry> list = new ArrayList<>(n);
+                    for (int i = 0; i < n; i++) list.add(KillEntry.CODEC.decode(buf));
+                    return new SyncKills(list);
+                }
+        );
+        @Override public Type<SyncKills> type() { return TYPE; }
+    }
+
+    public record SyncClear() implements CustomPacketPayload {
+        public static final Type<SyncClear> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_clear"));
+        public static final StreamCodec<FriendlyByteBuf, SyncClear> CODEC =
+                StreamCodec.of((b, p) -> {}, b -> new SyncClear());
+        @Override public Type<SyncClear> type() { return TYPE; }
+    }
+
+    public record Toast(String questId) implements CustomPacketPayload {
+        public static final Type<Toast> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "toast"));
+        public static final StreamCodec<FriendlyByteBuf, Toast> CODEC = StreamCodec.of(
+                (buf, p) -> buf.writeUtf(p.questId),
+                buf -> new Toast(buf.readUtf())
+        );
+        @Override public Type<Toast> type() { return TYPE; }
+    }
+
+    public record OpenQuestBook() implements CustomPacketPayload {
+        public static final Type<OpenQuestBook> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "open_quest_book"));
+        public static final StreamCodec<FriendlyByteBuf, OpenQuestBook> CODEC =
+                StreamCodec.of((buf, p) -> {}, buf -> new OpenQuestBook());
+        @Override public Type<OpenQuestBook> type() { return TYPE; }
+    }
+
+    public record SyncConfig(
+            List<String> disabledCategories,
+            List<String> appliedQuestPacks,
+            List<String> disabledQuestPacks,
+            String pinnedQuestHudPosition,
+            boolean hideQuestBookInInventory,
+            String questBookInventoryButtonPosition,
+            boolean centerInventoryWithQuestPanel,
+            boolean hideCategoryHeader,
+            String filterDisplayMode,
+            boolean disableCategories,
+            boolean enableBuiltinQuestPack,
+            boolean hideQuestWidgetIcons,
+            double questTextScale,
+            double questIconScale,
+            boolean enableQuestSearchBox,
+            boolean enableDescriptionColors,
+            boolean enableQuestToasts,
+            boolean disableQuestPinning,
+            boolean autoClaimQuestRewards,
+            boolean enableQuestScrolls,
+            boolean disableQuestBook,
+            boolean spawnWithQuestBook) implements CustomPacketPayload {
+        public static final Type<SyncConfig> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_config"));
+        public static final StreamCodec<FriendlyByteBuf, SyncConfig> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    writeStringList(buf, p.disabledCategories);
+                    writeStringList(buf, p.appliedQuestPacks);
+                    writeStringList(buf, p.disabledQuestPacks);
+                    buf.writeUtf(p.pinnedQuestHudPosition == null ? "" : p.pinnedQuestHudPosition);
+                    buf.writeBoolean(p.hideQuestBookInInventory);
+                    buf.writeUtf(p.questBookInventoryButtonPosition == null ? "" : p.questBookInventoryButtonPosition);
+                    buf.writeBoolean(p.centerInventoryWithQuestPanel);
+                    buf.writeBoolean(p.hideCategoryHeader);
+                    buf.writeUtf(p.filterDisplayMode == null ? "" : p.filterDisplayMode);
+                    buf.writeBoolean(p.disableCategories);
+                    buf.writeBoolean(p.enableBuiltinQuestPack);
+                    buf.writeBoolean(p.hideQuestWidgetIcons);
+                    buf.writeDouble(p.questTextScale);
+                    buf.writeDouble(p.questIconScale);
+                    buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeBoolean(p.enableQuestToasts);
+                    buf.writeBoolean(p.disableQuestPinning);
+                    buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.disableQuestBook);
+                    buf.writeBoolean(p.spawnWithQuestBook);
+                },
+                buf -> new SyncConfig(
+                        readStringList(buf),
+                        readStringList(buf),
+                        readStringList(buf),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readDouble(),
+                        buf.readDouble(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean())
+        );
+        @Override public Type<SyncConfig> type() { return TYPE; }
+    }
+
+    public record SyncQuestsChunk(int syncId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
+        public static final Type<SyncQuestsChunk> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_quests_chunk"));
+        public static final StreamCodec<FriendlyByteBuf, SyncQuestsChunk> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeVarInt(p.syncId);
+                    buf.writeVarInt(p.totalParts);
+                    buf.writeVarInt(p.index);
+                    buf.writeVarInt(p.part.length);
+                    buf.writeBytes(p.part);
+                },
+                buf -> {
+                    int syncId = buf.readVarInt();
+                    int total = buf.readVarInt();
+                    int idx = buf.readVarInt();
+                    int len = buf.readVarInt();
+                    if (len < 0 || len > 1_200_000) throw new IllegalArgumentException("chunk len " + len);
+                    byte[] bytes = new byte[len];
+                    buf.readBytes(bytes);
+                    return new SyncQuestsChunk(syncId, total, idx, bytes);
+                }
+        );
+        @Override public Type<SyncQuestsChunk> type() { return TYPE; }
+    }
+
+    public static void syncPlayer(ServerPlayer p) {
+        sendToPlayer(p, new SyncClear());
+        sendConfig(p);
+        sendQuestData(p);
+
+        List<KillEntry> killEntries = new ArrayList<>();
+        KillCounterState.get(p.serverLevel()).snapshotFor(p.getUUID())
+                .forEach((id, ct) -> killEntries.add(new KillEntry(id, ct)));
+        if (!killEntries.isEmpty()) {
+            sendToPlayer(p, new SyncKills(killEntries));
+        }
+
+        List<StatusEntry> statuses = new ArrayList<>();
+        QuestProgressState.get(p.serverLevel()).snapshotFor(p.getUUID())
+                .forEach((questId, status) -> statuses.add(new StatusEntry(questId, status)));
+        if (!statuses.isEmpty()) {
+            sendToPlayer(p, new SyncStatuses(statuses));
+        }
+
+        List<ProgressMetaEntry> metaEntries = new ArrayList<>();
+        QuestProgressState.get(p.serverLevel()).progressSnapshotFor(p.getUUID())
+                .forEach((questId, progress) -> metaEntries.add(new ProgressMetaEntry(
+                        questId,
+                        progress == null ? 0 : progress.claimCount(),
+                        progress != null && progress.scrollRedeemed(),
+                        progress != null && progress.scrollCreated()
+                )));
+        if (!metaEntries.isEmpty()) {
+            sendToPlayer(p, new SyncProgressMeta(metaEntries));
+        }
+
+        syncComputedCompletion(p);
+    }
+
+    private static void sendConfig(ServerPlayer p) {
+        sendToPlayer(p, new SyncConfig(
+                configStringList(Config.disabledCategories()),
+                configStringList(Config.appliedQuestPacks()),
+                configStringList(Config.disabledQuestPacks()),
+                Config.pinnedQuestHudPosition(),
+                Config.hideQuestBookInInventory(),
+                Config.questBookInventoryButtonPosition(),
+                Config.centerInventoryWithQuestPanel(),
+                Config.hideCategoryHeader(),
+                Config.filterDisplayMode(),
+                Config.disableCategories(),
+                Config.enableBuiltinQuestPack(),
+                Config.hideQuestWidgetIcons(),
+                Config.questTextScale(),
+                Config.questIconScale(),
+                Config.enableQuestSearchBox(),
+                Config.enableDescriptionColors(),
+                Config.enableQuestToasts(),
+                Config.disableQuestPinning(),
+                Config.autoClaimQuestRewards(),
+                Config.enableQuestScrolls(),
+                Config.disableQuestBook(),
+                Config.spawnWithQuestBook()
+        ));
+    }
+
+    private static List<String> configStringList(List<? extends String> values) {
+        if (values == null || values.isEmpty()) return List.of();
+        List<String> out = new ArrayList<>(values.size());
+        for (String value : values) {
+            if (value != null) out.add(value);
+        }
+        return out.isEmpty() ? List.of() : List.copyOf(out);
+    }
+
+    private static void writeStringList(FriendlyByteBuf buf, List<String> values) {
+        List<String> safe = values == null ? List.of() : values;
+        buf.writeVarInt(safe.size());
+        for (String value : safe) {
+            buf.writeUtf(value == null ? "" : value);
+        }
+    }
+
+    private static List<String> readStringList(FriendlyByteBuf buf) {
+        int size = buf.readVarInt();
+        if (size < 0 || size > 4096) throw new IllegalArgumentException("string list size " + size);
+        List<String> values = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            values.add(buf.readUtf());
+        }
+        return values;
+    }
+
+    public static void sendProgressMeta(ServerPlayer player, String questId) {
+        if (player == null || questId == null || questId.isBlank()) return;
+        var progress = QuestProgressState.get(player.serverLevel()).progress(player.getUUID(), questId);
+        sendToPlayer(player, new SyncProgressMeta(List.of(
+                new ProgressMetaEntry(questId, progress.claimCount(), progress.scrollRedeemed(), progress.scrollCreated())
+        )));
+    }
+
+    private static void syncComputedCompletion(ServerPlayer p) {
+        List<QuestData.Quest> quests = new ArrayList<>(QuestData.allServer(p.server));
+        for (QuestData.Quest q : quests) {
+            if (q == null) continue;
+            QuestTracker.Status st = QuestTracker.getStatus(q, p);
+            if (st == QuestTracker.Status.REDEEMED || st == QuestTracker.Status.REJECTED) continue;
+            if (QuestTracker.isReady(q, p) && st == QuestTracker.Status.INCOMPLETE) {
+                if (Config.autoClaimQuestRewards()) {
+                    claimQuest(p, q);
+                } else {
+                    QuestTracker.setServerStatus(p, q.id, QuestTracker.Status.COMPLETED);
+                    sendStatus(p, q.id, QuestTracker.Status.COMPLETED.name());
+                }
+            }
+        }
+    }
+
+    // inside BoundlessNetwork.java
+    private static void sendQuestData(ServerPlayer p) {
+        var quests = QuestData.allServer(p.server);
+        var categories = QuestData.categoriesOrderedServer(p.server);
+        var subCats = QuestData.subCategoriesAllOrderedServer(p.server);
+
+        JsonObject root = new JsonObject();
+
+        JsonArray cats = new JsonArray();
+        for (QuestData.Category c : categories) {
+            JsonObject o = new JsonObject();
+            o.addProperty("id", c.id);
+            o.addProperty("icon", c.icon);
+            o.addProperty("name", c.name);
+            o.addProperty("order", c.order);
+            o.addProperty("excludeFromAll", c.excludeFromAll);
+            o.addProperty("dependency", c.dependency);
+            o.addProperty("autoComplete", c.autoComplete);
+            cats.add(o);
+        }
+        root.add("categories", cats);
+
+        JsonArray scs = new JsonArray();
+        for (QuestData.SubCategory sc : subCats) {
+            JsonObject o = new JsonObject();
+            o.addProperty("id", sc.id);
+            o.addProperty("category", sc.category);
+            o.addProperty("icon", sc.icon);
+            o.addProperty("name", sc.name);
+            o.addProperty("order", sc.order);
+            o.addProperty("defaultOpen", sc.defaultOpen);
+            if (sc.sourcePath != null && !sc.sourcePath.isBlank()) {
+                o.addProperty("sourcePath", sc.sourcePath);
+            }
+
+            JsonArray qids = new JsonArray();
+            for (String qid : sc.quests) qids.add(qid);
+            o.add("quests", qids);
+
+            scs.add(o);
+        }
+        root.add("subCategories", scs);
+
+        JsonArray qs = new JsonArray();
+        for (QuestData.Quest q : quests) {
+            JsonObject o = new JsonObject();
+            o.addProperty("id", q.id);
+            o.addProperty("name", q.name);
+            o.addProperty("icon", q.icon);
+            o.addProperty("description", q.description);
+
+            JsonArray deps = new JsonArray();
+            for (String d : q.dependencies) deps.add(d);
+            o.add("dependencies", deps);
+
+            o.addProperty("optional", q.optional);
+            o.addProperty("repeatable", q.repeatable);
+            o.addProperty("hiddenUnderDependency", q.hiddenUnderDependency);
+
+            if (q.rewards != null) {
+                JsonObject ro = new JsonObject();
+
+                JsonArray items = new JsonArray();
+                for (QuestData.RewardEntry r : q.rewards.items) {
+                    JsonObject io = new JsonObject();
+                    io.addProperty("item", r.item);
+                    io.addProperty("count", r.count);
+                    items.add(io);
+                }
+                ro.add("items", items);
+
+                JsonArray cmds = new JsonArray();
+                for (QuestData.CommandReward cr : q.rewards.commands) {
+                    JsonObject co = new JsonObject();
+                    co.addProperty("command", cr.command);
+                    co.addProperty("icon", cr.icon);
+                    co.addProperty("title", cr.title);
+                    cmds.add(co);
+                }
+                ro.add("commands", cmds);
+
+                JsonArray fns = new JsonArray();
+                for (QuestData.FunctionReward fr : q.rewards.functions) {
+                    JsonObject fo = new JsonObject();
+                    fo.addProperty("function", fr.function);
+                    fo.addProperty("icon", fr.icon);
+                    fo.addProperty("title", fr.title);
+                    fns.add(fo);
+                }
+                ro.add("functions", fns);
+
+                JsonArray lootTables = new JsonArray();
+                for (QuestData.LootTableReward lr : q.rewards.lootTables) {
+                    JsonObject lo = new JsonObject();
+                    lo.addProperty("lootTable", lr.lootTable);
+                    lo.addProperty("icon", lr.icon);
+                    lo.addProperty("title", lr.title);
+                    lootTables.add(lo);
+                }
+                ro.add("lootTables", lootTables);
+
+                ro.addProperty("expType", q.rewards.expType);
+                ro.addProperty("expAmount", q.rewards.expAmount);
+
+                o.add("rewards", ro);
+            }
+
+            o.addProperty("type", q.type);
+
+            if (q.completion != null) {
+                JsonObject co = new JsonObject();
+                JsonArray targets = new JsonArray();
+                for (QuestData.Target t : q.completion.targets) {
+                    JsonObject to = new JsonObject();
+                    to.addProperty("kind", t.kind);
+                    to.addProperty("id", t.id);
+                    to.addProperty("count", t.count);
+                    if (t.hint != null && !t.hint.isBlank()) {
+                        to.addProperty("hint", t.hint);
+                    }
+                    targets.add(to);
+                }
+                co.add("targets", targets);
+                o.add("completion", co);
+            }
+
+            o.addProperty("category", q.category);
+
+            if (q.subCategory != null && !q.subCategory.isBlank()) {
+                o.addProperty("subCategory", q.subCategory);
+            }
+            if (q.sourcePath != null && !q.sourcePath.isBlank()) {
+                o.addProperty("sourcePath", q.sourcePath);
+            }
+
+            qs.add(o);
+        }
+
+        root.add("quests", qs);
+
+        String json = GSON.toJson(root);
+        sendQuestJsonChunked(p, json);
+    }
+
+
+    private static void sendQuestJsonChunked(ServerPlayer p, String json) {
+        if (json == null) json = "";
+        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        int syncId = SYNC_ID_GEN.incrementAndGet();
+
+        int total = (bytes.length + QUEST_CHUNK_BYTES - 1) / QUEST_CHUNK_BYTES;
+        if (total <= 0) total = 1;
+
+        for (int i = 0; i < total; i++) {
+            int start = i * QUEST_CHUNK_BYTES;
+            int end = Math.min(bytes.length, start + QUEST_CHUNK_BYTES);
+            byte[] part = start >= end ? new byte[0] : java.util.Arrays.copyOfRange(bytes, start, end);
+            sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
+        }
+    }
+
+    public static void sendStatus(ServerPlayer p, String questId, String status) {
+        sendToPlayer(p, new SyncStatus(questId, status));
+    }
+
+    public static void sendToast(ServerPlayer p, String questId) {
+        sendToPlayer(p, new Toast(questId));
+    }
+
+    public static void sendOpenQuestBook(ServerPlayer p) {
+        sendToPlayer(p, new OpenQuestBook());
+    }
+
+    public static void sendToastLocal(String questId) {
+        QuestData.byId(questId).ifPresent(q ->
+                QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
+        );
+    }
+
+    private static void handleRedeem(Redeem p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (!QuestTracker.isReady(q, sp)) return;
+            claimQuest(sp, q);
+        });
+    }
+
+    private static void handleReject(Reject p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (QuestTracker.serverReject(q, sp)) {
+                QuestTracker.setServerStatus(sp, q.id, QuestTracker.Status.REJECTED);
+                sendStatus(sp, q.id, QuestTracker.Status.REJECTED.name());
+            }
+        });
+    }
+
+    private static void handleCreateScroll(CreateScroll p, ServerPlayer sp) {
+        if (!Config.enableQuestScrolls()) return;
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (!QuestTracker.canCreateScroll(q, sp)) return;
+            QuestProgressState.get(sp.serverLevel()).setScrollCreated(sp.getUUID(), q.id, true);
+            ItemStack stack = ModItems.createQuestScroll(q.id);
+            if (!sp.getInventory().add(stack) && !stack.isEmpty()) {
+                sp.drop(stack, false);
+            }
+            sendProgressMeta(sp, q.id);
+        });
+    }
+
+    private static void handleUndoReject(UndoReject p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (QuestTracker.serverUndoReject(q, sp)) {
+                sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
+            }
+        });
+    }
+
+    private static void handleRestartRepeatable(RestartRepeatable p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (QuestTracker.restartRepeatable(q, sp)) {
+                sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
+            }
+        });
+    }
+
+    private static void handleUpdateFieldInput(UpdateFieldInput p, ServerPlayer sp) {
+        if (sp == null || p.questId() == null || p.questId().isBlank() || p.targetId() == null || p.targetId().isBlank()) return;
+        QuestData.Quest quest = QuestData.byIdServer(sp.server, p.questId()).orElse(null);
+        if (quest == null || quest.completion == null || quest.completion.targets == null) return;
+        boolean validFieldTarget = false;
+        for (QuestData.Target t : quest.completion.targets) {
+            if (t == null || !t.isFieldInput()) continue;
+            if (!p.targetId().equals(t.id)) continue;
+            validFieldTarget = true;
+            break;
+        }
+        if (!validFieldTarget) return;
+        String key = p.questId() + ":field:" + p.targetId();
+        QuestTracker.setFieldInputProgress(sp, key, p.value());
+    }
+
+    private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+
+        if (p.builtin()) {
+            Config.ENABLE_BUILTIN_QUEST_PACK.set(p.enabled());
+            Config.SPEC.save();
+        } else {
+            String id = p.id() == null ? "" : p.id().trim();
+            if (id.isBlank()) return;
+            if (id.contains("/") || id.contains("\\")) return;
+            Path packRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
+            if (!packRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT) || !Files.isDirectory(packRoot)) return;
+            Config.setQuestPackApplied(id, p.enabled());
+        }
+
+        QuestData.loadServer(sp.server, true);
+        for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+            syncPlayer(player);
+        }
+    }
+
+    private static void handleUpdateServerConfig(UpdateServerConfig p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+
+        Config.PINNED_QUEST_HUD_POSITION.set(p.pinnedQuestHudPosition());
+        Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(p.hideQuestBookInInventory());
+        Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(p.questBookInventoryButtonPosition());
+        Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(p.centerInventoryWithQuestPanel());
+        Config.HIDE_CATEGORY_HEADER.set(p.hideCategoryHeader());
+        Config.FILTER_DISPLAY_MODE.set(p.filterDisplayMode());
+        Config.DISABLE_CATEGORIES.set(p.disableCategories());
+        Config.HIDE_QUEST_WIDGET_ICONS.set(p.hideQuestWidgetIcons());
+        Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questTextScale())));
+        Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
+        Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
+        Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
+        Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
+        Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
+        Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
+        Config.ENABLE_QUEST_SCROLLS.set(p.enableQuestScrolls());
+        Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
+        Config.SPAWN_WITH_QUEST_BOOK.set(p.spawnWithQuestBook());
+        Config.SPEC.save();
+
+        for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+            sendConfig(player);
+        }
+    }
+
+    private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+        String id = normalizeQuestPackFolderName(p.id());
+        if (id.isBlank()) return;
+        if (p.totalParts() <= 0 || p.totalParts() > 65536) return;
+        if (p.index() < 0 || p.index() >= p.totalParts()) return;
+
+        String key = sp.getUUID() + ":" + id + ":" + p.uploadId();
+        QuestPackUploadSession session = QUESTPACK_UPLOADS.compute(key, (ignored, existing) -> {
+            if (existing == null || existing.totalParts != p.totalParts()) {
+                return new QuestPackUploadSession(id, p.enabled(), p.totalParts());
+            }
+            return existing;
+        });
+        if (session == null) return;
+        if (session.parts[p.index()] == null) {
+            session.parts[p.index()] = p.part() == null ? new byte[0] : p.part();
+            session.received++;
+        }
+        if (session.received < session.totalParts) return;
+
+        QUESTPACK_UPLOADS.remove(key);
+        byte[] zipBytes = session.join();
+        try {
+            writeUploadedQuestPack(id, zipBytes);
+            Config.setQuestPackApplied(id, session.enabled);
+            reloadAndSyncAll(sp);
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static void handleDeleteQuestPack(DeleteQuestPack p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+        String id = normalizeQuestPackFolderName(p.id());
+        if (id.isBlank()) return;
+        try {
+            deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
+            Config.setQuestPackApplied(id, false);
+            reloadAndSyncAll(sp);
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static void reloadAndSyncAll(ServerPlayer sp) {
+        QuestData.loadServer(sp.server, true);
+        for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+            syncPlayer(player);
+        }
+    }
+
+    private static String normalizeQuestPackFolderName(String raw) {
+        String id = raw == null ? "" : raw.trim();
+        if (id.isBlank()) return "";
+        if (".".equals(id) || "..".equals(id)) return "";
+        if (id.contains("/") || id.contains("\\") || id.matches(".*[<>:\"|?*].*")) return "";
+        return id;
+    }
+
+    private static void writeUploadedQuestPack(String id, byte[] zipBytes) throws IOException {
+        Files.createDirectories(INSTANCE_QUEST_PACKS_ROOT);
+        Path targetRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
+        if (!targetRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+        if (targetRoot.equals(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+
+        Path tempRoot = INSTANCE_QUEST_PACKS_ROOT.resolve("." + id + ".upload").normalize();
+        deleteDirectoryIfExists(tempRoot);
+        Files.createDirectories(tempRoot);
+
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes == null ? new byte[0] : zipBytes))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+                if (name == null || name.isBlank()) continue;
+                Path dst = tempRoot.resolve(name).normalize();
+                if (!dst.startsWith(tempRoot)) throw new IOException("Invalid questpack zip entry");
+                if (entry.isDirectory()) {
+                    Files.createDirectories(dst);
+                } else {
+                    Path parent = dst.getParent();
+                    if (parent != null) Files.createDirectories(parent);
+                    Files.copy(zis, dst, StandardCopyOption.REPLACE_EXISTING);
+                }
+                zis.closeEntry();
+            }
+        }
+
+        deleteDirectoryIfExists(targetRoot);
+        Files.move(tempRoot, targetRoot, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private static void deleteDirectoryIfExists(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) return;
+        Path normalized = root.normalize();
+        if (!normalized.startsWith(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+        if (normalized.equals(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
+        try (var walk = Files.walk(normalized)) {
+            List<Path> paths = new ArrayList<>();
+            for (Path path : (Iterable<Path>) walk::iterator) {
+                paths.add(path);
+            }
+            paths.sort((a, b) -> b.getNameCount() - a.getNameCount());
+            for (Path path : paths) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static void handleSyncStatus(SyncStatus p) {
+        QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()));
+    }
+
+    private static void handleSyncStatuses(SyncStatuses p) {
+        for (StatusEntry e : p.entries()) {
+            QuestTracker.clientSetStatus(e.questId(), QuestTracker.decodeStatus(e.status()));
+        }
+    }
+
+    private static void handleSyncProgressMeta(SyncProgressMeta p) {
+        for (ProgressMetaEntry e : p.entries()) {
+            QuestTracker.clientSetClaimCount(e.questId(), e.claimCount());
+            QuestTracker.clientSetScrollRedeemed(e.questId(), e.scrollRedeemed());
+            QuestTracker.clientSetScrollCreated(e.questId(), e.scrollCreated());
+        }
+    }
+
+    private static void handleSyncKills(SyncKills p) {
+        for (KillEntry e : p.entries())
+            QuestTracker.clientSetKill(e.entityId(), e.count());
+    }
+
+    private static void handleSyncClear(SyncClear p) {
+        QuestTracker.clientClearAll();
+        QuestData.clearClientNetworkData();
+        ClientQuestSync.clear();
+    }
+
+    private static void handleToast(Toast p) {
+        QuestData.byId(p.questId()).ifPresent(q ->
+                QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
+        );
+    }
+
+    private static void handleOpenQuestBook(OpenQuestBook p) {
+        if (!Config.disableQuestBook()) {
+            ClientOnly.openQuestBook();
+        }
+    }
+
+    private static void handleSyncConfig(SyncConfig p) {
+        Config.applySyncedFromServer(
+            p.disabledCategories(),
+            p.appliedQuestPacks(),
+            p.disabledQuestPacks(),
+            p.pinnedQuestHudPosition(),
+            p.hideQuestBookInInventory(),
+            p.questBookInventoryButtonPosition(),
+            p.centerInventoryWithQuestPanel(),
+            p.hideCategoryHeader(),
+            p.filterDisplayMode(),
+            p.disableCategories(),
+            p.enableBuiltinQuestPack(),
+            p.hideQuestWidgetIcons(),
+            p.questTextScale(),
+            p.questIconScale(),
+            p.enableQuestSearchBox(),
+            p.enableDescriptionColors(),
+            p.enableQuestToasts(),
+            p.disableQuestPinning(),
+            p.autoClaimQuestRewards(),
+            p.enableQuestScrolls(),
+            p.disableQuestBook(),
+            p.spawnWithQuestBook()
+        );
+        ClientOnly.applyConfigChanges();
+    }
+
+    private static void handleSyncQuestsChunk(SyncQuestsChunk p) {
+        ClientQuestSync.accept(p);
+    }
+
+    private static boolean questHasSubmit(QuestData.Quest q) {
+        if (q == null || q.completion == null) return false;
+
+        if ("submission".equalsIgnoreCase(q.type) || "submit".equalsIgnoreCase(q.type)) return true;
+
+        for (QuestData.Target t : q.completion.targets) {
+            if (isSubmitTarget(q, t)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isSubmitTarget(QuestData.Quest q, QuestData.Target t) {
+        if (t == null) return false;
+        return "submit".equalsIgnoreCase(t.kind)
+                || "xp".equalsIgnoreCase(t.kind)
+                || (("submission".equalsIgnoreCase(q.type) || "submit".equalsIgnoreCase(q.type)) && t.isItem());
+    }
+
+    public static boolean claimQuest(ServerPlayer sp, QuestData.Quest q) {
+        if (sp == null || q == null) return false;
+        String lockKey = sp.getUUID() + ":" + q.id;
+        if (!REDEEM_IN_FLIGHT.add(lockKey)) return false;
+        try {
+            QuestTracker.Status status = QuestTracker.getStatus(q, sp);
+            if (status == QuestTracker.Status.REDEEMED || status == QuestTracker.Status.REJECTED) return false;
+            if (!QuestTracker.isReady(q, sp)) return false;
+            if (questHasSubmit(q) && !consumeSubmitTargets(sp, q)) return false;
+            boolean ok;
+            try {
+                ok = QuestTracker.serverRedeem(q, sp);
+            } catch (Throwable ignored) {
+                ok = false;
+            }
+            if (!ok) return false;
+            sendStatus(sp, q.id, QuestTracker.Status.REDEEMED.name());
+            sendProgressMeta(sp, q.id);
+            return true;
+        } finally {
+            REDEEM_IN_FLIGHT.remove(lockKey);
+        }
+    }
+
+    private static boolean consumeSubmitTargets(ServerPlayer sp, QuestData.Quest q) {
+        if (sp == null || q == null || q.completion == null) return false;
+
+        Inventory inv = sp.getInventory();
+        int size = inv.getContainerSize();
+        ItemStack[] sim = new ItemStack[size];
+        for (int i = 0; i < size; i++) sim[i] = inv.getItem(i).copy();
+        HolderLookup.Provider registries = sp.registryAccess();
+        QuestTracker.ExperienceSnapshot simulatedXp =
+                new QuestTracker.ExperienceSnapshot(sp.experienceLevel, sp.experienceProgress);
+        boolean hasXpSubmitTarget = false;
+
+        for (QuestData.Target t : q.completion.targets) {
+            if (t == null) continue;
+            boolean submitTarget = isSubmitTarget(q, t);
+            if (!submitTarget) continue;
+
+            if (t.isXp()) {
+                hasXpSubmitTarget = true;
+                simulatedXp = QuestTracker.consumeExperience(simulatedXp, t.id, t.count);
+                if (simulatedXp == null) return false;
+                continue;
+            }
+
+            String raw = t.id;
+            int need = Math.max(1, t.count);
+
+            if (raw == null || raw.isBlank()) return false;
+
+            QuestItemSpec spec = QuestItemSpec.parse(raw);
+            if (spec.tag) {
+                ResourceLocation tagRl;
+                try { tagRl = ResourceLocation.parse(spec.id); }
+                catch (Exception ignored) { return false; }
+
+                TagKey<Item> tag = TagKey.create(Registries.ITEM, tagRl);
+
+                if (!canTakeTag(sim, tag, spec, need, registries)) return false;
+                if (!takeTag(sim, tag, spec, need, registries)) return false;
+
+            } else {
+                Item item = spec.item();
+                if (item == null) return false;
+
+                if (!canTakeItem(sim, item, spec, need, registries)) return false;
+                if (!takeItem(sim, item, spec, need, registries)) return false;
+            }
+        }
+
+        for (QuestData.Target t : q.completion.targets) {
+            if (t == null) continue;
+            boolean submitTarget = isSubmitTarget(q, t);
+            if (!submitTarget) continue;
+
+            if (t.isXp()) continue;
+
+            String raw = t.id;
+            int need = Math.max(1, t.count);
+
+            if (raw == null || raw.isBlank()) return false;
+
+            boolean ok;
+            QuestItemSpec spec = QuestItemSpec.parse(raw);
+            if (spec.tag) {
+                ResourceLocation tagRl;
+                try { tagRl = ResourceLocation.parse(spec.id); }
+                catch (Exception ignored) { return false; }
+
+                TagKey<Item> tag = TagKey.create(Registries.ITEM, tagRl);
+                ok = takeTag(inv, tag, spec, need, registries);
+            } else {
+                Item item = spec.item();
+                if (item == null) return false;
+                ok = takeItem(inv, item, spec, need, registries);
+            }
+
+            if (!ok) return false;
+        }
+
+        if (hasXpSubmitTarget) {
+            QuestTracker.setExperienceSnapshot(sp, simulatedXp);
+        }
+        inv.setChanged();
+        sp.containerMenu.broadcastChanges();
+        return true;
+    }
+
+    private static boolean canTakeItem(ItemStack[] stacks, Item item, QuestItemSpec spec, int needed, HolderLookup.Provider registries) {
+        int have = 0;
+        for (ItemStack s : stacks) {
+            if (s == null || s.isEmpty()) continue;
+            if (!s.is(item)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
+            have += s.getCount();
+            if (have >= needed) return true;
+        }
+        return have >= needed;
+    }
+
+    private static boolean canTakeTag(ItemStack[] stacks, TagKey<Item> tag, QuestItemSpec spec, int needed, HolderLookup.Provider registries) {
+        int have = 0;
+        for (ItemStack s : stacks) {
+            if (s == null || s.isEmpty()) continue;
+            if (!s.is(tag)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
+            have += s.getCount();
+            if (have >= needed) return true;
+        }
+        return have >= needed;
+    }
+
+    private static boolean takeItem(ItemStack[] stacks, Item item, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
+        int remaining = toTake;
+        for (int i = 0; i < stacks.length && remaining > 0; i++) {
+            ItemStack s = stacks[i];
+            if (s == null || s.isEmpty()) continue;
+            if (!s.is(item)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
+
+            int take = Math.min(remaining, s.getCount());
+            s.shrink(take);
+            remaining -= take;
+
+            if (s.isEmpty()) stacks[i] = ItemStack.EMPTY;
+        }
+        return remaining <= 0;
+    }
+
+    private static boolean takeTag(ItemStack[] stacks, TagKey<Item> tag, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
+        int remaining = toTake;
+        for (int i = 0; i < stacks.length && remaining > 0; i++) {
+            ItemStack s = stacks[i];
+            if (s == null || s.isEmpty()) continue;
+            if (!s.is(tag)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
+
+            int take = Math.min(remaining, s.getCount());
+            s.shrink(take);
+            remaining -= take;
+
+            if (s.isEmpty()) stacks[i] = ItemStack.EMPTY;
+        }
+        return remaining <= 0;
+    }
+
+    private static boolean takeItem(Inventory inv, Item item, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
+        int remaining = toTake;
+        int size = inv.getContainerSize();
+
+        for (int i = 0; i < size && remaining > 0; i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty()) continue;
+            if (!s.is(item)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
+
+            int take = Math.min(remaining, s.getCount());
+            s.shrink(take);
+            remaining -= take;
+
+            if (s.isEmpty()) inv.setItem(i, ItemStack.EMPTY);
+        }
+        return remaining <= 0;
+    }
+
+    private static boolean takeTag(Inventory inv, TagKey<Item> tag, QuestItemSpec spec, int toTake, HolderLookup.Provider registries) {
+        int remaining = toTake;
+        int size = inv.getContainerSize();
+
+        for (int i = 0; i < size && remaining > 0; i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty()) continue;
+            if (!s.is(tag)) continue;
+            if (spec != null && !spec.matches(s, registries)) continue;
+
+            int take = Math.min(remaining, s.getCount());
+            s.shrink(take);
+            remaining -= take;
+
+            if (s.isEmpty()) inv.setItem(i, ItemStack.EMPTY);
+        }
+        return remaining <= 0;
+    }
+
+    private static final class QuestPackUploadSession {
+        final String id;
+        final boolean enabled;
+        final int totalParts;
+        final byte[][] parts;
+        int received;
+
+        QuestPackUploadSession(String id, boolean enabled, int totalParts) {
+            this.id = id;
+            this.enabled = enabled;
+            this.totalParts = totalParts;
+            this.parts = new byte[totalParts][];
+        }
+
+        byte[] join() {
+            int len = 0;
+            for (byte[] part : parts) {
+                if (part != null) len += part.length;
+            }
+            byte[] out = new byte[len];
+            int off = 0;
+            for (byte[] part : parts) {
+                if (part == null) continue;
+                System.arraycopy(part, 0, out, off, part.length);
+                off += part.length;
+            }
+            return out;
+        }
+    }
+
+    @Environment(EnvType.CLIENT)
+    private static final class ClientOnly {
+        private static void openQuestBook() {
+            net.minecraft.client.Minecraft.getInstance()
+                    .setScreen(new net.revilodev.boundless.client.screen.StandaloneQuestBookScreen());
+        }
+
+        private static void applyConfigChanges() {
+            net.revilodev.boundless.client.QuestPanelClient.applyConfigChanges();
+            if (net.minecraft.client.Minecraft.getInstance().screen
+                    instanceof net.revilodev.boundless.client.screen.StandaloneQuestBookScreen screen) {
+                screen.refreshSyncedData();
+            }
+        }
+    }
+
+    @Environment(EnvType.CLIENT)
+    private static final class ClientQuestSync {
+        private static int activeSyncId = -1;
+        private static int newestSyncIdSeen = -1;
+        private static int expected = -1;
+        private static byte[][] parts = null;
+        private static int received = 0;
+
+        private static void reset() {
+            activeSyncId = -1;
+            expected = -1;
+            parts = null;
+            received = 0;
+        }
+
+        private static void clear() {
+            reset();
+            newestSyncIdSeen = -1;
+        }
+
+        private static void accept(SyncQuestsChunk p) {
+            if (p == null) return;
+
+            int sid = p.syncId();
+            int total = p.totalParts();
+            int idx = p.index();
+
+            if (total <= 0 || total > 65536) { reset(); return; }
+            if (idx < 0 || idx >= total) { reset(); return; }
+            if (sid < newestSyncIdSeen) return;
+
+            if (activeSyncId != sid || expected != total || parts == null) {
+                activeSyncId = sid;
+                newestSyncIdSeen = sid;
+                expected = total;
+                parts = new byte[total][];
+                received = 0;
+            }
+
+            if (parts[idx] == null) {
+                parts[idx] = p.part() == null ? new byte[0] : p.part();
+                received++;
+            }
+
+            if (received >= expected) {
+                int totalLen = 0;
+                for (int i = 0; i < expected; i++) {
+                    if (parts[i] == null) { reset(); return; }
+                    totalLen += parts[i].length;
+                }
+
+                byte[] all = new byte[totalLen];
+                int off = 0;
+                for (int i = 0; i < expected; i++) {
+                    byte[] b = parts[i];
+                    System.arraycopy(b, 0, all, off, b.length);
+                    off += b.length;
+                }
+
+                String json = new String(all, StandardCharsets.UTF_8);
+                reset();
+                QuestData.applyNetworkJson(json);
+                ClientOnly.applyConfigChanges();
+            }
+        }
+    }
+}
+
+

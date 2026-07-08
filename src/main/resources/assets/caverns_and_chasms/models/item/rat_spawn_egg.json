@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "caverns_and_chasms:item/rat_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "eldritch_end:item/tentacle_spawn_egg"
+  }
+}

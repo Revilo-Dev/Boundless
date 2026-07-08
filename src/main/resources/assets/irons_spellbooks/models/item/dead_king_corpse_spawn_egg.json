@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "irons_spellbooks:item/dead_king_corpse_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "wan_ancient_beasts:item/crusher_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "traveloptics:item/fading_mage_spawn_egg"
+  }
+}

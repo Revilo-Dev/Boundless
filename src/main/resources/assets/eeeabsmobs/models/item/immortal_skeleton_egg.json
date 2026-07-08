@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "eeeabsmobs:item/immortal_skeleton_egg"
+  }
+}

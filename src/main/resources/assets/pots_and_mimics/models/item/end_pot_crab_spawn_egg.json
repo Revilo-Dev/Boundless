@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "pots_and_mimics:item/end_pot_crab_spawn_egg"
+  }
+}

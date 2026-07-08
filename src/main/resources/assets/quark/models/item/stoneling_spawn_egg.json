@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "quark:item/stoneling_spawn_egg"
+  }
+}

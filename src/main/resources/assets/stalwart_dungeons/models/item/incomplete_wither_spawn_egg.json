@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "stalwart_dungeons:item/incomplete_wither_spawn_egg"
+  }
+}

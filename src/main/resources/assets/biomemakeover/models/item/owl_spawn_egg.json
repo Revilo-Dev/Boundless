@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "biomemakeover:item/owl_spawn_egg"
+  }
+}

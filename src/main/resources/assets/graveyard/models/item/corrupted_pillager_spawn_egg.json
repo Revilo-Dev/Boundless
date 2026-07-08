@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "graveyard:item/corrupted_pillager_spawn_egg"
+  }
+}

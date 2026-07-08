@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "theinkarena:item/morphink_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "realmrpg_wyrms:item/ender_wyrm_spawn_egg"
+  }
+}

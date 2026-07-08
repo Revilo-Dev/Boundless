@@ -1,0 +1,22 @@
+{
+  "category": "minecraft",
+  "sub-category": "getting_started",
+  "id": "smelting",
+  "name": "Smelting",
+  "icon": "minecraft:furnace",
+  "description": "Craft a furnace to smelt ores and cook food.",
+  "dependencies": "stone_age",
+  "optional": "false",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:furnace", "count": 1 }
+    ]
+  },
+  "reward": {
+    "items": [
+      { "item": "minecraft:coal", "count": 16 }
+    ],
+    "exp": "points",
+    "count": 50
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mythicmounts:item/acencia_spawn_egg"
+  }
+}

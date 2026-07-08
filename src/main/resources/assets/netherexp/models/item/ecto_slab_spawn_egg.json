@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "netherexp:item/ecto_slab_spawn_egg"
+  }
+}

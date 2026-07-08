@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "eternalnether:item/warped_enderman_spawn_egg"
+  }
+}

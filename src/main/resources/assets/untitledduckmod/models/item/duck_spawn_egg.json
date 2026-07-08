@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "untitledduckmod:item/duck_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "scguns:item/blunderer_spawn_egg"
+  }
+}

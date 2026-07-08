@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "seadwellers:item/random_mermorph_spawn_egg"
+  }
+}

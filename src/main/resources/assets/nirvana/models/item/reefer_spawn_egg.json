@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "nirvana:item/reefer_spawn_egg"
+  }
+}

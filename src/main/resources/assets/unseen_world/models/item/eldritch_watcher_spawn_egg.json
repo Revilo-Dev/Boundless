@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "unseen_world:item/eldritch_watcher_spawn_egg"
+  }
+}

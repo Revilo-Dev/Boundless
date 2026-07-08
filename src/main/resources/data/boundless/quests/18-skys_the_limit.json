@@ -1,0 +1,22 @@
+{
+  "category": "minecraft",
+  "sub-category": "end_game",
+  "id": "skys_the_limit",
+  "name": "Sky’s the Limit",
+  "icon": "minecraft:elytra",
+  "description": "Obtain an elytra and take to the skies, use firework rockets to boost yourself, just make sure they don't explode!",
+  "dependencies": "shulker_storage",
+  "optional": "false",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:elytra", "count": 1 }
+    ]
+  },
+  "reward": {
+    "items": [
+      { "item": "minecraft:firework_rocket", "count": 64 }
+    ],
+    "exp": "points",
+    "count": 150
+  }
+}

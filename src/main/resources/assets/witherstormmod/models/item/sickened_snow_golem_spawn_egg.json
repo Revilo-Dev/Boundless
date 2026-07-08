@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "witherstormmod:item/sickened_snow_golem_spawn_egg"
+  }
+}

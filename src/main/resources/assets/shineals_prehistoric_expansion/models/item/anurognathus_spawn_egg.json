@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "shineals_prehistoric_expansion:item/anurognathus_spawn_egg"
+  }
+}

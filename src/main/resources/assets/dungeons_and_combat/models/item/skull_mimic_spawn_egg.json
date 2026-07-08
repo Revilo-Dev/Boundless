@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "dungeons_and_combat:item/skull_mimic_spawn_egg"
+  }
+}

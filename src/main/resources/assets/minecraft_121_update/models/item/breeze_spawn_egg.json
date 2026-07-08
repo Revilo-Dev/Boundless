@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "minecraft_121_update:item/breeze_spawn_egg"
+  }
+}

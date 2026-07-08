@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "legendarycreatures:item/corpse_eater_spawn_egg"
+  }
+}

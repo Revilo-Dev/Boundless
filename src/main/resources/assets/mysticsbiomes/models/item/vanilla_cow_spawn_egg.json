@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mysticsbiomes:item/vanilla_cow_spawn_egg"
+  }
+}

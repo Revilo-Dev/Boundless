@@ -1,0 +1,25 @@
+{
+  "category": "minecraft",
+  "sub-category": "mid_game",
+  "id": "diamonds",
+  "name": "Diamonds",
+  "icon": "minecraft:diamond",
+  "description": "Craft your first set of diamond tools and prepare for enchanting.",
+  "dependencies": "iron_age",
+  "optional": "false",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:diamond_pickaxe", "count": 1 },
+      { "collect": "minecraft:diamond_sword", "count": 1 },
+      { "collect": "minecraft:diamond_axe", "count": 1 }
+    ]
+  },
+  "reward": {
+    "items": [
+      { "item": "minecraft:obsidian", "count": 4 },
+      { "item": "minecraft:book", "count": 1 }
+    ],
+    "exp": "points",
+    "count": 150
+  }
+}

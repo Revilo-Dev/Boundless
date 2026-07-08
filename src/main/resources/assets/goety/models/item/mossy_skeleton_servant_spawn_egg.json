@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "goety:item/mossy_skeleton_servant_spawn_egg"
+  }
+}

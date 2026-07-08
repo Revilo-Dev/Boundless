@@ -1,0 +1,19 @@
+{
+  "category": "minecraft",
+  "sub-category": "mid_game",
+  "id": "artisan",
+  "name": "Artisan",
+  "icon": "minecraft:anvil",
+  "description": "Craft an anvil to repair, combine, and improve your gear.",
+  "dependencies": "iron_age",
+  "optional": "false",
+  "completion": {
+    "complete": [
+      { "collect": "minecraft:anvil", "count": 1 }
+    ]
+  },
+  "reward": {
+    "exp": "points",
+    "count": 60
+  }
+}

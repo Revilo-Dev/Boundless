@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "crittersandcompanions:item/leaf_insect_spawn_egg"
+  }
+} 

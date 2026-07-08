@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "mischief_illagers:item/doodle_pillager_spawn_egg"
+  }
+}

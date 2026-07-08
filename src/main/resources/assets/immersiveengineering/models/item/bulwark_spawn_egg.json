@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "immersiveengineering:item/bulwark_spawn_egg"
+  }
+}

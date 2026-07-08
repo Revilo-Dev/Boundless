@@ -1,0 +1,606 @@
+package net.revilodev.boundless.client;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.revilodev.boundless.Config;
+import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestTracker;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Consumer;
+
+@Environment(EnvType.CLIENT)
+public final class QuestListWidget extends AbstractWidget {
+
+    private static final ResourceLocation ROW_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget.png");
+    private static final ResourceLocation ROW_TEX_DISABLED =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_disabled.png");
+    private static final ResourceLocation ROW_TEX_REDEEMABLE =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_redeemable.png");
+    private static final ResourceLocation ROW_TEX_COMPLETED =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_completed.png");
+    private static final ResourceLocation ROW_TEX_DISCARDED =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_discarded.png");
+    private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
+
+    private final Minecraft mc = Minecraft.getInstance();
+    private final List<QuestData.Quest> quests = new ArrayList<>();
+    private final Consumer<QuestData.Quest> onClick;
+    private final Map<String, Boolean> subOpen = new HashMap<>();
+
+    private float scrollY = 0;
+    private final int rowH = 27;
+    private final int pad = 1;
+    private final int subHeaderH = 12;
+
+    private String category = "all";
+    private boolean bypassFilters = false;
+    private List<RowEntry> cachedRows = List.of();
+    private int cachedContentHeight = 0;
+    private long cachedTick = Long.MIN_VALUE;
+    private String cachedCategory = null;
+    private boolean cachedBypassFilters = false;
+    private boolean cachedAllowCompleted = false;
+    private boolean cachedAllowRejected = false;
+    private boolean cachedAllowLocked = true;
+    private String searchQuery = "";
+    private int topInset = 0;
+    private boolean useConfigScaling = true;
+
+    public QuestListWidget(int x, int y, int w, int h, Consumer<QuestData.Quest> onClick) {
+        super(x, y, w, h, Component.empty());
+        this.onClick = onClick;
+    }
+
+    public void setQuests(Iterable<QuestData.Quest> qs) {
+        quests.clear();
+        for (QuestData.Quest q : qs) quests.add(q);
+        quests.sort(Comparator.comparing(QuestData.Quest::sourceSortKey));
+        scrollY = 0;
+        invalidateRowsCache();
+    }
+
+    public void setCategory(String cat) {
+        category = cat == null ? "all" : cat;
+        scrollY = 0;
+        invalidateRowsCache();
+    }
+
+    public void setBypassFilters(boolean bypass) {
+        this.bypassFilters = bypass;
+        invalidateRowsCache();
+    }
+
+    public void setBounds(int x, int y, int w, int h) {
+        this.setX(x);
+        this.setY(y);
+        this.width = w;
+        this.height = h;
+    }
+
+    public void setSearchQuery(String searchQuery) {
+        String next = searchQuery == null ? "" : searchQuery.trim().toLowerCase(java.util.Locale.ROOT);
+        if (Objects.equals(this.searchQuery, next)) return;
+        this.searchQuery = next;
+        scrollY = 0;
+        invalidateRowsCache();
+    }
+
+    public void setTopInset(int topInset) {
+        this.topInset = Math.max(0, topInset);
+    }
+
+    public void setUseConfigScaling(boolean useConfigScaling) {
+        this.useConfigScaling = useConfigScaling;
+    }
+
+    private float configuredTextScale() {
+        return useConfigScaling ? Config.questTextScale() : 1.0f;
+    }
+
+    private float configuredIconScale() {
+        return useConfigScaling ? Config.questIconScale() : 1.0f;
+    }
+
+    private static final class RowEntry {
+        final QuestData.SubCategory subCategory;
+        final QuestData.Quest quest;
+
+        RowEntry(QuestData.SubCategory subCategory) {
+            this.subCategory = subCategory;
+            this.quest = null;
+        }
+
+        RowEntry(QuestData.Quest quest) {
+            this.quest = quest;
+            this.subCategory = null;
+        }
+
+        boolean isHeader() {
+            return subCategory != null;
+        }
+    }
+
+    private String subKey(String cat, String subId) {
+        String c = cat == null ? "" : cat;
+        String s = subId == null ? "" : subId;
+        return c + "::" + s;
+    }
+
+    private boolean isSubOpen(QuestData.SubCategory sc) {
+        if (sc == null) return true;
+        String key = subKey(sc.category, sc.id);
+        return subOpen.getOrDefault(key, sc.defaultOpen);
+    }
+
+    private void toggleSubOpen(QuestData.SubCategory sc) {
+        if (sc == null) return;
+        String key = subKey(sc.category, sc.id);
+        boolean next = !isSubOpen(sc);
+        subOpen.put(key, next);
+        invalidateRowsCache();
+    }
+
+    private String prettifyId(String raw) {
+        if (raw == null || raw.isBlank()) return "";
+        String clean = raw.replace('_', ' ').replace('-', ' ').trim();
+        String[] parts = clean.split("\\s+");
+        StringBuilder out = new StringBuilder();
+        for (String part : parts) {
+            if (part.isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            out.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) out.append(part.substring(1));
+        }
+        return out.toString();
+    }
+
+    private void drawScaledString(GuiGraphics gg, String text, float scale, int x, int y, int color) {
+        if (text == null || text.isEmpty()) return;
+        gg.pose().pushPose();
+        gg.pose().scale(scale, scale, 1f);
+        float inv = 1f / scale;
+        gg.drawString(mc.font, text, Mth.floor(x * inv), Mth.floor(y * inv), color, false);
+        gg.pose().popPose();
+    }
+
+    private boolean categoryUnlocked(String catId) {
+        var c = QuestData.categoryById(catId).orElse(null);
+        if (mc.player == null) return true;
+        return QuestData.isCategoryUnlocked(c, mc.player);
+    }
+
+    private boolean includeInAll(QuestData.Quest q) {
+        if (mc.player == null) return true;
+        return QuestData.includeQuestInAll(q, mc.player);
+    }
+
+    private boolean matchesCategory(QuestData.Quest q) {
+        if (bypassFilters) return true;
+        if (Config.disabledCategories().contains(q.category)) return false;
+        if ("all".equalsIgnoreCase(category)) return includeInAll(q);
+        if (!q.category.equalsIgnoreCase(category)) return false;
+        return categoryUnlocked(q.category);
+    }
+
+    private boolean isActuallyVisible(QuestData.Quest q) {
+        if (bypassFilters) return true;
+        if (mc.player == null) return true;
+        QuestTracker.Status st = QuestTracker.getStatus(q, mc.player);
+        if (st == QuestTracker.Status.INCOMPLETE) {
+            return QuestTracker.isVisible(q, mc.player);
+        }
+        return true;
+    }
+
+    private boolean passesFilters(QuestData.Quest q) {
+        if (bypassFilters) return true;
+        if (mc.player == null) return true;
+
+        QuestTracker.Status st = QuestTracker.getStatus(q, mc.player);
+        boolean deps = QuestTracker.dependenciesMet(q, mc.player);
+
+        if (!QuestFilterBar.allowCompleted() && st == QuestTracker.Status.REDEEMED) {
+            return false;
+        }
+
+        if (!QuestFilterBar.allowRejected() && st == QuestTracker.Status.REJECTED) {
+            return false;
+        }
+
+        if (!QuestFilterBar.allowLocked() && !deps) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean matchesSearch(QuestData.Quest q) {
+        if (q == null) return false;
+        if (searchQuery == null || searchQuery.isBlank()) return true;
+        return q.name != null && q.name.toLowerCase(java.util.Locale.ROOT).contains(searchQuery);
+    }
+
+    private List<RowEntry> buildRows() {
+        List<RowEntry> rows = new ArrayList<>();
+        if (mc.player == null) return rows;
+
+        List<QuestData.Quest> ungrouped = new ArrayList<>();
+        Map<String, List<QuestData.Quest>> grouped = new HashMap<>();
+
+        for (QuestData.Quest q : quests) {
+            if (!matchesCategory(q)) continue;
+            if (!isActuallyVisible(q)) continue;
+            if (!passesFilters(q)) continue;
+            if (!matchesSearch(q)) continue;
+
+            if (q.subCategory == null || q.subCategory.isBlank()) {
+                ungrouped.add(q);
+            } else {
+                String key = subKey(q.category, q.subCategory);
+                grouped.computeIfAbsent(key, k -> new ArrayList<>()).add(q);
+            }
+        }
+
+        for (QuestData.Quest q : ungrouped) {
+            rows.add(new RowEntry(q));
+        }
+
+        Set<String> seen = new HashSet<>();
+        List<QuestData.SubCategory> subCats = "all".equalsIgnoreCase(category)
+                ? QuestData.subCategoriesAllOrdered()
+                : QuestData.subCategoriesForCategory(category);
+
+        for (QuestData.SubCategory sc : subCats) {
+            String key = subKey(sc.category, sc.id);
+            List<QuestData.Quest> qs = grouped.get(key);
+            if (qs == null || qs.isEmpty()) continue;
+
+            rows.add(new RowEntry(sc));
+            if (isSubOpen(sc)) {
+                for (QuestData.Quest q : qs) rows.add(new RowEntry(q));
+            }
+            seen.add(key);
+        }
+
+        for (var entry : grouped.entrySet()) {
+            if (seen.contains(entry.getKey())) continue;
+            List<QuestData.Quest> qs = entry.getValue();
+            if (qs == null || qs.isEmpty()) continue;
+
+            QuestData.Quest first = qs.get(0);
+            QuestData.SubCategory sc = new QuestData.SubCategory(
+                    first.subCategory,
+                    first.category,
+                    first.icon,
+                    prettifyId(first.subCategory),
+                    0,
+                    true,
+                    List.of(),
+                    ""
+            );
+
+            rows.add(new RowEntry(sc));
+            if (isSubOpen(sc)) {
+                for (QuestData.Quest q : qs) rows.add(new RowEntry(q));
+            }
+        }
+
+        return rows;
+    }
+
+    private void invalidateRowsCache() {
+        cachedRows = List.of();
+        cachedContentHeight = 0;
+        cachedTick = Long.MIN_VALUE;
+    }
+
+    private List<RowEntry> rowsForCurrentState() {
+        if (mc.player == null) return List.of();
+
+        long tick = mc.level != null ? mc.level.getGameTime() : Long.MIN_VALUE;
+        boolean allowCompleted = QuestFilterBar.allowCompleted();
+        boolean allowRejected = QuestFilterBar.allowRejected();
+        boolean allowLocked = QuestFilterBar.allowLocked();
+
+        boolean stale = cachedTick != tick
+                || !Objects.equals(cachedCategory, category)
+                || cachedBypassFilters != bypassFilters
+                || cachedAllowCompleted != allowCompleted
+                || cachedAllowRejected != allowRejected
+                || cachedAllowLocked != allowLocked;
+
+        if (stale) {
+            cachedRows = buildRows();
+            cachedContentHeight = contentHeight(cachedRows);
+            cachedTick = tick;
+            cachedCategory = category;
+            cachedBypassFilters = bypassFilters;
+            cachedAllowCompleted = allowCompleted;
+            cachedAllowRejected = allowRejected;
+            cachedAllowLocked = allowLocked;
+        }
+
+        return cachedRows;
+    }
+
+    private int rowHeight(RowEntry row) {
+        if (row == null) return 0;
+        return (row.isHeader() ? subHeaderH : rowH) + pad;
+    }
+
+    private int contentHeight(List<RowEntry> rows) {
+        int total = 0;
+        for (RowEntry row : rows) {
+            total += rowHeight(row);
+        }
+        return total;
+    }
+
+    private int contentHeight() {
+        rowsForCurrentState();
+        return cachedContentHeight;
+    }
+
+    @Override
+    protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float pt) {
+        if (!visible || mc.player == null) return;
+
+        RenderSystem.enableBlend();
+        int contentTop = getY() + topInset;
+        int viewportHeight = Math.max(0, height - topInset);
+        gg.enableScissor(getX(), contentTop, getX() + width, contentTop + viewportHeight);
+
+        int yOff = contentTop - Mth.floor(scrollY);
+        int yCursor = yOff;
+
+        List<RowEntry> rows = rowsForCurrentState();
+        boolean hideIcons = Config.hideQuestWidgetIcons();
+        for (RowEntry row : rows) {
+            int h = row.isHeader() ? subHeaderH : rowH;
+            int top = yCursor;
+
+            if (top > contentTop + viewportHeight) break;
+            if (top + h < contentTop) {
+                yCursor += rowHeight(row);
+                continue;
+            }
+
+            if (row.isHeader()) {
+                QuestData.SubCategory sc = row.subCategory;
+                boolean open = isSubOpen(sc);
+
+                float iconScale = 0.45f * configuredIconScale();
+                int iconSize = (int) (16 * iconScale);
+                int iconX = getX() + 2;
+                int iconY = top + (h - iconSize) / 2;
+                int textIconSize = hideIcons ? 0 : iconSize;
+
+                if (!hideIcons) {
+                    sc.iconItem().ifPresent(item -> {
+                        gg.pose().pushPose();
+                        gg.pose().translate(iconX, iconY, 0);
+                        gg.pose().scale(iconScale, iconScale, 1f);
+                        gg.renderItem(new ItemStack(item), 0, 0);
+                        gg.pose().popPose();
+                    });
+                }
+
+                float textScale = 0.66f * configuredTextScale();
+                String name = sc.name;
+                int textX = iconX + textIconSize + 2;
+                int textH = (int) (mc.font.lineHeight * textScale);
+                int textY = top + (h - textH) / 2 + 1;
+
+                String sym = open ? "-" : "+";
+                int symW = (int) (mc.font.width(sym) * textScale);
+                int symX = getX() + width - symW - 2;
+                int maxW = symX - textX - 2;
+                int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
+                if (mc.font.width(name) > maxWUnscaled) {
+                    name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - mc.font.width("..."))) + "...";
+                }
+
+                drawScaledString(gg, name, textScale, textX, textY, 0xFFFFFF);
+                drawScaledString(gg, sym, textScale, symX, textY, 0xFFFFFF);
+            } else {
+                QuestData.Quest q = row.quest;
+                if (q != null && q.id != null && q.id.startsWith("settings_spacer_")) {
+                    yCursor += rowHeight(row);
+                    continue;
+                }
+                QuestTracker.Status st = QuestTracker.getStatus(q, mc.player);
+                boolean deps = QuestTracker.dependenciesMet(q, mc.player);
+                boolean ready = deps && QuestTracker.isReady(q, mc.player);
+
+                ResourceLocation tex;
+                if (!deps) {
+                    tex = ROW_TEX_DISABLED;
+                } else if (st == QuestTracker.Status.REJECTED) {
+                    tex = ROW_TEX_DISCARDED;
+                } else if (st == QuestTracker.Status.REDEEMED) {
+                    tex = ROW_TEX_COMPLETED;
+                } else if (st == QuestTracker.Status.COMPLETED || ready) {
+                    tex = ROW_TEX_REDEEMABLE;
+                } else {
+                    tex = ROW_TEX;
+                }
+
+                boolean hovered = this.active
+                        && mouseX >= getX() && mouseX <= getX() + width
+                        && mouseY >= top && mouseY <= top + h;
+                blitQuestWidget(gg, tex, getX(), top, 127, 27, hovered);
+
+                int textX = getX() + 23;
+                if (!hideIcons) {
+                    renderQuestIcon(gg, q, getX() + 6, top + 5);
+                } else {
+                    textX = getX() + 6;
+                }
+
+                float textScale = configuredTextScale();
+                String name = q.name == null ? "" : q.name;
+                int maxW = getX() + width - textX - 4;
+                int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
+                if (mc.font.width(name) > maxWUnscaled) {
+                    name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - mc.font.width("..."))) + "...";
+                }
+                int textH = Math.round(mc.font.lineHeight * textScale);
+                int textY = top + (h - textH) / 2 + 1;
+                drawScaledString(gg, name, textScale, textX, textY,
+                        deps ? 0xFFFFFF : 0xA0A0A0);
+            }
+
+            yCursor += rowHeight(row);
+        }
+
+        gg.disableScissor();
+
+        int content = contentHeight(rows);
+        if (content > viewportHeight) {
+            float maxScroll = content - viewportHeight;
+            float ratio = (float) viewportHeight / (float) content;
+            int barH = Math.max(12, (int) (viewportHeight * ratio));
+            float scrollRatio = maxScroll <= 0 ? 0f : scrollY / maxScroll;
+            int barY = contentTop + (int) ((viewportHeight - barH) * scrollRatio);
+            gg.fill(getX() + width + 4, barY, getX() + width + 6, barY + barH, 0xFF808080);
+        }
+    }
+
+    private void blitQuestWidget(GuiGraphics gg, ResourceLocation texture, int x, int y, int w, int h, boolean hovered) {
+        if (hovered) RenderSystem.setShaderColor(1.1f, 1.1f, 1.1f, 1.0f);
+        gg.blit(texture, x, y, 0, 0, w, h, w, h);
+        if (hovered) RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+
+    private void renderScaledItem(GuiGraphics gg, ItemStack stack, int x, int y) {
+        if (stack == null || stack.isEmpty()) return;
+        float scale = configuredIconScale();
+        int size = Math.max(1, Math.round(16 * scale));
+        int dx = x + (16 - size) / 2;
+        int dy = y + (16 - size) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(dx, dy, 0);
+        gg.pose().scale(scale, scale, 1f);
+        gg.renderItem(stack, 0, 0);
+        gg.pose().popPose();
+    }
+
+    private void renderQuestIcon(GuiGraphics gg, QuestData.Quest quest, int x, int y) {
+        if (quest == null) return;
+        ResourceLocation texture = textureIcon(quest.icon);
+        if (texture != null) {
+            renderScaledTextureIcon(gg, texture, x, y);
+            return;
+        }
+        quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x, y));
+    }
+
+    private ResourceLocation textureIcon(String icon) {
+        if (icon == null || icon.isBlank()) return null;
+        try {
+            ResourceLocation rl = ResourceLocation.parse(icon);
+            if (!rl.getPath().startsWith("textures/")) return null;
+            return textureExists(rl) ? rl : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean textureExists(ResourceLocation texture) {
+        if (texture == null) return false;
+        Boolean cached = TEXTURE_EXISTS_CACHE.get(texture);
+        if (cached != null) return cached;
+        boolean exists = false;
+        try {
+            exists = mc.getResourceManager().getResource(texture).isPresent();
+        } catch (Exception ignored) {
+        }
+        TEXTURE_EXISTS_CACHE.put(texture, exists);
+        return exists;
+    }
+
+    private void renderScaledTextureIcon(GuiGraphics gg, ResourceLocation texture, int x, int y) {
+        float scale = configuredIconScale();
+        int size = Math.max(1, Math.round(16 * scale));
+        int dx = x + (16 - size) / 2;
+        int dy = y + (16 - size) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(dx, dy, 0);
+        gg.pose().scale(scale, scale, 1f);
+        gg.blit(texture, 0, 0, 0, 0, 16, 16, 16, 16);
+        gg.pose().popPose();
+    }
+
+    @Override
+    public boolean mouseClicked(double mxD, double myD, int button) {
+        if (!visible || !active || button != 0) return false;
+
+        int mx = (int) mxD;
+        int my = (int) myD;
+
+        if (!isMouseOver(mx, my)) return false;
+        if (mc.player == null) return false;
+        if (my < getY() + topInset) return false;
+
+        int localY = (int) (my - (getY() + topInset) + scrollY);
+        int yCursor = 0;
+
+        List<RowEntry> rows = rowsForCurrentState();
+        for (RowEntry row : rows) {
+            int h = rowHeight(row);
+            if (localY >= yCursor && localY < yCursor + h) {
+                if (row.isHeader()) {
+                    toggleSubOpen(row.subCategory);
+                    return true;
+                }
+                if (row.quest != null && onClick != null) {
+                    onClick.accept(row.quest);
+                    return true;
+                }
+                return false;
+            }
+            yCursor += h;
+        }
+
+        return false;
+    }
+
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (!visible || !active) return false;
+        int content = contentHeight();
+        int viewportHeight = Math.max(0, height - topInset);
+        if (content <= viewportHeight) return false;
+
+        float max = content - viewportHeight;
+        scrollY = Mth.clamp(scrollY - (float) (delta * 12), 0f, max);
+        return true;
+    }
+
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+        return mouseScrolled(mouseX, mouseY, deltaY);
+    }
+
+    @Override
+    protected void updateWidgetNarration(NarrationElementOutput n) {
+    }
+}
+
+

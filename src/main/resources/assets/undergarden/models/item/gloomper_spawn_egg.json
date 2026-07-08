@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "undergarden:item/gloomper_spawn_egg"
+  }
+}

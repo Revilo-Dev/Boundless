@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "fowlplay:item/robin_spawn_egg"
+  }
+}

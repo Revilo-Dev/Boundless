@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "aquamirae:item/maze_mother_spawn_egg"
+  }
+}

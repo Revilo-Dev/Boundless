@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "terramity:item/trial_guardian_spawn_egg"
+  }
+}

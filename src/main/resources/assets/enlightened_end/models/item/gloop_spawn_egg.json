@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "enlightened_end:item/gloop_spawn_egg"
+  }
+}

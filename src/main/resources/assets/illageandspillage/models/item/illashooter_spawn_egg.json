@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "illageandspillage:item/illashooter_spawn_egg"
+  }
+}

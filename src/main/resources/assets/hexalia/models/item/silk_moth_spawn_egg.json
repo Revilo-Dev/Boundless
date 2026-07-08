@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "hexalia:item/silk_moth_spawn_egg"
+  }
+}

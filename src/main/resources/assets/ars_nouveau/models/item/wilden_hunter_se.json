@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "ars_nouveau:item/wilden_hunter_se"
+  }
+}

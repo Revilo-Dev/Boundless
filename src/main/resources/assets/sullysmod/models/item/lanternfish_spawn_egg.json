@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "sullysmod:item/lanternfish_spawn_egg"
+  }
+}

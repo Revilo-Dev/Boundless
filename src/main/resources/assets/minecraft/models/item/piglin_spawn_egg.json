@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "minecraft:item/piglin_spawn_egg"
+  }
+}

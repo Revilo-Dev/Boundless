@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "soulsweapons:item/frost_giant_spawn_egg"
+  }
+}

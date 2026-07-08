@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "realmrpg_quests:item/piglin_gambler_spawn_egg"
+  }
+}

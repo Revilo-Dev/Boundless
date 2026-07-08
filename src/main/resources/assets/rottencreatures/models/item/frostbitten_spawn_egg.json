@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "rottencreatures:item/frostbitten_spawn_egg"
+  }
+}

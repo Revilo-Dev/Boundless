@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "companions:item/cornelius_spawn_egg"
+  }
+}

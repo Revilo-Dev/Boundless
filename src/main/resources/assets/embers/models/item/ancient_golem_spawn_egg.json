@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "embers:item/ancient_golem_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "gnumus:item/marsupial_mousse_spawn_egg"
+  }
+}

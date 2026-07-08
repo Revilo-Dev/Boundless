@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "gtbcs_geomancy_plus:item/geomancer_spawn_egg"
+  }
+}

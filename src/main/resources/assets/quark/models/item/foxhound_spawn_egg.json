@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "quark:item/foxhound_spawn_egg"
+  }
+}

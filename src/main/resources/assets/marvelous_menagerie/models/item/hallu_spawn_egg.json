@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "marvelous_menagerie:item/hallu_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "goety:item/hostile_redstone_monstrosity_spawn_egg"
+  }
+}

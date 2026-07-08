@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "biomemakeover:item/mushroom_trader_spawn_egg"
+  }
+}

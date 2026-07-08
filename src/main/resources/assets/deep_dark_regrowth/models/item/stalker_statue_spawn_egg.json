@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "deep_dark_regrowth:item/stalker_statue_spawn_egg"
+  }
+}

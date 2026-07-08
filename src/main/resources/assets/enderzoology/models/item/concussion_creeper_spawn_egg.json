@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "enderzoology:item/concussion_creeper_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "naturalist:item/rattlesnake_spawn_egg"
+  }
+}

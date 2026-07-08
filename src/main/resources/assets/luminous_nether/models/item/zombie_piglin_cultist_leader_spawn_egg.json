@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "luminous_nether:item/zombie_piglin_cultist_leader_spawn_egg"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "category": "minecraft",
+  "sub-category": "getting_started",
+  "id": "first_night",
+  "name": "First Night",
+  "icon": "minecraft:white_bed",
+  "description": "Craft a bed to skip the night and set your respawn point.",
+  "dependencies": "smelting",
+  "optional": "false",
+  "completion": {
+    "complete": [
+      { "collect": "#minecraft:beds", "count": 1 }
+    ]
+  },
+  "reward": {
+    "items": [
+      { "item": "minecraft:campfire", "count": 1 }
+    ],
+    "exp": "points",
+    "count": 60
+  }
+}

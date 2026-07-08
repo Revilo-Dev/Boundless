@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "infinitygolem:item/infinity_golem_spawn_egg"
+  }
+}

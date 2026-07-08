@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",
+  "textures": {
+    "egg": "terramity:item/dungeon_effigy_spawn_egg"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/spawn_egg",  
+  "textures": {
+    "egg": "witherstormmod:item/withered_symbiont_spawn_egg"
+  }
+}
