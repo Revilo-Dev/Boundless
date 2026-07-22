@@ -114,37 +114,61 @@ public final class QuestObjectiveState extends SavedData {
 
     public int updateItemProgress(UUID player, String key, int current, int required) {
         String p = player.toString();
-        Map<String, Integer> m = itemProgressByPlayer.computeIfAbsent(p, k -> new HashMap<>());
-        int prev = Math.max(0, m.getOrDefault(key, 0));
+        Map<String, Integer> m = itemProgressByPlayer.get(p);
+        int prev = m == null ? 0 : Math.max(0, m.getOrDefault(key, 0));
         int now = Math.max(prev, Math.min(Math.max(0, current), Math.max(0, required)));
         if (now <= 0) {
-            m.remove(key);
-            if (m.isEmpty()) itemProgressByPlayer.remove(p);
-        } else {
-            m.put(key, now);
+            if (m != null && m.remove(key) != null) {
+                if (m.isEmpty()) itemProgressByPlayer.remove(p);
+                setDirty();
+            }
+            return 0;
         }
-        setDirty();
+        if (now != prev) {
+            if (m == null) {
+                m = new HashMap<>();
+                itemProgressByPlayer.put(p, m);
+            }
+            m.put(key, now);
+            setDirty();
+        }
         return now;
     }
 
     public boolean getEffectDone(UUID player, String key) {
+        return getFlagDone(player, key);
+    }
+
+    public boolean getFlagDone(UUID player, String key) {
         Map<String, Boolean> m = effectProgressByPlayer.get(player.toString());
         if (m == null) return false;
         return Boolean.TRUE.equals(m.get(key));
     }
 
     public boolean updateEffectDone(UUID player, String key, boolean hasNow) {
+        return updateFlagDone(player, key, hasNow);
+    }
+
+    public boolean updateFlagDone(UUID player, String key, boolean hasNow) {
         String p = player.toString();
-        Map<String, Boolean> m = effectProgressByPlayer.computeIfAbsent(p, k -> new HashMap<>());
-        boolean prev = Boolean.TRUE.equals(m.get(key));
+        Map<String, Boolean> m = effectProgressByPlayer.get(p);
+        boolean prev = m != null && Boolean.TRUE.equals(m.get(key));
         boolean now = prev || hasNow;
         if (now) {
-            m.put(key, true);
+            if (!prev) {
+                if (m == null) {
+                    m = new HashMap<>();
+                    effectProgressByPlayer.put(p, m);
+                }
+                m.put(key, true);
+                setDirty();
+            }
         } else {
-            m.remove(key);
-            if (m.isEmpty()) effectProgressByPlayer.remove(p);
+            if (m != null && m.remove(key) != null) {
+                if (m.isEmpty()) effectProgressByPlayer.remove(p);
+                setDirty();
+            }
         }
-        setDirty();
         return now;
     }
 
@@ -159,49 +183,73 @@ public final class QuestObjectiveState extends SavedData {
         if (key == null || key.isBlank()) return;
         String p = player.toString();
         String normalized = value == null ? "" : value.trim();
+        Map<String, String> m = inputProgressByPlayer.get(p);
         if (normalized.isBlank()) {
-            Map<String, String> m = inputProgressByPlayer.get(p);
-            if (m != null) {
-                m.remove(key);
+            if (m != null && m.remove(key) != null) {
                 if (m.isEmpty()) inputProgressByPlayer.remove(p);
+                setDirty();
             }
-            setDirty();
             return;
         }
-        inputProgressByPlayer.computeIfAbsent(p, k -> new HashMap<>()).put(key, normalized);
+        String prev = m == null ? null : m.get(key);
+        if (normalized.equals(prev)) return;
+        if (m == null) {
+            m = new HashMap<>();
+            inputProgressByPlayer.put(p, m);
+        }
+        m.put(key, normalized);
         setDirty();
     }
 
     public void clearPlayer(UUID player) {
         String p = player.toString();
-        itemProgressByPlayer.remove(p);
-        effectProgressByPlayer.remove(p);
-        inputProgressByPlayer.remove(p);
-        setDirty();
+        boolean changed = itemProgressByPlayer.remove(p) != null;
+        changed |= effectProgressByPlayer.remove(p) != null;
+        changed |= inputProgressByPlayer.remove(p) != null;
+        if (changed) setDirty();
     }
 
     public void clearQuest(UUID player, String questId) {
         String p = player.toString();
         if (questId == null || questId.isBlank()) return;
+        boolean changed = false;
 
         Map<String, Integer> items = itemProgressByPlayer.get(p);
         if (items != null) {
-            items.entrySet().removeIf(entry -> entry.getKey() != null && entry.getKey().startsWith(questId + ":"));
+            boolean removed = items.entrySet().removeIf(entry -> entry.getKey() != null && entry.getKey().startsWith(questId + ":"));
+            if (removed) changed = true;
             if (items.isEmpty()) itemProgressByPlayer.remove(p);
         }
 
         Map<String, Boolean> effects = effectProgressByPlayer.get(p);
         if (effects != null) {
-            effects.entrySet().removeIf(entry -> entry.getKey() != null && entry.getKey().startsWith(questId + ":"));
+            boolean removed = effects.entrySet().removeIf(entry -> entry.getKey() != null && entry.getKey().startsWith(questId + ":"));
+            if (removed) changed = true;
             if (effects.isEmpty()) effectProgressByPlayer.remove(p);
         }
 
         Map<String, String> inputs = inputProgressByPlayer.get(p);
         if (inputs != null) {
-            inputs.entrySet().removeIf(entry -> entry.getKey() != null && entry.getKey().startsWith(questId + ":"));
+            boolean removed = inputs.entrySet().removeIf(entry -> entry.getKey() != null && entry.getKey().startsWith(questId + ":"));
+            if (removed) changed = true;
             if (inputs.isEmpty()) inputProgressByPlayer.remove(p);
         }
 
-        setDirty();
+        if (changed) setDirty();
+    }
+
+    public Map<String, Integer> itemSnapshotFor(UUID player) {
+        Map<String, Integer> snapshot = itemProgressByPlayer.get(player.toString());
+        return snapshot == null || snapshot.isEmpty() ? Map.of() : Map.copyOf(snapshot);
+    }
+
+    public Map<String, Boolean> flagSnapshotFor(UUID player) {
+        Map<String, Boolean> snapshot = effectProgressByPlayer.get(player.toString());
+        return snapshot == null || snapshot.isEmpty() ? Map.of() : Map.copyOf(snapshot);
+    }
+
+    public Map<String, String> inputSnapshotFor(UUID player) {
+        Map<String, String> snapshot = inputProgressByPlayer.get(player.toString());
+        return snapshot == null || snapshot.isEmpty() ? Map.of() : Map.copyOf(snapshot);
     }
 }

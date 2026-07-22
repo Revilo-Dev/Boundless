@@ -23,15 +23,18 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.SharedConstants;
 import net.minecraft.util.StringUtil;
+import net.minecraft.stats.Stats;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.entity.MobCategory;
 import net.neoforged.api.distmarker.Dist;
@@ -264,7 +267,7 @@ public final class QuestEditorScreen extends Screen {
     private static final int ITEM_PICKER_SIDE_TAB_X = -TAB_W + 4;
     private static final int ITEM_PICKER_SIDE_TAB_Y = 17;
     private static final int ITEM_PICKER_SIDE_TAB_ICON_SIZE = 16;
-    private static final float ENTRY_TYPE_TEXT_SCALE = 0.55f;
+    private static final float ENTRY_TYPE_TEXT_SCALE = 0.45f;
     private static final int EDITOR_SUBHEADER_H = 12;
     private static final int EDITOR_SUBHEADER_GAP = 3;
 
@@ -366,6 +369,7 @@ public final class QuestEditorScreen extends Screen {
     private final List<EntryCountBox> rewardEntryCountBoxes = new ArrayList<>();
     private final Map<ScaledMultiLineEditBox, String> entryTypeByBox = new HashMap<>();
     private final Map<ScaledMultiLineEditBox, String> selectedItemIdByBox = new HashMap<>();
+    private final Map<ScaledMultiLineEditBox, List<String>> selectedItemIdsByBox = new HashMap<>();
     private final Map<ScaledMultiLineEditBox, String> selectedItemComponentsByBox = new HashMap<>();
     private final Map<ScaledMultiLineEditBox, Integer> entryCountByBox = new HashMap<>();
     private static final String LEGACY_PACK_TOOLTIP = "Incompatible pack";
@@ -382,6 +386,10 @@ public final class QuestEditorScreen extends Screen {
     private final List<String> effectIdCache = new ArrayList<>();
     private final List<String> advancementIdCache = new ArrayList<>();
     private final List<String> lootTableIdCache = new ArrayList<>();
+    private final List<String> biomeIdCache = new ArrayList<>();
+    private final List<String> dimensionIdCache = new ArrayList<>();
+    private final List<String> statIdCache = new ArrayList<>();
+    private final List<String> observeIdCache = new ArrayList<>();
     private final Set<String> categoryIdCache = new HashSet<>();
     private final Set<String> subCategoryIdCache = new HashSet<>();
     private final Set<String> questIdCache = new HashSet<>();
@@ -401,6 +409,9 @@ public final class QuestEditorScreen extends Screen {
     private EditBox idSuggestionField;
     private ScaledMultiLineEditBox idSuggestionMultiLineField;
     private int idSuggestionScroll = 0;
+    private Object lastIdSuggestionSource;
+    private String lastIdSuggestionPrefix = "";
+    private boolean idSuggestionsDirty = true;
     private boolean suppressIdSuggestions = false;
     private boolean suppressIdSanitizer = false;
     private boolean closingEditor = false;
@@ -429,9 +440,22 @@ public final class QuestEditorScreen extends Screen {
     private int itemPickerRow = -1;
     private EditBox itemPickerIconTarget;
     private ItemPickerTab itemPickerTab = ItemPickerTab.CREATIVE;
+    private ValidationSnapshot validationSnapshot;
     private PickerMode pickerMode = PickerMode.ITEMS;
     private int itemPickerPage = 0;
     private EditBox itemPickerSearchBox;
+    private boolean itemPickerMultiSelect = false;
+    private final LinkedHashSet<String> itemPickerPendingSelection = new LinkedHashSet<>();
+    private final LinkedHashSet<String> itemPickerOriginalSelection = new LinkedHashSet<>();
+    private String itemPickerSearchQuery = "";
+    private String cachedTagFilterQuery = "";
+    private final List<String> cachedFilteredTagIds = new ArrayList<>();
+    private final LinkedHashMap<String, TagPageData> itemTagPageCache = new LinkedHashMap<>(8, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, TagPageData> eldest) {
+            return size() > 8;
+        }
+    };
     private List<Component> pendingEditorTooltip = List.of();
     private int pendingEditorTooltipX;
     private int pendingEditorTooltipY;
@@ -534,7 +558,7 @@ public final class QuestEditorScreen extends Screen {
         catIconBox = createBox("Category icon", BOX_H);
         catIconBox.setTextColor(0x00000000);
         catIconBox.setTextColorUneditable(0x00000000);
-        catDependencyBox = createBox("Category dependency", BOX_H);
+        catDependencyBox = createBox("Unlock quest", BOX_H);
         catAutoCompleteToggle = createToggle(false);
 
         subIdBox = createBox("Sub-category id", BOX_H);
@@ -1304,7 +1328,7 @@ public final class QuestEditorScreen extends Screen {
         setActiveFields(List.of(
                 field(trs("field.id"), catIdBox),
                 field("Display", catNameBox),
-                field(trs("field.dependency"), catDependencyBox),
+                field("Unlock quest", catDependencyBox),
                 field(trs("field.auto_complete") + " (" + trs("tooltip.auto_complete_category") + ")", catAutoCompleteToggle)
         ));
         saveButton.setMessage(tr("save"));
@@ -2115,21 +2139,24 @@ public final class QuestEditorScreen extends Screen {
         JsonObject obj = new JsonObject();
         switch (type) {
             case "collect", "item" -> {
-                String normalizedId = normalizeItemIdWithComponents(id, true);
-                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
-                obj.addProperty("collect", normalizedId);
+                List<String> acceptedItems = normalizeAcceptedEntryIds(parsed.acceptedIds, true, true);
+                if (acceptedItems.isEmpty()) return failCompletion(line, raiseErrors);
+                obj.addProperty("collect", acceptedItems.get(0));
+                if (acceptedItems.size() > 1) obj.add("acceptedItems", toJsonArray(acceptedItems));
                 obj.addProperty("count", count);
             }
             case "submit" -> {
-                String normalizedId = normalizeItemIdWithComponents(id, true);
-                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
-                obj.addProperty("submit", normalizedId);
+                List<String> acceptedItems = normalizeAcceptedEntryIds(parsed.acceptedIds, true, true);
+                if (acceptedItems.isEmpty()) return failCompletion(line, raiseErrors);
+                obj.addProperty("submit", acceptedItems.get(0));
+                if (acceptedItems.size() > 1) obj.add("acceptedItems", toJsonArray(acceptedItems));
                 obj.addProperty("count", count);
             }
             case "kill", "entity" -> {
-                String normalizedId = normalizeNamespacedId(id, false);
-                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
-                obj.addProperty("kill", normalizedId);
+                List<String> acceptedMobs = normalizeAcceptedEntryIds(parsed.acceptedIds, false, false);
+                if (acceptedMobs.isEmpty()) return failCompletion(line, raiseErrors);
+                obj.addProperty("kill", acceptedMobs.get(0));
+                if (acceptedMobs.size() > 1) obj.add("acceptedMobs", toJsonArray(acceptedMobs));
                 obj.addProperty("count", count);
             }
             case "achieve", "advancement" -> {
@@ -2141,6 +2168,31 @@ public final class QuestEditorScreen extends Screen {
                 String normalizedId = normalizeNamespacedId(id, false);
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
                 obj.addProperty("effect", normalizedId);
+            }
+            case "stat" -> {
+                String statId = safe(id).trim();
+                if (statId.isBlank()) return failCompletion(line, raiseErrors);
+                obj.addProperty("stat", statId);
+                obj.addProperty("count", count);
+            }
+            case "observe" -> {
+                String normalizedId = normalizeNamespacedId(id, false);
+                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
+                obj.addProperty("observe", normalizedId);
+            }
+            case "check" -> {
+                String text = safe(id).trim();
+                obj.addProperty("check", text.isBlank() ? "Understand" : text);
+            }
+            case "biome" -> {
+                String normalizedId = normalizeNamespacedId(id, false);
+                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
+                obj.addProperty("biome", normalizedId);
+            }
+            case "dimension" -> {
+                String normalizedId = normalizeNamespacedId(id, false);
+                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
+                obj.addProperty("dimension", normalizedId);
             }
             case "xp" -> {
                 String mode = safe(id).trim().toLowerCase(Locale.ROOT);
@@ -2174,6 +2226,71 @@ public final class QuestEditorScreen extends Screen {
         return null;
     }
 
+    private com.google.gson.JsonArray toJsonArray(List<String> values) {
+        com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+        if (values == null) return out;
+        for (String value : values) {
+            String normalized = safe(value).trim();
+            if (!normalized.isBlank()) out.add(normalized);
+        }
+        return out;
+    }
+
+    private List<String> normalizeAcceptedEntryIds(List<String> values, boolean allowItemComponents, boolean allowTags) {
+        List<String> out = new ArrayList<>();
+        if (values == null) return out;
+        for (String value : values) {
+            String normalized = allowItemComponents
+                    ? normalizeItemIdWithComponents(value, allowTags)
+                    : normalizeNamespacedId(value, allowTags);
+            if (!normalized.isBlank() && !out.contains(normalized)) out.add(normalized);
+        }
+        return out;
+    }
+
+    private List<String> readAcceptedEntryIds(JsonObject obj, String listKey, String fallbackKey) {
+        List<String> out = new ArrayList<>();
+        if (obj == null) return out;
+        if (!safe(listKey).isBlank() && obj.has(listKey) && obj.get(listKey).isJsonArray()) {
+            for (JsonElement element : obj.getAsJsonArray(listKey)) {
+                if (element != null && element.isJsonPrimitive()) {
+                    String value = element.getAsString();
+                    if (value != null && !value.isBlank() && !out.contains(value)) out.add(value);
+                }
+            }
+        }
+        if (!safe(fallbackKey).isBlank() && obj.has(fallbackKey)) {
+            JsonElement element = obj.get(fallbackKey);
+            if (element != null) {
+                if (element.isJsonArray()) {
+                    for (JsonElement value : element.getAsJsonArray()) {
+                        if (value != null && value.isJsonPrimitive()) {
+                            String raw = value.getAsString();
+                            if (raw != null && !raw.isBlank() && !out.contains(raw)) out.add(raw);
+                        }
+                    }
+                } else if (element.isJsonPrimitive()) {
+                    String value = element.getAsString();
+                    if (value != null && !value.isBlank() && !out.contains(value)) out.add(value);
+                }
+            }
+        }
+        return out;
+    }
+
+    private String formatAcceptedEntryLine(String type, List<String> acceptedIds, int count) {
+        List<String> ids = new ArrayList<>();
+        if (acceptedIds != null) {
+            for (String acceptedId : acceptedIds) {
+                String value = safe(acceptedId).trim();
+                if (!value.isBlank() && !ids.contains(value)) ids.add(value);
+            }
+        }
+        if (ids.isEmpty()) return "";
+        if (ids.size() == 1) return type + ": " + ids.get(0) + " " + count;
+        return type + ": [" + String.join(" | ", ids) + "] " + count;
+    }
+
     private JsonObject parseRewardEntries(String raw, boolean raiseErrors) {
         List<String> lines = extractEntryLines(raw);
         com.google.gson.JsonArray items = new com.google.gson.JsonArray();
@@ -2189,10 +2306,15 @@ public final class QuestEditorScreen extends Screen {
             }
             switch (parsed.type) {
                 case "item", "submit" -> {
-                    String normalizedId = normalizeItemIdWithComponents(parsed.id, false);
-                    if (normalizedId.isBlank()) return failReward(line, raiseErrors);
+                    List<String> acceptedItems = normalizeAcceptedEntryIds(
+                            parsed.acceptedIds == null || parsed.acceptedIds.isEmpty() ? List.of(parsed.id) : parsed.acceptedIds,
+                            true,
+                            false
+                    );
+                    if (acceptedItems.isEmpty()) return failReward(line, raiseErrors);
                     JsonObject item = new JsonObject();
-                    item.addProperty("item", normalizedId);
+                    item.addProperty("item", acceptedItems.get(0));
+                    if (acceptedItems.size() > 1) item.add("acceptedItems", toJsonArray(acceptedItems));
                     item.addProperty("count", parsed.count);
                     items.add(item);
                 }
@@ -2306,15 +2428,24 @@ public final class QuestEditorScreen extends Screen {
             }
             if (obj.has("kind") && obj.has("id")) {
                 String kind = optString(obj, "kind", "").toLowerCase(Locale.ROOT);
-                String id = optString(obj, "id", "");
+                List<String> acceptedIds = switch (kind) {
+                    case "item", "submit" -> readAcceptedEntryIds(obj, "acceptedItems", "id");
+                    case "entity" -> readAcceptedEntryIds(obj, "acceptedMobs", "id");
+                    default -> List.of(optString(obj, "id", ""));
+                };
+                String id = acceptedIds.isEmpty() ? "" : acceptedIds.get(0);
                 int count = parseIntFlexible(obj, "count", 1);
                 switch (kind) {
-                    case "item" -> out.add("collect: " + id + " " + count);
-                    case "submit" -> out.add("submit: " + id + " " + count);
-                    case "entity" -> out.add("kill: " + id + " " + count);
+                    case "item" -> out.add(formatAcceptedEntryLine("collect", acceptedIds, count));
+                    case "submit" -> out.add(formatAcceptedEntryLine("submit", acceptedIds, count));
+                    case "entity" -> out.add(formatAcceptedEntryLine("kill", acceptedIds, count));
                     case "advancement" -> out.add("achieve: " + id);
                     case "effect" -> out.add("effect: " + id);
                     case "stat" -> out.add("stat: " + id + " " + count);
+                    case "observe" -> out.add("observe: " + id);
+                    case "check" -> out.add("check: " + (id.isBlank() ? "Understand" : id));
+                    case "biome" -> out.add("biome: " + id);
+                    case "dimension" -> out.add("dimension: " + id);
                     case "xp" -> out.add("xp: " + id + " " + count);
                     case "levelup_level" -> out.add("levelup: levels " + count);
                     case "field" -> {
@@ -2327,25 +2458,26 @@ public final class QuestEditorScreen extends Screen {
                 return;
             }
             if (obj.has("collect")) {
-                JsonElement collect = obj.get("collect");
                 int count = parseIntFlexible(obj, "count", 1);
-                if (collect.isJsonArray()) {
-                    for (JsonElement c : collect.getAsJsonArray()) {
-                        if (c.isJsonPrimitive()) out.add("collect: " + c.getAsString() + " " + count);
-                    }
-                } else if (collect.isJsonPrimitive()) {
-                    out.add("collect: " + collect.getAsString() + " " + count);
-                }
+                out.add(formatAcceptedEntryLine("collect", readAcceptedEntryIds(obj, "acceptedItems", "collect"), count));
                 return;
             }
-            if (obj.has("item")) out.add("collect: " + optString(obj, "item", "") + " " + parseIntFlexible(obj, "count", 1));
-            else if (obj.has("submit")) out.add("submit: " + optString(obj, "submit", "") + " " + parseIntFlexible(obj, "count", 1));
-            else if (obj.has("kill")) out.add("kill: " + optString(obj, "kill", "") + " " + parseIntFlexible(obj, "count", 1));
-            else if (obj.has("entity")) out.add("kill: " + optString(obj, "entity", "") + " " + parseIntFlexible(obj, "count", 1));
+            if (obj.has("item")) out.add(formatAcceptedEntryLine("collect", readAcceptedEntryIds(obj, "acceptedItems", "item"), parseIntFlexible(obj, "count", 1)));
+            else if (obj.has("acceptedItems") && !obj.has("submit")) out.add(formatAcceptedEntryLine("collect", readAcceptedEntryIds(obj, "acceptedItems", ""), parseIntFlexible(obj, "count", 1)));
+            else if (obj.has("submit")) out.add(formatAcceptedEntryLine("submit", readAcceptedEntryIds(obj, "acceptedItems", "submit"), parseIntFlexible(obj, "count", 1)));
+            else if (obj.has("kill") || obj.has("acceptedMobs")) out.add(formatAcceptedEntryLine("kill", readAcceptedEntryIds(obj, "acceptedMobs", "kill"), parseIntFlexible(obj, "count", 1)));
+            else if (obj.has("entity")) out.add(formatAcceptedEntryLine("kill", readAcceptedEntryIds(obj, "acceptedMobs", "entity"), parseIntFlexible(obj, "count", 1)));
             else if (obj.has("achieve")) out.add("achieve: " + optString(obj, "achieve", ""));
             else if (obj.has("advancement")) out.add("achieve: " + optString(obj, "advancement", ""));
             else if (obj.has("effect")) out.add("effect: " + optString(obj, "effect", ""));
             else if (obj.has("stat")) out.add("stat: " + optString(obj, "stat", "") + " " + parseIntFlexible(obj, "count", 1));
+            else if (obj.has("observe")) out.add("observe: " + optString(obj, "observe", ""));
+            else if (obj.has("check")) {
+                String text = optString(obj, "check", "");
+                out.add("check: " + (text.isBlank() || "true".equalsIgnoreCase(text) ? "Understand" : text));
+            }
+            else if (obj.has("biome")) out.add("biome: " + optString(obj, "biome", ""));
+            else if (obj.has("dimension")) out.add("dimension: " + optString(obj, "dimension", ""));
             else if (obj.has("xp")) out.add("xp: " + optString(obj, "xp", "points") + " " + parseIntFlexible(obj, "count", 1));
             else if (obj.has("levelup_level")) out.add("levelup: levels " + parseIntFlexible(obj, "levelup_level", 1));
             else if (obj.has("field")) {
@@ -2375,7 +2507,9 @@ public final class QuestEditorScreen extends Screen {
                 JsonObject item = e.getAsJsonObject();
                 String id = optString(item, "item", "");
                 int count = parseIntFlexible(item, "count", 1);
-                if (!id.isBlank()) out.add("item: " + id + " " + count);
+                List<String> acceptedIds = readAcceptedEntryIds(item, "acceptedItems", "item");
+                if (!acceptedIds.isEmpty()) out.add(formatAcceptedEntryLine("item", acceptedIds, count));
+                else if (!id.isBlank()) out.add("item: " + id + " " + count);
             }
         }
         if (obj.has("commands") && obj.get("commands").isJsonArray()) {
@@ -2458,6 +2592,28 @@ public final class QuestEditorScreen extends Screen {
             String hint = quoted.get(1).trim();
             if (expected.isBlank()) return null;
             return new ParsedEntry(type, expected, 1, hint);
+        }
+
+        if ((type.equals("collect") || type.equals("item") || type.equals("submit") || type.equals("kill") || type.equals("entity"))
+                && remainder.startsWith("[") && remainder.contains("]")) {
+            int close = remainder.indexOf(']');
+            String listPart = remainder.substring(1, close);
+            String countPart = remainder.substring(close + 1).trim();
+            int count = 1;
+            if (!countPart.isBlank()) {
+                try {
+                    count = Math.max(1, Integer.parseInt(countPart));
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+            List<String> acceptedIds = new ArrayList<>();
+            for (String token : listPart.split("\\|")) {
+                String value = token.trim();
+                if (!value.isBlank() && !acceptedIds.contains(value)) acceptedIds.add(value);
+            }
+            if (acceptedIds.isEmpty()) return null;
+            return new ParsedEntry(type, acceptedIds.get(0), count, "", acceptedIds);
         }
 
         String[] tokens = remainder.split("\\s+");
@@ -2945,7 +3101,7 @@ public final class QuestEditorScreen extends Screen {
     private ScaledMultiLineEditBox createEntryRowBox(EntryRowKind kind) {
         String hint = switch (kind) {
             case DEPENDENCY -> "boundless:quest_id";
-            case REWARD, COMPLETION -> "minecraft:item 1";
+            case REWARD, COMPLETION -> "";
         };
         ScaledMultiLineEditBox box = new ScaledMultiLineEditBox(font, 0, 0, pw - 4, ENTRY_ROW_H,
                 Component.literal(hint), Component.empty(), ENTRY_INPUT_TEXT_SCALE, false);
@@ -3008,6 +3164,7 @@ public final class QuestEditorScreen extends Screen {
         try {
             for (ScaledMultiLineEditBox box : target) {
                 selectedItemIdByBox.remove(box);
+                selectedItemIdsByBox.remove(box);
                 selectedItemComponentsByBox.remove(box);
                 entryCountByBox.remove(box);
                 entryTypeByBox.remove(box);
@@ -3047,21 +3204,28 @@ public final class QuestEditorScreen extends Screen {
                     entryTypeByBox.put(box, normalizedType);
                     entryCountByBox.put(box, parsed == null ? 1 : Math.max(1, parsed.count));
                     if (parsed != null && hasRowBrowser(kind, normalizedType)) {
-                        String parsedId = safe(parsed.id).trim();
-                        String itemId = parsedId;
+                        List<String> normalizedAcceptedIds = new ArrayList<>();
+                        boolean itemSelection = "collect".equals(normalizedType)
+                                || "submit".equals(normalizedType)
+                                || "item".equals(normalizedType);
                         String components = "";
-                        int compStart = componentStart(parsedId);
-                        if (compStart > 0) {
-                            itemId = parsedId.substring(0, compStart).trim();
-                            components = parsedId.substring(compStart).trim();
+                        for (String parsedId : parsed.acceptedIds) {
+                            String itemId = itemSelection
+                                    ? normalizeItemIdWithComponents(parsedId, true)
+                                    : normalizeNamespacedId(parsedId, false);
+                            if (itemId.isBlank() || normalizedAcceptedIds.contains(itemId)) continue;
+                            if (itemSelection && parsed.acceptedIds.size() == 1) {
+                                int compStart = componentStart(itemId);
+                                if (compStart > 0) components = itemId.substring(compStart).trim();
+                            }
+                            normalizedAcceptedIds.add(itemId);
                         }
-                        itemId = itemId.startsWith("#")
-                                ? normalizeNamespacedId(itemId, true)
-                                : normalizeNamespacedId(itemId, false);
+                        String itemId = normalizedAcceptedIds.isEmpty() ? "" : QuestItemSpec.stripComponents(normalizedAcceptedIds.get(0));
                         selectedItemIdByBox.put(box, itemId);
+                        selectedItemIdsByBox.put(box, List.copyOf(normalizedAcceptedIds));
                         if (!components.isBlank()) selectedItemComponentsByBox.put(box, components);
                         else selectedItemComponentsByBox.remove(box);
-                        box.setValue(displayNameForItem(itemId));
+                        box.setValue(displayNameForEntrySelection(kind, box, normalizedAcceptedIds));
                     } else {
                         selectedItemComponentsByBox.remove(box);
                         box.setValue(line);
@@ -3232,6 +3396,7 @@ public final class QuestEditorScreen extends Screen {
 
         ScaledMultiLineEditBox removed = rows.remove(idx);
         selectedItemIdByBox.remove(removed);
+        selectedItemIdsByBox.remove(removed);
         selectedItemComponentsByBox.remove(removed);
         entryCountByBox.remove(removed);
         entryTypeByBox.remove(removed);
@@ -3285,14 +3450,19 @@ public final class QuestEditorScreen extends Screen {
         }
         if (hasRowBrowser(kind, type)) {
             String itemId = safe(selectedItemIdByBox.get(box)).trim();
+            List<String> acceptedIds = selectedIdsForRow(box);
             String components = safe(selectedItemComponentsByBox.get(box)).trim();
             int count = entryCount(box);
-            if (!itemId.isBlank()) {
+            if (!itemId.isBlank() && !acceptedIds.isEmpty()) {
+                if (acceptedIds.size() > 1) {
+                    return type + ": [" + String.join(" | ", acceptedIds) + "]"
+                            + (rowHasCount(kind, type) ? " " + count : "");
+                }
                 return type + ": " + itemId + (components.isBlank() ? "" : components)
                         + (rowHasCount(kind, type) ? " " + count : "");
             }
         }
-        ParsedEntry parsed = parseEntry(raw);
+        ParsedEntry parsed = rowParsedBody(kind, box, raw);
         String body;
         if (parsed != null) {
             if ("field".equals(type)) {
@@ -3312,6 +3482,44 @@ public final class QuestEditorScreen extends Screen {
         }
         body = safe(body).trim();
         return body.isBlank() ? "" : type + ": " + body;
+    }
+
+    private ParsedEntry rowParsedBody(EntryRowKind kind, ScaledMultiLineEditBox box, String raw) {
+        String value = safe(raw).trim();
+        if (value.isBlank()) return null;
+        ParsedEntry parsed = parseEntry(value);
+        if (!rowContainsExplicitType(kind, value)) {
+            String type = effectiveRowType(kind, box);
+            if ("field".equals(type)) {
+                List<String> quoted = parseQuotedSegments(value);
+                if (quoted.size() < 2) return null;
+                String expected = quoted.get(0).trim();
+                String hint = quoted.get(1).trim();
+                if (expected.isBlank()) return null;
+                return new ParsedEntry(type, expected, 1, hint);
+            }
+            int count = rowHasCount(kind, type) ? entryCount(box) : 1;
+            return new ParsedEntry(type, value, count);
+        }
+        return parsed;
+    }
+
+    private boolean rowContainsExplicitType(EntryRowKind kind, String raw) {
+        String value = safe(raw).trim();
+        if (value.isBlank()) return false;
+        int colon = value.indexOf(':');
+        if (colon <= 0) return false;
+        String prefix = value.substring(0, colon).trim().toLowerCase(Locale.ROOT);
+        if (prefix.isBlank()) return false;
+        if (kind == EntryRowKind.DEPENDENCY) return true;
+        return entryTypeOptions(kind).contains(prefix)
+                || ("advancement".equals(prefix) && kind == EntryRowKind.COMPLETION)
+                || ("entity".equals(prefix) && kind == EntryRowKind.COMPLETION)
+                || ("item".equals(prefix) && kind == EntryRowKind.COMPLETION)
+                || ("submit".equals(prefix) && kind == EntryRowKind.REWARD)
+                || ("exp".equals(prefix) && kind == EntryRowKind.REWARD)
+                || ("loottable".equals(prefix) && kind == EntryRowKind.REWARD)
+                || ("input".equals(prefix) && kind == EntryRowKind.COMPLETION);
     }
 
     private String bodyWithEntryCount(String body, int count) {
@@ -3406,7 +3614,7 @@ public final class QuestEditorScreen extends Screen {
 
     private int entryRowHeight(EntryRowKind kind, ScaledMultiLineEditBox box) {
         if (kind == EntryRowKind.DEPENDENCY || box == null) return ENTRY_ROW_H;
-        int content = (int) Math.ceil(Math.max(1, box.getLineCount()) * box.getLineHeight()) + 4;
+        int content = (int) Math.ceil(Math.max(1, box.getLineCount()) * Math.max(1.0, box.getLineHeight())) + 4;
         int maxHeight = Math.max(ENTRY_ROW_H, ph - (font.lineHeight + FIELD_LABEL_GAP + FIELD_ROW_GAP + 6));
         return Math.max(ENTRY_ROW_H, Math.min(maxHeight, content));
     }
@@ -3420,9 +3628,12 @@ public final class QuestEditorScreen extends Screen {
                 if (box == null) continue;
                 String itemId = safe(selectedItemIdByBox.get(box)).trim();
                 if (itemId.isBlank()) continue;
+                List<String> acceptedIds = selectedIdsForRow(box);
                 String next = box.isFocused()
-                        ? itemId + safe(selectedItemComponentsByBox.get(box)).trim()
-                        : displayNameForEntryRow(kind, box, itemId);
+                        ? (acceptedIds.size() > 1
+                            ? "[" + String.join(" | ", acceptedIds) + "]"
+                            : itemId + safe(selectedItemComponentsByBox.get(box)).trim())
+                        : displayNameForEntrySelection(kind, box, acceptedIds);
                 if (safe(box.getValue()).equals(next)) continue;
                 int cursor = box.getCursorPosition();
                 box.setValue(next);
@@ -3435,10 +3646,77 @@ public final class QuestEditorScreen extends Screen {
 
     private String displayNameForEntryRow(EntryRowKind kind, ScaledMultiLineEditBox box, String itemId) {
         String type = effectiveRowType(kind, box);
-        if ("kill".equals(type) || "entity".equals(type)) return mobDisplayNameForMobId(itemId).getString();
-        if ("effect".equals(type)) return effectDisplayName(itemId);
-        if ("achieve".equals(type) || "advancement".equals(type)) return itemId;
-        return displayNameForItem(itemId);
+        String normalizedItemId = QuestItemSpec.stripComponents(itemId);
+        if ("kill".equals(type) || "entity".equals(type)) return mobDisplayNameForMobId(normalizedItemId).getString();
+        if ("effect".equals(type)) return effectDisplayName(normalizedItemId);
+        if ("achieve".equals(type) || "advancement".equals(type)) return normalizedItemId;
+        if ("observe".equals(type) || "stat".equals(type) || "biome".equals(type) || "dimension".equals(type)) return normalizedItemId;
+        return displayNameForItem(normalizedItemId);
+    }
+
+    private String displayNameForEntrySelection(EntryRowKind kind, ScaledMultiLineEditBox box, List<String> ids) {
+        List<String> acceptedIds = ids == null ? List.of() : ids;
+        if (acceptedIds.isEmpty()) return "";
+        if (acceptedIds.size() == 1) return displayNameForEntryRow(kind, box, acceptedIds.get(0));
+        String type = effectiveRowType(kind, box);
+        String first = displayNameForEntryRow(kind, box, acceptedIds.get(0));
+        String label = ("kill".equals(type) || "entity".equals(type)) ? " mobs" : " items";
+        return first + " +" + (acceptedIds.size() - 1) + label;
+    }
+
+    private String entryRowPlaceholder(EntryRowKind kind, String type) {
+        String normalized = normalizeRowType(kind, type);
+        if (kind == EntryRowKind.DEPENDENCY) return "boundless:quest_id";
+        if (kind == EntryRowKind.REWARD) {
+            return switch (normalized) {
+                case "item" -> "minecraft:diamond 3";
+                case "xp" -> "points 100";
+                case "levelup" -> "levels 5";
+                case "command" -> "say hello";
+                case "loot" -> "minecraft:chests/simple_dungeon";
+                default -> "";
+            };
+        }
+        return switch (normalized) {
+            case "collect" -> "minecraft:oak_log 16";
+            case "submit" -> "minecraft:diamond 1";
+            case "kill" -> "minecraft:zombie 10";
+            case "achieve" -> "minecraft:story/mine_stone";
+            case "effect" -> "minecraft:speed";
+            case "stat" -> "mine_block:minecraft:stone 64";
+            case "observe" -> "minecraft:oak_log";
+            case "check" -> "Understand";
+            case "biome" -> "minecraft:plains";
+            case "dimension" -> "minecraft:overworld";
+            case "xp" -> "points 100";
+            case "levelup" -> "levels 10";
+            case "field" -> "\"expected text\" \"hint text\"";
+            default -> "";
+        };
+    }
+
+    private String entryTypeLabel(String type) {
+        String normalized = safe(type).trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "achieve" -> "achv";
+            case "observe" -> "obs";
+            case "dimension" -> "dim";
+            case "levelup" -> "lvlup";
+            default -> normalized;
+        };
+    }
+
+    private List<String> selectedIdsForRow(ScaledMultiLineEditBox box) {
+        List<String> ids = selectedItemIdsByBox.get(box);
+        if (ids != null && !ids.isEmpty()) return ids;
+        String single = safe(selectedItemIdByBox.get(box)).trim();
+        return single.isBlank() ? List.of() : List.of(single);
+    }
+
+    private boolean shouldExpandFocusedEntryRow(EntryRowKind kind, ScaledMultiLineEditBox box) {
+        if (kind == EntryRowKind.DEPENDENCY || box == null || !box.isFocused()) return false;
+        String value = safe(box.getValue());
+        return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
     }
 
     private int layoutEntryRows(EntryRowKind kind, int x, int y, int width, int clipTop, int clipBottom) {
@@ -3462,13 +3740,19 @@ public final class QuestEditorScreen extends Screen {
             EntryItemPickerButton pickerButton = typed && i < pickerButtons.size() ? pickerButtons.get(i) : null;
             EntryCountBox countBox = typed && i < countBoxes.size() ? countBoxes.get(i) : null;
             String rowType = effectiveRowType(kind, box);
+            box.setPlaceholder(Component.literal(entryRowPlaceholder(kind, rowType)));
             boolean canPickItem = typed && hasRowBrowser(kind, rowType);
             boolean hasCount = typed && rowHasCount(kind, rowType);
+            boolean expanded = shouldExpandFocusedEntryRow(kind, box);
             int pickerSpace = canPickItem ? (ENTRY_ITEM_PICK_BTN_W + 2) : 0;
             int countSpace = hasCount ? (ENTRY_COUNT_BTN_W + 2) : 0;
-            box.setX(x + iconSpace + typeSpace + pickerSpace);
+            int effectiveTypeSpace = expanded ? 0 : typeSpace;
+            int effectivePickerSpace = expanded ? 0 : pickerSpace;
+            int effectiveCountSpace = expanded ? 0 : countSpace;
+            int effectiveRemoveSpace = expanded ? 0 : ENTRY_REMOVE_BTN_W;
+            box.setX(x + iconSpace + effectiveTypeSpace + effectivePickerSpace);
             box.setY(cursorY);
-            box.setWidth(Math.max(10, width - ENTRY_REMOVE_BTN_W - 2 - lockSpace - iconSpace - typeSpace - pickerSpace - countSpace));
+            box.setWidth(Math.max(10, width - effectiveRemoveSpace - 2 - lockSpace - iconSpace - effectiveTypeSpace - effectivePickerSpace - effectiveCountSpace));
             int rowHeight = entryRowHeight(kind, box);
             box.setHeight(rowHeight);
             boolean inside = cursorY + rowHeight > clipTop && cursorY < clipBottom;
@@ -3478,8 +3762,8 @@ public final class QuestEditorScreen extends Screen {
                 typeButton.setPosition(x + iconSpace, cursorY);
                 typeButton.setWidth(ENTRY_TYPE_BTN_W);
                 typeButton.setHeight(ENTRY_ROW_H);
-                typeButton.visible = inside;
-                typeButton.active = inside;
+                typeButton.visible = inside && !expanded;
+                typeButton.active = inside && !expanded;
             }
             if (pickerButton != null) {
                 pickerButton.setRow(i);
@@ -3487,8 +3771,8 @@ public final class QuestEditorScreen extends Screen {
                 pickerButton.setPosition(pickerX, cursorY);
                 pickerButton.setWidth(ENTRY_ITEM_PICK_BTN_W);
                 pickerButton.setHeight(ENTRY_ROW_H);
-                pickerButton.visible = inside && canPickItem;
-                pickerButton.active = inside && canPickItem;
+                pickerButton.visible = inside && canPickItem && !expanded;
+                pickerButton.active = inside && canPickItem && !expanded;
             }
             if (countBox != null) {
                 countBox.setRow(i);
@@ -3499,15 +3783,15 @@ public final class QuestEditorScreen extends Screen {
                 if (!countBox.isFocused()) {
                     countBox.setValueSilently(Integer.toString(entryCount(box)));
                 }
-                countBox.visible = inside && hasCount;
-                countBox.active = inside && hasCount;
+                countBox.visible = inside && hasCount && !expanded;
+                countBox.active = inside && hasCount && !expanded;
             }
             if (removeButton != null) {
                 removeButton.setPosition(x + width - ENTRY_REMOVE_BTN_W - lockSpace, cursorY);
                 removeButton.setWidth(ENTRY_REMOVE_BTN_W);
                 removeButton.setHeight(ENTRY_ROW_H);
-                removeButton.visible = inside;
-                removeButton.active = inside;
+                removeButton.visible = inside && !expanded;
+                removeButton.active = inside && !expanded;
             }
             if (dependency && lockButton != null) {
                 int lockX = x + width - DEP_LOCK_SIZE;
@@ -3565,6 +3849,8 @@ public final class QuestEditorScreen extends Screen {
         if (questDependenciesBox != null) questDependenciesBox.setValue(entryRowsToRaw(EntryRowKind.DEPENDENCY));
         if (questCompletionBox != null) questCompletionBox.setValue(entryRowsToRaw(EntryRowKind.COMPLETION));
         if (questRewardBox != null) questRewardBox.setValue(entryRowsToRaw(EntryRowKind.REWARD));
+        validationSnapshot = null;
+        invalidateIdSuggestions();
     }
 
     private void normalizeCommandRewardRows() {
@@ -5067,21 +5353,29 @@ public final class QuestEditorScreen extends Screen {
         EditBox focused = focusedIdSuggestionField();
         ScaledMultiLineEditBox focusedMulti = focusedMultiIdSuggestionField();
         if (suppressIdSuggestions || (focused == null && focusedMulti == null)) {
-            idSuggestionField = null;
-            idSuggestionMultiLineField = null;
-            activeIdSuggestions.clear();
+            clearIdSuggestions();
             return;
         }
+        Object source = focused != null ? focused : focusedMulti;
+        String prefix = focused != null
+                ? idSuggestionPrefix(focused).toLowerCase(Locale.ROOT)
+                : multiLineSuggestionPrefix(focusedMulti).toLowerCase(Locale.ROOT);
+        if (!idSuggestionsDirty
+                && Objects.equals(lastIdSuggestionSource, source)
+                && Objects.equals(lastIdSuggestionPrefix, prefix)) {
+            return;
+        }
+
         idSuggestionField = focused;
         idSuggestionMultiLineField = focusedMulti;
+        lastIdSuggestionSource = source;
+        lastIdSuggestionPrefix = prefix;
+        idSuggestionsDirty = false;
         activeIdSuggestions.clear();
 
         List<String> all = focused != null ? idSuggestionValuesForField(focused) : idSuggestionValuesForMultiField(focusedMulti);
         if (all.isEmpty()) return;
 
-        String prefix = focused != null
-                ? idSuggestionPrefix(focused).toLowerCase(Locale.ROOT)
-                : multiLineSuggestionPrefix(focusedMulti).toLowerCase(Locale.ROOT);
         for (String id : all) {
             if (id == null || id.isBlank()) continue;
             if (!prefix.isBlank() && !matchesIdPrefix(id, prefix)) continue;
@@ -5089,6 +5383,19 @@ public final class QuestEditorScreen extends Screen {
             if (activeIdSuggestions.size() >= ID_SUGGESTION_MAX) break;
         }
         idSuggestionScroll = Mth.clamp(idSuggestionScroll, 0, Math.max(0, activeIdSuggestions.size() - ID_SUGGESTION_VISIBLE_ROWS));
+    }
+
+    private void clearIdSuggestions() {
+        idSuggestionField = null;
+        idSuggestionMultiLineField = null;
+        lastIdSuggestionSource = null;
+        lastIdSuggestionPrefix = "";
+        idSuggestionsDirty = true;
+        activeIdSuggestions.clear();
+    }
+
+    private void invalidateIdSuggestions() {
+        idSuggestionsDirty = true;
     }
 
     private EditBox focusedIdSuggestionField() {
@@ -5124,7 +5431,9 @@ public final class QuestEditorScreen extends Screen {
         if (field == null) return List.of();
         if (isIconBox(field)) {
             return itemSuggestions();
-        } else if (field == catDependencyBox || field == subCategoryBox || field == questCategoryBox) {
+        } else if (field == catDependencyBox) {
+            return questSuggestionCache;
+        } else if (field == subCategoryBox || field == questCategoryBox) {
             return categorySuggestionCache;
         } else if (field == questSubCategoryBox) {
             String cat = dropdownBoxValue(questCategoryBox);
@@ -5152,8 +5461,8 @@ public final class QuestEditorScreen extends Screen {
         if (!ctx.hasTypeSeparator) {
             return isCompletionEntryField(field)
                     ? (LevelUpCompat.isAvailable()
-                        ? List.of("collect", "submit", "kill", "achieve", "effect", "xp", "levelup", "field")
-                        : List.of("collect", "submit", "kill", "achieve", "effect", "xp", "field"))
+                        ? List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "levelup", "field")
+                        : List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "field"))
                     : (LevelUpCompat.isAvailable()
                         ? List.of("item", "xp", "levelup", "command", "loot")
                         : List.of("item", "xp", "command", "loot"));
@@ -5163,6 +5472,11 @@ public final class QuestEditorScreen extends Screen {
             case "kill", "entity" -> entitySuggestions();
             case "effect" -> effectSuggestions();
             case "achieve", "advancement" -> advancementSuggestions();
+            case "stat" -> statSuggestions();
+            case "observe" -> observeSuggestions();
+            case "check" -> List.of("understand");
+            case "biome" -> biomeSuggestions();
+            case "dimension" -> dimensionSuggestions();
             case "loot", "loottable" -> lootTableSuggestions();
             case "xp", "exp" -> List.of("points", "levels");
             case "levelup" -> LevelUpCompat.isAvailable() ? List.of("xp", "levels") : List.of();
@@ -5701,15 +6015,86 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void updateInvalidFieldStyles() {
-        setIdFieldColor(questIdBox, isInvalidQuestIdField());
-        setIdFieldColor(questNameBox, isInvalidQuestNameField());
-        setIdFieldColor(catDependencyBox, isInvalidCategoryDependency());
-        setIdFieldColor(subCategoryBox, isInvalidParentCategory());
-        setIdFieldColor(questCategoryBox, isInvalidQuestCategory());
-        setIdFieldColor(questSubCategoryBox, isInvalidQuestSubCategory());
-        setEntryRowsColor(EntryRowKind.DEPENDENCY, isInvalidQuestDependencies());
-        setEntryRowsColor(EntryRowKind.COMPLETION, isInvalidCompletionEntries());
-        setEntryRowsColor(EntryRowKind.REWARD, isInvalidRewardEntries());
+        ValidationSnapshot snapshot = currentValidationSnapshot();
+        setIdFieldColor(questIdBox, snapshot.invalidQuestId);
+        setIdFieldColor(questNameBox, snapshot.invalidQuestName);
+        setIdFieldColor(catDependencyBox, snapshot.invalidCategoryDependency);
+        setIdFieldColor(subCategoryBox, snapshot.invalidParentCategory);
+        setIdFieldColor(questCategoryBox, snapshot.invalidQuestCategory);
+        setIdFieldColor(questSubCategoryBox, snapshot.invalidQuestSubCategory);
+        setEntryRowsColor(EntryRowKind.DEPENDENCY, snapshot.invalidQuestDependencies);
+        setEntryRowsColor(EntryRowKind.COMPLETION, snapshot.invalidCompletionEntries);
+        setEntryRowsColor(EntryRowKind.REWARD, snapshot.invalidRewardEntries);
+    }
+
+    private ValidationSnapshot currentValidationSnapshot() {
+        String questId = safe(questIdBox == null ? "" : questIdBox.getValue()).trim();
+        String questName = safe(questNameBox == null ? "" : questNameBox.getValue()).trim();
+        String categoryDependency = safe(catDependencyBox == null ? "" : catDependencyBox.getValue()).trim();
+        String parentCategory = dropdownBoxValue(subCategoryBox);
+        String questCategory = dropdownBoxValue(questCategoryBox);
+        String questSubCategory = dropdownBoxValue(questSubCategoryBox);
+        String dependencyRaw = entryRowsToRaw(EntryRowKind.DEPENDENCY);
+        String completionRaw = entryRowsToRaw(EntryRowKind.COMPLETION).trim();
+        String rewardRaw = entryRowsToRaw(EntryRowKind.REWARD).trim();
+
+        if (validationSnapshot != null
+                && validationSnapshot.matches(
+                editorType,
+                currentPack == null ? "" : currentPack.name,
+                safe(editingPath == null ? "" : editingPath.toString()),
+                questId,
+                questName,
+                categoryDependency,
+                parentCategory,
+                questCategory,
+                questSubCategory,
+                dependencyRaw,
+                completionRaw,
+                rewardRaw)) {
+            return validationSnapshot;
+        }
+
+        validationSnapshot = new ValidationSnapshot(
+                editorType,
+                currentPack == null ? "" : currentPack.name,
+                safe(editingPath == null ? "" : editingPath.toString()),
+                questId,
+                questName,
+                categoryDependency,
+                parentCategory,
+                questCategory,
+                questSubCategory,
+                dependencyRaw,
+                completionRaw,
+                rewardRaw,
+                computeInvalidQuestId(questId),
+                computeInvalidQuestName(questName),
+                isMissingQuestId(categoryDependency),
+                isMissingCategoryId(parentCategory),
+                questCategory.isBlank() || isMissingCategoryId(questCategory),
+                isMissingSubCategoryId(questSubCategory),
+                computeInvalidQuestDependencies(dependencyRaw),
+                !completionRaw.isBlank() && parseCompletionEntries(completionRaw, false) == null,
+                !rewardRaw.isBlank() && parseRewardEntries(rewardRaw, false) == null
+        );
+        return validationSnapshot;
+    }
+
+    private boolean computeInvalidQuestId(String questId) {
+        return editorType == EditorType.QUEST && (questId.isBlank() || isDuplicateQuestId(questId));
+    }
+
+    private boolean computeInvalidQuestName(String questName) {
+        return editorType == EditorType.QUEST && questName.isBlank();
+    }
+
+    private boolean computeInvalidQuestDependencies(String dependencyRaw) {
+        if (currentPack == null || dependencyRaw.isBlank()) return false;
+        for (String dependency : extractEntryLines(dependencyRaw)) {
+            if (!dependency.isBlank() && !questPackDependencySuggestionCache.contains(dependency)) return true;
+        }
+        return false;
     }
 
     private void setIdFieldColor(EditBox box, boolean invalid) {
@@ -5739,7 +6124,7 @@ public final class QuestEditorScreen extends Screen {
             return isDuplicateQuestId(safe(questIdBox.getValue()).trim()) ? "Quest ID already exists" : "Quest ID required";
         }
         if (field.widget == questNameBox && isInvalidQuestNameField()) return "Quest name required";
-        if (field.widget == catDependencyBox && isInvalidCategoryDependency()) return INVALID_ID_TOOLTIP;
+        if (field.widget == catDependencyBox && isInvalidCategoryDependency()) return "Invalid quest ID";
         if (field.widget == subCategoryBox && isInvalidParentCategory()) return INVALID_ID_TOOLTIP;
         if (field.widget == questCategoryBox && isInvalidQuestCategory()) {
             return dropdownBoxValue(questCategoryBox).isBlank() ? "Quest category required" : INVALID_ID_TOOLTIP;
@@ -5809,7 +6194,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private boolean isInvalidCategoryDependency() {
-        return isMissingCategoryId(safe(catDependencyBox == null ? "" : catDependencyBox.getValue()));
+        return isMissingQuestId(safe(catDependencyBox == null ? "" : catDependencyBox.getValue()));
     }
 
     private boolean isInvalidParentCategory() {
@@ -5851,6 +6236,13 @@ public final class QuestEditorScreen extends Screen {
         String id = raw == null ? "" : raw.trim();
         if (id.isBlank()) return false;
         return !categoryIdCache.contains(id);
+    }
+
+    private boolean isMissingQuestId(String raw) {
+        if (currentPack == null) return false;
+        String id = raw == null ? "" : raw.trim();
+        if (id.isBlank()) return false;
+        return !questIdCache.contains(id);
     }
 
     private void setDropdownBoxValue(EditBox box, String value) {
@@ -5941,6 +6333,8 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void refreshPackIdCaches(QuestListIndex questIndex) {
+        validationSnapshot = null;
+        invalidateIdSuggestions();
         categoryIdCache.clear();
         subCategoryIdCache.clear();
         questIdCache.clear();
@@ -5952,6 +6346,10 @@ public final class QuestEditorScreen extends Screen {
         subCategoryByCategorySuggestion.clear();
         advancementIdCache.clear();
         lootTableIdCache.clear();
+        biomeIdCache.clear();
+        dimensionIdCache.clear();
+        statIdCache.clear();
+        observeIdCache.clear();
 
         Set<String> questPackDependencySuggestions = new LinkedHashSet<>();
         if (questIndex != null) {
@@ -6198,11 +6596,10 @@ public final class QuestEditorScreen extends Screen {
         if (button == 0) {
             if (!isInsideSuggestionBox(mouseX, mouseY) && !isInsideSuggestionTargetField(mouseX, mouseY)) {
                 suppressIdSuggestions = true;
-                activeIdSuggestions.clear();
-                idSuggestionField = null;
-                idSuggestionMultiLineField = null;
+                clearIdSuggestions();
             } else {
                 suppressIdSuggestions = false;
+                invalidateIdSuggestions();
             }
         }
         if (button == 0 && deleteConfirmArmed
@@ -6751,8 +7148,8 @@ public final class QuestEditorScreen extends Screen {
     private List<String> entryTypeOptions(EntryRowKind kind) {
         if (kind == EntryRowKind.COMPLETION) {
             return LevelUpCompat.isAvailable()
-                    ? List.of("collect", "submit", "kill", "achieve", "effect", "xp", "levelup", "field")
-                    : List.of("collect", "submit", "kill", "achieve", "effect", "xp", "field");
+                    ? List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "levelup", "field")
+                    : List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "field");
         }
         if (kind == EntryRowKind.REWARD) {
             return LevelUpCompat.isAvailable()
@@ -6770,6 +7167,7 @@ public final class QuestEditorScreen extends Screen {
         entryTypeByBox.put(box, normalized);
         if (pickerModeForType(kind, normalized) == PickerMode.NONE) {
             selectedItemIdByBox.remove(box);
+            selectedItemIdsByBox.remove(box);
             selectedItemComponentsByBox.remove(box);
         }
         entryCountByBox.put(box, 1);
@@ -6801,6 +7199,11 @@ public final class QuestEditorScreen extends Screen {
             itemPickerSearchBox = new EditBox(font, 0, 0, ITEM_PICKER_SEARCH_W, ITEM_PICKER_SEARCH_H, Component.literal("Search"));
             itemPickerSearchBox.setMaxLength(128);
             itemPickerSearchBox.setBordered(false);
+            itemPickerSearchBox.setResponder(value -> {
+                itemPickerSearchQuery = safe(value);
+                itemPickerPage = 0;
+                invalidateTagPageCache();
+            });
             addRenderableWidget(itemPickerSearchBox);
         }
         itemPickerSearchBox.setValue("");
@@ -6826,18 +7229,34 @@ public final class QuestEditorScreen extends Screen {
             itemPickerSearchBox = new EditBox(font, 0, 0, ITEM_PICKER_SEARCH_W, ITEM_PICKER_SEARCH_H, Component.literal("Search"));
             itemPickerSearchBox.setMaxLength(128);
             itemPickerSearchBox.setBordered(false);
+            itemPickerSearchBox.setResponder(value -> {
+                itemPickerSearchQuery = safe(value);
+                itemPickerPage = 0;
+                invalidateTagPageCache();
+            });
             addRenderableWidget(itemPickerSearchBox);
         }
+        itemPickerPendingSelection.clear();
+        itemPickerOriginalSelection.clear();
+        List<String> existing = selectedIdsForRow(entryRows(kind).get(row));
+        itemPickerOriginalSelection.addAll(existing);
+        itemPickerPendingSelection.addAll(existing);
+        itemPickerMultiSelect = (mode == PickerMode.ITEMS || mode == PickerMode.MOBS) && existing.size() > 1;
         itemPickerSearchBox.setValue("");
         itemPickerSearchBox.setFocused(true);
         itemPickerSearchBox.visible = true;
         itemPickerSearchBox.active = true;
+        itemPickerSearchQuery = "";
+        invalidateTagPageCache();
     }
 
     private void closeItemPicker() {
         itemPickerKind = null;
         itemPickerRow = -1;
         itemPickerIconTarget = null;
+        itemPickerMultiSelect = false;
+        itemPickerPendingSelection.clear();
+        itemPickerOriginalSelection.clear();
         if (itemPickerSearchBox != null) {
             itemPickerSearchBox.visible = false;
             itemPickerSearchBox.active = false;
@@ -6854,6 +7273,28 @@ public final class QuestEditorScreen extends Screen {
         if (mouseX >= closeX && mouseX <= closeX + ITEM_PICKER_CLOSE_SIZE && mouseY >= closeY && mouseY <= closeY + ITEM_PICKER_CLOSE_SIZE) {
             closeItemPicker();
             return true;
+        }
+        if (isItemPickerMultiToggleAvailable()) {
+            if (isPointWithin(mouseX, mouseY, x + 6, y + ITEM_PICKER_H + 4, 86, 16)) {
+                if (itemPickerMultiSelect && itemPickerPendingSelection.size() > 1) {
+                    itemPickerMultiSelect = true;
+                    statusMessage = "Reduce selection to one before disabling multi-select";
+                    statusColor = 0xFF8080;
+                } else {
+                    itemPickerMultiSelect = !itemPickerMultiSelect;
+                    if (itemPickerMultiSelect && itemPickerPendingSelection.isEmpty()) {
+                        itemPickerPendingSelection.addAll(itemPickerOriginalSelection);
+                    }
+                }
+                return true;
+            }
+            if (isPointWithin(mouseX, mouseY, x + ITEM_PICKER_W - 62, y + ITEM_PICKER_H + 4, 56, 16)) {
+                if (!itemPickerPendingSelection.isEmpty()) {
+                    applyItemPickerMultiSelection();
+                    closeItemPicker();
+                }
+                return true;
+            }
         }
         if (itemPickerSearchBox != null && itemPickerSearchBox.isMouseOver(mouseX, mouseY)) {
             return itemPickerSearchBox.mouseClicked(mouseX, mouseY, 0);
@@ -6875,7 +7316,22 @@ public final class QuestEditorScreen extends Screen {
             List<ItemStack> items = itemPickerDisplayItems();
             int start = itemPickerPage * (ITEM_PICKER_COLS * ITEM_PICKER_ROWS);
             int at = start + idx;
-            if (at >= 0 && at < items.size()) {
+            int itemIndex = (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) ? idx : at;
+            if (itemIndex >= 0 && itemIndex < items.size()) {
+                if (itemPickerMultiSelect && isItemPickerMultiToggleAvailable()) {
+                    String selectedId = "";
+                    if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
+                        List<String> tagIds = itemTagPickerIds();
+                        if (at < tagIds.size()) selectedId = tagIds.get(at);
+                    } else if (pickerMode == PickerMode.MOBS) {
+                        List<String> mobIds = mobPickerIds();
+                        if (at < mobIds.size()) selectedId = mobIds.get(at);
+                    } else {
+                        selectedId = pickerSelectionId(items.get(at));
+                    }
+                    togglePendingItemPickerSelection(selectedId);
+                    return true;
+                }
                 if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
                     List<String> tagIds = itemTagPickerIds();
                     if (at < tagIds.size()) applyPickedItemTag(tagIds.get(at));
@@ -6883,7 +7339,7 @@ public final class QuestEditorScreen extends Screen {
                     List<String> mobIds = mobPickerIds();
                     if (at < mobIds.size()) applyPickedMob(mobIds.get(at));
                 } else {
-                    applyPickedItem(items.get(at));
+                    applyPickedItem(items.get(itemIndex));
                 }
                 closeItemPicker();
             }
@@ -6898,7 +7354,10 @@ public final class QuestEditorScreen extends Screen {
         int y = itemPickerY();
         if (mouseX < x || mouseX > x + ITEM_PICKER_W || mouseY < y || mouseY > y + ITEM_PICKER_H) return false;
         int pageSize = ITEM_PICKER_COLS * ITEM_PICKER_ROWS;
-        int maxPage = Math.max(0, (itemPickerDisplayItems().size() - 1) / pageSize);
+        int resultCount = (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS)
+                ? itemTagPickerIds().size()
+                : itemPickerDisplayItems().size();
+        int maxPage = Math.max(0, (resultCount - 1) / pageSize);
         itemPickerPage = Mth.clamp(itemPickerPage - (delta > 0 ? 1 : -1), 0, maxPage);
         return true;
     }
@@ -6947,14 +7406,27 @@ public final class QuestEditorScreen extends Screen {
             int sy = gridY + row * ITEM_PICKER_CELL;
             boolean cellHover = mouseX >= sx && mouseX <= sx + ITEM_PICKER_CELL && mouseY >= sy && mouseY <= sy + ITEM_PICKER_CELL;
             gg.blit(BROWSER_SLOT_TEX, sx, sy, 0, 0, ITEM_PICKER_CELL, ITEM_PICKER_CELL, ITEM_PICKER_CELL, ITEM_PICKER_CELL);
-            if (at < items.size()) {
-                ItemStack stack = items.get(at);
+            int itemIndex = (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) ? i : at;
+            if (itemIndex < items.size()) {
+                ItemStack stack = items.get(itemIndex);
+                String selectedId = pickerMode == PickerMode.MOBS
+                        ? (at < mobIds.size() ? mobIds.get(at) : "")
+                        : (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()
+                            ? (at < tagIds.size() ? tagIds.get(at) : "")
+                            : pickerSelectionId(stack));
                 if (pickerMode == PickerMode.EFFECTS) {
                     renderEffectPickerIcon(gg, stack, sx + 1, sy + 1);
                 } else if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
                     gg.renderItem(stack, sx + 1, sy + 1);
                 } else {
                     gg.renderItem(stack, sx + 1, sy + 1);
+                }
+                if (itemPickerMultiSelect && itemPickerPendingSelection.contains(selectedId)) {
+                    gg.fill(sx + 1, sy + 1, sx + ITEM_PICKER_CELL - 1, sy + ITEM_PICKER_CELL - 1, 0x6637A24A);
+                    gg.fill(sx, sy, sx + ITEM_PICKER_CELL, sy + 1, 0xFF7CFF7C);
+                    gg.fill(sx, sy + ITEM_PICKER_CELL - 1, sx + ITEM_PICKER_CELL, sy + ITEM_PICKER_CELL, 0xFF7CFF7C);
+                    gg.fill(sx, sy, sx + 1, sy + ITEM_PICKER_CELL, 0xFF7CFF7C);
+                    gg.fill(sx + ITEM_PICKER_CELL - 1, sy, sx + ITEM_PICKER_CELL, sy + ITEM_PICKER_CELL, 0xFF7CFF7C);
                 }
                 if (cellHover) {
                     hovered = stack;
@@ -6988,7 +7460,73 @@ public final class QuestEditorScreen extends Screen {
                 gg.renderTooltip(font, Component.literal("Inventory"), mouseX, mouseY);
             }
         }
+        if (isItemPickerMultiToggleAvailable()) {
+            renderPickerFooterControls(gg, x, y);
+        }
         gg.pose().popPose();
+    }
+
+    private boolean isItemPickerMultiToggleAvailable() {
+        return (pickerMode == PickerMode.ITEMS || pickerMode == PickerMode.MOBS)
+                && (itemPickerKind == EntryRowKind.COMPLETION
+                || (itemPickerKind == EntryRowKind.REWARD && pickerMode == PickerMode.ITEMS));
+    }
+
+    private boolean isPointWithin(double mouseX, double mouseY, int x, int y, int width, int height) {
+        return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
+    }
+
+    private void renderPickerFooterControls(GuiGraphics gg, int pickerX, int pickerY) {
+        int toggleX = pickerX + 6;
+        int footerY = pickerY + ITEM_PICKER_H + 4;
+        int doneX = pickerX + ITEM_PICKER_W - 62;
+        renderVanillaFooterButton(gg, toggleX, footerY, 86, 16, "Select Multiple", true, itemPickerMultiSelect);
+        renderVanillaFooterButton(gg, doneX, footerY, 56, 16, "Done", !itemPickerPendingSelection.isEmpty(), false);
+        if (!itemPickerPendingSelection.isEmpty()) {
+            String countText = Integer.toString(itemPickerPendingSelection.size());
+            gg.drawString(font, countText, doneX + 4, footerY + 4, 0xFFFFFFFF, false);
+        }
+    }
+
+    private void renderVanillaFooterButton(GuiGraphics gg, int x, int y, int width, int height, String text, boolean enabled, boolean selected) {
+        ResourceLocation sprite = enabled ? VANILLA_BUTTON_SPRITE : ResourceLocation.withDefaultNamespace("widget/button_disabled");
+        gg.blitSprite(sprite, x, y, width, height);
+        if (selected) {
+            gg.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0x6637A24A);
+        }
+        int textColor = enabled ? 0xFFFFFF : 0xA0A0A0;
+        int textX = x + (width - font.width(text)) / 2;
+        int textY = y + (height - 8) / 2;
+        gg.drawString(font, text, textX, textY, textColor, false);
+    }
+
+    private void togglePendingItemPickerSelection(String id) {
+        String normalized = safe(id).trim();
+        if (normalized.isBlank()) return;
+        if (itemPickerPendingSelection.contains(normalized)) itemPickerPendingSelection.remove(normalized);
+        else itemPickerPendingSelection.add(normalized);
+    }
+
+    private void applyItemPickerMultiSelection() {
+        if (!isItemPickerOpen() || itemPickerKind == null) return;
+        List<ScaledMultiLineEditBox> rows = entryRows(itemPickerKind);
+        if (itemPickerRow < 0 || itemPickerRow >= rows.size()) return;
+        ScaledMultiLineEditBox box = rows.get(itemPickerRow);
+        List<String> acceptedIds = new ArrayList<>(itemPickerPendingSelection);
+        if (acceptedIds.isEmpty()) return;
+        selectedItemIdByBox.put(box, QuestItemSpec.stripComponents(acceptedIds.get(0)));
+        selectedItemIdsByBox.put(box, List.copyOf(acceptedIds));
+        selectedItemComponentsByBox.remove(box);
+        box.setValue(displayNameForEntrySelection(itemPickerKind, box, acceptedIds));
+        box.setFocused(true);
+        entryRowsDirty = true;
+        syncEntryBackingValues();
+    }
+
+    private void invalidateTagPageCache() {
+        cachedTagFilterQuery = "";
+        cachedFilteredTagIds.clear();
+        itemTagPageCache.clear();
     }
 
     private int itemPickerX() {
@@ -7066,8 +7604,22 @@ public final class QuestEditorScreen extends Screen {
         gg.pose().popPose();
     }
 
+    private String pickerSelectionId(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return "";
+        ResourceLocation key = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        if (key == null) return "";
+        if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.INVENTORY) {
+            String components = safe(QuestItemSpec.describeStackComponents(
+                    stack,
+                    minecraft == null || minecraft.level == null ? null : minecraft.level.registryAccess()
+            )).trim();
+            return components.isBlank() || "{}".equals(components) ? key.toString() : key + components;
+        }
+        return key.toString();
+    }
+
     private List<ItemStack> itemPickerItems() {
-        String query = safe(itemPickerSearchBox == null ? "" : itemPickerSearchBox.getValue()).trim().toLowerCase(Locale.ROOT);
+        String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
         List<ItemStack> out = new ArrayList<>();
         if (itemPickerTab == ItemPickerTab.CREATIVE) {
             ensureItemIdCache();
@@ -7083,8 +7635,8 @@ public final class QuestEditorScreen extends Screen {
             return out;
         }
         if (itemPickerTab == ItemPickerTab.TAGS) {
-            for (String tagId : itemTagPickerIds()) {
-                out.add(itemTagIconStack(tagId));
+            for (TagPageEntry pageEntry : currentTagPageData().entries) {
+                out.add(pageEntry.icon());
             }
             return out;
         }
@@ -7101,13 +7653,18 @@ public final class QuestEditorScreen extends Screen {
 
     private List<String> itemTagPickerIds() {
         ensureItemTagIdCache();
-        String query = safe(itemPickerSearchBox == null ? "" : itemPickerSearchBox.getValue()).trim().toLowerCase(Locale.ROOT);
-        List<String> out = new ArrayList<>();
-        for (String tagId : itemTagIdCache) {
-            if (!query.isBlank() && !tagId.toLowerCase(Locale.ROOT).contains(query)) continue;
-            out.add(tagId);
+        String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
+        if (query.equals(cachedTagFilterQuery) && !cachedFilteredTagIds.isEmpty()) {
+            return cachedFilteredTagIds;
         }
-        return out;
+        cachedTagFilterQuery = query;
+        cachedFilteredTagIds.clear();
+        for (String tagId : itemTagIdCache) {
+            String lower = tagId.toLowerCase(Locale.ROOT);
+            if (!query.isBlank() && !lower.contains(query)) continue;
+            cachedFilteredTagIds.add(tagId);
+        }
+        return cachedFilteredTagIds;
     }
 
     private ItemStack itemTagIconStack(String tagId) {
@@ -7134,9 +7691,29 @@ public final class QuestEditorScreen extends Screen {
         return fallback;
     }
 
+    private TagPageData currentTagPageData() {
+        int pageSize = ITEM_PICKER_COLS * ITEM_PICKER_ROWS;
+        List<String> filtered = itemTagPickerIds();
+        int maxPage = Math.max(0, (filtered.size() - 1) / pageSize);
+        itemPickerPage = Mth.clamp(itemPickerPage, 0, maxPage);
+        String cacheKey = itemPickerPage + "|" + safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
+        TagPageData cached = itemTagPageCache.get(cacheKey);
+        if (cached != null) return cached;
+        int start = itemPickerPage * pageSize;
+        int end = Math.min(filtered.size(), start + pageSize);
+        List<TagPageEntry> entries = new ArrayList<>();
+        for (int i = start; i < end; i++) {
+            String tagId = filtered.get(i);
+            entries.add(new TagPageEntry(tagId, itemTagIconStack(tagId), Component.literal(tagId)));
+        }
+        TagPageData created = new TagPageData(entries);
+        itemTagPageCache.put(cacheKey, created);
+        return created;
+    }
+
     private List<ItemStack> itemPickerDisplayItems() {
         if (pickerMode == PickerMode.ITEMS) return itemPickerItems();
-        String query = safe(itemPickerSearchBox == null ? "" : itemPickerSearchBox.getValue()).trim().toLowerCase(Locale.ROOT);
+        String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
         List<ItemStack> out = new ArrayList<>();
         switch (pickerMode) {
             case EFFECTS -> {
@@ -7160,7 +7737,7 @@ public final class QuestEditorScreen extends Screen {
 
     private List<String> mobPickerIds() {
         ensureEntityIdCache();
-        String query = safe(itemPickerSearchBox == null ? "" : itemPickerSearchBox.getValue()).trim().toLowerCase(Locale.ROOT);
+        String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
         List<String> out = new ArrayList<>();
         for (String entityId : entityIdCache) {
             if (!isSelectableMobEntityId(entityId)) continue;
@@ -7209,8 +7786,10 @@ public final class QuestEditorScreen extends Screen {
             )).trim();
             if (components.isBlank() || "{}".equals(components)) selectedItemComponentsByBox.remove(box);
             else selectedItemComponentsByBox.put(box, components);
+            selectedItemIdsByBox.put(box, List.of(pickerSelectionId(picked)));
         } else {
             selectedItemComponentsByBox.remove(box);
+            selectedItemIdsByBox.put(box, List.of(id));
         }
         String itemName = picked.getHoverName().getString();
         String value = switch (pickerMode) {
@@ -7241,6 +7820,7 @@ public final class QuestEditorScreen extends Screen {
         if (itemPickerRow < 0 || itemPickerRow >= rows.size()) return;
         ScaledMultiLineEditBox box = rows.get(itemPickerRow);
         selectedItemIdByBox.put(box, normalized);
+        selectedItemIdsByBox.put(box, List.of(normalized));
         selectedItemComponentsByBox.remove(box);
         if (rowHasCount(itemPickerKind, effectiveRowType(itemPickerKind, box))) {
             entryCountByBox.put(box, 1);
@@ -7258,6 +7838,7 @@ public final class QuestEditorScreen extends Screen {
         if (mobId == null || mobId.isBlank()) return;
         ScaledMultiLineEditBox box = rows.get(itemPickerRow);
         selectedItemIdByBox.put(box, mobId);
+        selectedItemIdsByBox.put(box, List.of(mobId));
         selectedItemComponentsByBox.remove(box);
         entryCountByBox.put(box, 1);
         box.setValue(mobDisplayNameForMobId(mobId).getString());
@@ -7448,6 +8029,85 @@ public final class QuestEditorScreen extends Screen {
     private List<String> effectSuggestions() {
         ensureEffectIdCache();
         return effectIdCache;
+    }
+
+    private void ensureObserveIdCache() {
+        if (!observeIdCache.isEmpty()) return;
+        for (ResourceLocation rl : BuiltInRegistries.ITEM.keySet()) {
+            if (rl == null || "minecraft:air".equals(rl.toString())) continue;
+            if (!observeIdCache.contains(rl.toString())) observeIdCache.add(rl.toString());
+        }
+        for (ResourceLocation rl : BuiltInRegistries.BLOCK.keySet()) {
+            if (rl == null || "minecraft:air".equals(rl.toString())) continue;
+            if (!observeIdCache.contains(rl.toString())) observeIdCache.add(rl.toString());
+        }
+        ensureEntityIdCache();
+        for (String entityId : entityIdCache) {
+            if (isSelectableMobEntityId(entityId) && !observeIdCache.contains(entityId)) {
+                observeIdCache.add(entityId);
+            }
+        }
+        observeIdCache.sort(String::compareTo);
+    }
+
+    private List<String> observeSuggestions() {
+        ensureObserveIdCache();
+        return observeIdCache;
+    }
+
+    private void ensureBiomeIdCache() {
+        if (!biomeIdCache.isEmpty()) return;
+        if (minecraft != null && minecraft.level != null) {
+            minecraft.level.registryAccess()
+                    .lookupOrThrow(Registries.BIOME)
+                    .listElementIds()
+                    .forEach(key -> biomeIdCache.add(key.location().toString()));
+        }
+        biomeIdCache.sort(String::compareTo);
+    }
+
+    private List<String> biomeSuggestions() {
+        ensureBiomeIdCache();
+        return biomeIdCache;
+    }
+
+    private void ensureDimensionIdCache() {
+        if (!dimensionIdCache.isEmpty()) return;
+        if (minecraft != null && minecraft.getConnection() != null) {
+            for (var levelKey : minecraft.getConnection().levels()) {
+                if (levelKey != null) dimensionIdCache.add(levelKey.location().toString());
+            }
+        } else if (minecraft != null && minecraft.level != null) {
+            dimensionIdCache.add(minecraft.level.dimension().location().toString());
+        }
+        dimensionIdCache.sort(String::compareTo);
+    }
+
+    private List<String> dimensionSuggestions() {
+        ensureDimensionIdCache();
+        return dimensionIdCache;
+    }
+
+    private void ensureStatIdCache() {
+        if (!statIdCache.isEmpty()) return;
+        for (ResourceLocation rl : BuiltInRegistries.CUSTOM_STAT.keySet()) {
+            if (rl != null) statIdCache.add("custom:" + rl);
+        }
+        for (ResourceLocation rl : BuiltInRegistries.BLOCK.keySet()) {
+            if (rl != null && !"minecraft:air".equals(rl.toString())) statIdCache.add("mine_block:" + rl);
+        }
+        for (ResourceLocation rl : BuiltInRegistries.ITEM.keySet()) {
+            if (rl != null && !"minecraft:air".equals(rl.toString())) statIdCache.add("use_item:" + rl);
+        }
+        for (ResourceLocation rl : BuiltInRegistries.ENTITY_TYPE.keySet()) {
+            if (rl != null) statIdCache.add("kill_entity:" + rl);
+        }
+        statIdCache.sort(String::compareTo);
+    }
+
+    private List<String> statSuggestions() {
+        ensureStatIdCache();
+        return statIdCache;
     }
 
     private void ensureAdvancementIdCache() {
@@ -7741,7 +8401,7 @@ public final class QuestEditorScreen extends Screen {
         private static final int PLACEHOLDER_TEXT_COLOR = -857677600;
         private static final int CURSOR_BLINK_INTERVAL_MS = 300;
         private final Font font;
-        private final Component placeholder;
+        private Component placeholder;
         private final ScaledTextField textField;
         private final float textScale;
         private final double lineHeight;
@@ -7768,7 +8428,8 @@ public final class QuestEditorScreen extends Screen {
         @Override
         public void setWidth(int width) {
             super.setWidth(width);
-            this.textField.setWidth(Math.max(20, Math.round((width - this.totalInnerPadding()) / this.textScale)));
+            float safeScale = this.textScale <= 0f ? 1f : this.textScale;
+            this.textField.setWidth(Math.max(20, Math.round((width - this.totalInnerPadding()) / safeScale)));
             this.setScrollAmount(Mth.clamp(this.scrollAmount(), 0.0, Math.max(0.0, this.getInnerHeight() - (this.height - this.totalInnerPadding()))));
         }
 
@@ -7778,6 +8439,10 @@ public final class QuestEditorScreen extends Screen {
 
         public void setValue(String fullText) {
             this.textField.setValue(fullText);
+        }
+
+        public void setPlaceholder(Component placeholder) {
+            this.placeholder = placeholder == null ? Component.empty() : placeholder;
         }
 
         public void insertText(String text) {
@@ -7913,10 +8578,11 @@ public final class QuestEditorScreen extends Screen {
         @Override
         protected void renderContents(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
             String text = this.textField.value();
-            float invScale = 1.0f / this.textScale;
+            float safeScale = this.textScale <= 0f ? 1f : this.textScale;
+            float invScale = 1.0f / safeScale;
             int baseX = Math.round((this.getX() + this.innerPadding()) * invScale);
             int baseY = Math.round((this.getY() + this.innerPadding()) * invScale);
-            int wrapWidth = Math.round((this.width - this.totalInnerPadding()) * invScale);
+            int wrapWidth = Math.max(1, Math.round((this.width - this.totalInnerPadding()) * invScale));
 
             if (text.isEmpty() && !this.isFocused()) {
                 guiGraphics.drawWordWrap(this.font, this.placeholder, baseX, baseY, wrapWidth, PLACEHOLDER_TEXT_COLOR);
@@ -7964,7 +8630,7 @@ public final class QuestEditorScreen extends Screen {
             if (this.textField.hasSelection()) {
                 ScaledTextField.StringView selected = this.textField.getSelected();
                 int startX = baseX;
-                int maxLineWidth = Math.round((this.width - this.innerPadding()) * invScale);
+                int maxLineWidth = Math.max(1, Math.round((this.width - this.innerPadding()) * invScale));
                 double selScreenY = this.getY() + this.innerPadding();
 
                 for (ScaledTextField.StringView line : this.textField.iterateLines()) {
@@ -8055,7 +8721,7 @@ public final class QuestEditorScreen extends Screen {
         }
 
         private double getDisplayableLineCount() {
-            return (double) (this.height - this.totalInnerPadding()) / this.lineHeight;
+            return this.lineHeight <= 0.0 ? 0.0 : (double) (this.height - this.totalInnerPadding()) / this.lineHeight;
         }
 
         private long drawFormattedString(GuiGraphics guiGraphics, String text, int x, int y, int initialColor) {
@@ -8206,8 +8872,9 @@ public final class QuestEditorScreen extends Screen {
         }
 
         private void seekCursorScreen(double mouseX, double mouseY) {
-            double d0 = (mouseX - (double) this.getX() - (double) this.innerPadding()) / this.textScale;
-            double d1 = (mouseY - (double) this.getY() - (double) this.innerPadding() + this.scrollAmount()) / this.textScale;
+            double safeScale = this.textScale <= 0f ? 1.0 : this.textScale;
+            double d0 = (mouseX - (double) this.getX() - (double) this.innerPadding()) / safeScale;
+            double d1 = (mouseY - (double) this.getY() - (double) this.innerPadding() + this.scrollAmount()) / safeScale;
             this.textField.seekCursorToPoint(d0, d1);
         }
 
@@ -8652,15 +9319,19 @@ public final class QuestEditorScreen extends Screen {
             if (this.value.isEmpty()) {
                 this.displayLines.add(StringView.EMPTY);
             } else {
+                int safeWidth = Math.max(1, this.width);
                 this.font.getSplitter().splitLines(
                         this.value,
-                        this.width,
+                        safeWidth,
                         Style.EMPTY,
                         false,
                         (style, begin, end) -> this.displayLines.add(new StringView(begin, end))
                 );
                 if (this.value.charAt(this.value.length() - 1) == '\n') {
                     this.displayLines.add(new StringView(this.value.length(), this.value.length()));
+                }
+                if (this.displayLines.isEmpty()) {
+                    this.displayLines.add(new StringView(0, this.value.length()));
                 }
             }
         }
@@ -9001,16 +9672,30 @@ public final class QuestEditorScreen extends Screen {
     private static final class ParsedEntry {
         final String type;
         final String id;
+        final List<String> acceptedIds;
         final int count;
         final String hint;
 
         ParsedEntry(String type, String id, int count) {
-            this(type, id, count, "");
+            this(type, id, count, "", List.of(id));
         }
 
         ParsedEntry(String type, String id, int count, String hint) {
+            this(type, id, count, hint, List.of(id));
+        }
+
+        ParsedEntry(String type, String id, int count, String hint, List<String> acceptedIds) {
             this.type = type == null ? "" : type;
             this.id = id == null ? "" : id;
+            List<String> normalized = new ArrayList<>();
+            if (acceptedIds != null) {
+                for (String acceptedId : acceptedIds) {
+                    String value = acceptedId == null ? "" : acceptedId.trim();
+                    if (!value.isBlank() && !normalized.contains(value)) normalized.add(value);
+                }
+            }
+            if (normalized.isEmpty() && !this.id.isBlank()) normalized.add(this.id);
+            this.acceptedIds = List.copyOf(normalized);
             this.count = count;
             this.hint = hint == null ? "" : hint;
         }
@@ -9027,6 +9712,10 @@ public final class QuestEditorScreen extends Screen {
             this.title = title == null ? "" : title;
         }
     }
+
+    private record TagPageEntry(String tagId, ItemStack icon, Component tooltip) {}
+
+    private record TagPageData(List<TagPageEntry> entries) {}
 
     private static final class MultiLineEntryContext {
         final boolean hasTypeSeparator;
@@ -9723,7 +10412,7 @@ public final class QuestEditorScreen extends Screen {
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             List<ScaledMultiLineEditBox> rows = entryRows(kind);
             if (row < 0 || row >= rows.size()) return;
-            String text = effectiveRowType(kind, rows.get(row));
+            String text = entryTypeLabel(effectiveRowType(kind, rows.get(row)));
             boolean hovered = this.isMouseOver(mouseX, mouseY);
             boolean focused = this.isFocused();
             int bg = hovered || focused ? 0xFF101010 : 0xFF000000;
@@ -10029,5 +10718,75 @@ public final class QuestEditorScreen extends Screen {
         CATEGORY,
         SUBCATEGORY,
         QUEST
+    }
+
+    private static final class ValidationSnapshot {
+        private final EditorType editorType;
+        private final String packName;
+        private final String editingPath;
+        private final String questId;
+        private final String questName;
+        private final String categoryDependency;
+        private final String parentCategory;
+        private final String questCategory;
+        private final String questSubCategory;
+        private final String dependencyRaw;
+        private final String completionRaw;
+        private final String rewardRaw;
+        private final boolean invalidQuestId;
+        private final boolean invalidQuestName;
+        private final boolean invalidCategoryDependency;
+        private final boolean invalidParentCategory;
+        private final boolean invalidQuestCategory;
+        private final boolean invalidQuestSubCategory;
+        private final boolean invalidQuestDependencies;
+        private final boolean invalidCompletionEntries;
+        private final boolean invalidRewardEntries;
+
+        private ValidationSnapshot(EditorType editorType, String packName, String editingPath, String questId, String questName,
+                                   String categoryDependency, String parentCategory, String questCategory, String questSubCategory,
+                                   String dependencyRaw, String completionRaw, String rewardRaw, boolean invalidQuestId,
+                                   boolean invalidQuestName, boolean invalidCategoryDependency, boolean invalidParentCategory,
+                                   boolean invalidQuestCategory, boolean invalidQuestSubCategory, boolean invalidQuestDependencies,
+                                   boolean invalidCompletionEntries, boolean invalidRewardEntries) {
+            this.editorType = editorType;
+            this.packName = packName;
+            this.editingPath = editingPath;
+            this.questId = questId;
+            this.questName = questName;
+            this.categoryDependency = categoryDependency;
+            this.parentCategory = parentCategory;
+            this.questCategory = questCategory;
+            this.questSubCategory = questSubCategory;
+            this.dependencyRaw = dependencyRaw;
+            this.completionRaw = completionRaw;
+            this.rewardRaw = rewardRaw;
+            this.invalidQuestId = invalidQuestId;
+            this.invalidQuestName = invalidQuestName;
+            this.invalidCategoryDependency = invalidCategoryDependency;
+            this.invalidParentCategory = invalidParentCategory;
+            this.invalidQuestCategory = invalidQuestCategory;
+            this.invalidQuestSubCategory = invalidQuestSubCategory;
+            this.invalidQuestDependencies = invalidQuestDependencies;
+            this.invalidCompletionEntries = invalidCompletionEntries;
+            this.invalidRewardEntries = invalidRewardEntries;
+        }
+
+        private boolean matches(EditorType editorType, String packName, String editingPath, String questId, String questName,
+                                String categoryDependency, String parentCategory, String questCategory, String questSubCategory,
+                                String dependencyRaw, String completionRaw, String rewardRaw) {
+            return this.editorType == editorType
+                    && Objects.equals(this.packName, packName)
+                    && Objects.equals(this.editingPath, editingPath)
+                    && Objects.equals(this.questId, questId)
+                    && Objects.equals(this.questName, questName)
+                    && Objects.equals(this.categoryDependency, categoryDependency)
+                    && Objects.equals(this.parentCategory, parentCategory)
+                    && Objects.equals(this.questCategory, questCategory)
+                    && Objects.equals(this.questSubCategory, questSubCategory)
+                    && Objects.equals(this.dependencyRaw, dependencyRaw)
+                    && Objects.equals(this.completionRaw, completionRaw)
+                    && Objects.equals(this.rewardRaw, rewardRaw);
+        }
     }
 }

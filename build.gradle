@@ -61,6 +61,8 @@ dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
     compileOnly "mezz.jei:jei-1.21.1-neoforge-api:19.+"
     localRuntime "mezz.jei:jei-1.21.1-neoforge:19.+"
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
 // Replace properties inside neoforge.mods.toml with gradle.properties values
@@ -102,6 +104,10 @@ publishing {
 // Compile settings
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 // IntelliJ IDEA sources + javadoc download

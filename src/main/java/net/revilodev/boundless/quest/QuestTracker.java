@@ -18,8 +18,12 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -27,6 +31,11 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.fml.loading.FMLEnvironment;
@@ -109,6 +118,11 @@ public final class QuestTracker {
             return QuestObjectiveState.get(sp.serverLevel())
                     .updateItemProgress(sp.getUUID(), key, current, required);
         }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            return QuestObjectiveState.get(integrated.serverLevel())
+                    .updateItemProgress(integrated.getUUID(), key, current, required);
+        }
         return getPermanentItemProgress(key, current, required);
     }
 
@@ -122,9 +136,37 @@ public final class QuestTracker {
     private static boolean getPermanentEffectProgress(Player player, String key, boolean hasEffect) {
         if (player instanceof ServerPlayer sp) {
             return QuestObjectiveState.get(sp.serverLevel())
-                    .updateEffectDone(sp.getUUID(), key, hasEffect);
+                    .updateFlagDone(sp.getUUID(), key, hasEffect);
+        }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            return QuestObjectiveState.get(integrated.serverLevel())
+                    .updateFlagDone(integrated.getUUID(), key, hasEffect);
         }
         return getPermanentEffectProgress(key, hasEffect);
+    }
+
+    private static boolean getPermanentFlagProgress(String key, boolean hasNow) {
+        boolean prev = CLIENT_EFFECT_PROGRESS.getOrDefault(key, false);
+        boolean now = prev || hasNow;
+        if (now) CLIENT_EFFECT_PROGRESS.put(key, true);
+        return now;
+    }
+
+    private static boolean getPermanentFlagProgress(Player player, String key, boolean hasNow) {
+        if (player instanceof ServerPlayer sp) {
+            return QuestObjectiveState.get(sp.serverLevel())
+                    .updateFlagDone(sp.getUUID(), key, hasNow);
+        }
+        if (player != null && player.level().isClientSide && isClientMultiplayer()) {
+            return CLIENT_EFFECT_PROGRESS.getOrDefault(key, false) || hasNow;
+        }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            return QuestObjectiveState.get(integrated.serverLevel())
+                    .updateFlagDone(integrated.getUUID(), key, hasNow);
+        }
+        return getPermanentFlagProgress(key, hasNow);
     }
 
     public static void setFieldInputProgress(Player player, String key, String value) {
@@ -132,6 +174,10 @@ public final class QuestTracker {
         String normalized = value == null ? "" : value.trim();
         if (player instanceof ServerPlayer sp) {
             QuestObjectiveState.get(sp.serverLevel()).setInputProgress(sp.getUUID(), key, normalized);
+        }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            QuestObjectiveState.get(integrated.serverLevel()).setInputProgress(integrated.getUUID(), key, normalized);
         }
         if (normalized.isBlank()) CLIENT_INPUT_PROGRESS.remove(key);
         else CLIENT_INPUT_PROGRESS.put(key, normalized);
@@ -142,7 +188,25 @@ public final class QuestTracker {
         if (player instanceof ServerPlayer sp) {
             return QuestObjectiveState.get(sp.serverLevel()).getInputProgress(sp.getUUID(), key);
         }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            return QuestObjectiveState.get(integrated.serverLevel()).getInputProgress(integrated.getUUID(), key);
+        }
         return CLIENT_INPUT_PROGRESS.getOrDefault(key, "");
+    }
+
+    private static ServerPlayer resolveIntegratedServerPlayer(Player player) {
+        if (player == null || !player.level().isClientSide) return null;
+        try {
+            Class<?> mcClass = Class.forName("net.minecraft.client.Minecraft");
+            Object mc = mcClass.getMethod("getInstance").invoke(null);
+            Object srvObj = mcClass.getMethod("getSingleplayerServer").invoke(mc);
+            if (srvObj instanceof net.minecraft.server.MinecraftServer srv) {
+                return srv.getPlayerList().getPlayer(player.getUUID());
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private static String sanitize(String s) {
@@ -355,6 +419,152 @@ public final class QuestTracker {
         return false;
     }
 
+    public static String flagProgressKey(QuestData.Quest quest, QuestData.Target target) {
+        if (quest == null || target == null) return "";
+        String id = target.id == null ? "" : target.id.trim();
+        return quest.id + ":" + target.kind + ":" + id;
+    }
+
+    private static int peekPermanentItemProgress(Player player, String key, int current, int required) {
+        int req = Math.max(0, required);
+        int cur = Math.max(0, current);
+        if (req <= 0) return 0;
+        if (player instanceof ServerPlayer sp) {
+            int saved = QuestObjectiveState.get(sp.serverLevel()).getItemProgress(sp.getUUID(), key);
+            return Math.max(saved, Math.min(cur, req));
+        }
+        if (player != null && player.level().isClientSide && isClientMultiplayer()) {
+            int saved = CLIENT_ITEM_PROGRESS.getOrDefault(key, 0);
+            return Math.max(saved, Math.min(cur, req));
+        }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            int saved = QuestObjectiveState.get(integrated.serverLevel()).getItemProgress(integrated.getUUID(), key);
+            return Math.max(saved, Math.min(cur, req));
+        }
+        int saved = CLIENT_ITEM_PROGRESS.getOrDefault(key, 0);
+        return Math.max(saved, Math.min(cur, req));
+    }
+
+    public static int getTrackedItemProgress(QuestData.Quest quest, QuestData.Target target, Player player) {
+        if (quest == null || target == null || player == null) return 0;
+        String key = itemProgressKey(quest, target);
+        int current = getAcceptedItemCountInInventory(target, player);
+        return peekPermanentItemProgress(player, key, current, target.count);
+    }
+
+    private static boolean peekPermanentFlagProgress(Player player, String key, boolean hasNow) {
+        if (player instanceof ServerPlayer sp) {
+            return QuestObjectiveState.get(sp.serverLevel()).getFlagDone(sp.getUUID(), key) || hasNow;
+        }
+        if (player != null && player.level().isClientSide && isClientMultiplayer()) {
+            return CLIENT_EFFECT_PROGRESS.getOrDefault(key, false) || hasNow;
+        }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            return QuestObjectiveState.get(integrated.serverLevel()).getFlagDone(integrated.getUUID(), key) || hasNow;
+        }
+        return CLIENT_EFFECT_PROGRESS.getOrDefault(key, false) || hasNow;
+    }
+
+    private static boolean evaluateTarget(QuestData.Quest q, QuestData.Target t, Player player, boolean trackProgress) {
+        if (t == null || player == null) return true;
+
+        if (isSubmitTarget(q, t)) {
+            return getAcceptedItemCountInInventory(t, player) >= t.count;
+        }
+
+        if (t.isItem()) {
+            String key = itemProgressKey(q, t);
+            int cur = getAcceptedItemCountInInventory(t, player);
+            int prog = trackProgress
+                    ? getPermanentItemProgress(player, key, cur, t.count)
+                    : peekPermanentItemProgress(player, key, cur, t.count);
+            return prog >= t.count;
+        }
+
+        if (t.isEntity()) return getAcceptedKillCount(t, player) >= t.count;
+
+        if (t.isEffect()) {
+            String key = flagProgressKey(q, t);
+            return trackProgress
+                    ? getPermanentFlagProgress(player, key, hasEffect(player, t.id))
+                    : peekPermanentFlagProgress(player, key, hasEffect(player, t.id));
+        }
+
+        if (t.isAdvancement()) return hasAdvancement(player, t.id);
+        if (t.isStat()) return getStatCount(player, t.id) >= t.count;
+        if (t.isObserve()) {
+            String key = flagProgressKey(q, t);
+            return trackProgress
+                    ? getPermanentFlagProgress(player, key, isObservingTarget(player, t.id))
+                    : peekPermanentFlagProgress(player, key, isObservingTarget(player, t.id));
+        }
+        if (t.isBiome()) {
+            String key = flagProgressKey(q, t);
+            return trackProgress
+                    ? getPermanentFlagProgress(player, key, isInBiome(player, t.id))
+                    : peekPermanentFlagProgress(player, key, isInBiome(player, t.id));
+        }
+        if (t.isDimension()) {
+            String key = flagProgressKey(q, t);
+            return trackProgress
+                    ? getPermanentFlagProgress(player, key, isInDimension(player, t.id))
+                    : peekPermanentFlagProgress(player, key, isInDimension(player, t.id));
+        }
+        if (t.isCheck()) {
+            String key = flagProgressKey(q, t);
+            return trackProgress
+                    ? getPermanentFlagProgress(player, key, false)
+                    : peekPermanentFlagProgress(player, key, false);
+        }
+        if (t.isXp()) return getXpAmount(player, t.id) >= t.count;
+        if (t.isLevelUpLevel()) return LevelUpCompat.meetsLevelRequirement(player, t.count);
+        if (t.isFieldInput()) {
+            String key = q.id + ":field:" + t.id;
+            String value = getFieldInputProgress(player, key);
+            return safeNormalizeFieldInput(value).equals(safeNormalizeFieldInput(t.id));
+        }
+
+        return true;
+    }
+
+    public static boolean isTargetSatisfied(QuestData.Quest q, QuestData.Target t, Player player) {
+        return evaluateTarget(q, t, player, false);
+    }
+
+    public static boolean canAcknowledge(QuestData.Quest q, Player player) {
+        if (player == null || q == null || q.completion == null) return false;
+        if (!dependenciesMet(q, player)) return false;
+        Status status = getStatus(q, player);
+        if (status == Status.REDEEMED || status == Status.REJECTED) return false;
+
+        boolean hasPendingCheck = false;
+        for (QuestData.Target t : q.completion.targets) {
+            if (t == null) continue;
+            if (t.isCheck()) {
+                if (!evaluateTarget(q, t, player, false)) hasPendingCheck = true;
+                continue;
+            }
+            if (!evaluateTarget(q, t, player, false)) return false;
+        }
+        return hasPendingCheck;
+    }
+
+    public static boolean acknowledgeCheckObjectives(QuestData.Quest q, Player player) {
+        if (player == null || q == null || q.completion == null) return false;
+        boolean changed = false;
+        for (QuestData.Target t : q.completion.targets) {
+            if (t == null || !t.isCheck()) continue;
+            String key = flagProgressKey(q, t);
+            if (!getPermanentFlagProgress(player, key, false)) {
+                getPermanentFlagProgress(player, key, true);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     public static boolean isReady(QuestData.Quest q, Player player) {
         if (player == null || q == null || q.completion == null) return false;
         if (getStatus(q, player) == Status.COMPLETED) return true;
@@ -363,40 +573,21 @@ public final class QuestTracker {
 
         for (QuestData.Target t : q.completion.targets) {
             if (t == null) continue;
+            if (!evaluateTarget(q, t, player, false)) return false;
+        }
 
-            if (isSubmitTarget(q, t)) {
-                int cur = getCountInInventory(t.id, player);
-                if (cur < t.count) return false;
-                continue;
-            }
+        return true;
+    }
 
-            if (t.isItem()) {
-                String key = q.id + ":" + t.id;
-                int cur = getCountInInventory(t.id, player);
-                int prog = getPermanentItemProgress(player, key, cur, t.count);
-                if (prog < t.count) return false;
-                continue;
-            }
+    public static boolean updateProgressAndCheckReady(QuestData.Quest q, Player player) {
+        if (player == null || q == null || q.completion == null) return false;
+        if (getStatus(q, player) == Status.COMPLETED) return true;
 
-            if (t.isEntity() && getKillCount(player, t.id) < t.count) return false;
+        if (!dependenciesMet(q, player)) return false;
 
-            if (t.isEffect()) {
-                String key = q.id + ":effect:" + t.id;
-                boolean hasNow = hasEffect(player, t.id);
-                boolean done = getPermanentEffectProgress(player, key, hasNow);
-                if (!done) return false;
-                continue;
-            }
-
-            if (t.isAdvancement() && !hasAdvancement(player, t.id)) return false;
-            if (t.isStat() && getStatCount(player, t.id) < t.count) return false;
-            if (t.isXp() && getXpAmount(player, t.id) < t.count) return false;
-            if (t.isLevelUpLevel() && !LevelUpCompat.meetsLevelRequirement(player, t.count)) return false;
-            if (t.isFieldInput()) {
-                String key = q.id + ":field:" + t.id;
-                String value = getFieldInputProgress(player, key);
-                if (!safeNormalizeFieldInput(value).equals(safeNormalizeFieldInput(t.id))) return false;
-            }
+        for (QuestData.Target t : q.completion.targets) {
+            if (t == null) continue;
+            if (!evaluateTarget(q, t, player, true)) return false;
         }
 
         return true;
@@ -423,34 +614,71 @@ public final class QuestTracker {
     public static int getStatCount(Player player, String statId) {
         if (player == null || statId == null || statId.isBlank()) return 0;
         try {
-            if (player instanceof ServerPlayer sp) {
-                int first = statId.indexOf(':');
-                int second = statId.indexOf(':', first + 1);
-                boolean typed = second > first;
-                String type = typed ? statId.substring(0, first) : "custom";
-                String name = typed ? statId.substring(first + 1) : statId;
-                ResourceLocation rl = ResourceLocation.tryParse(name);
-                if (rl == null) return 0;
-                return switch (type) {
-                    case "custom" -> sp.getStats().getValue(Stats.CUSTOM.get(rl));
-                    case "mine_block" -> {
-                        var block = BuiltInRegistries.BLOCK.getOptional(rl).orElse(null);
-                        yield block == null ? 0 : sp.getStats().getValue(Stats.BLOCK_MINED.get(block));
-                    }
-                    case "use_item" -> {
-                        var item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
-                        yield item == null ? 0 : sp.getStats().getValue(Stats.ITEM_USED.get(item));
-                    }
-                    case "kill_entity" -> {
-                        var et = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
-                        yield et == null ? 0 : sp.getStats().getValue(Stats.ENTITY_KILLED.get(et));
-                    }
-                    default -> 0;
-                };
+            if (player.level().isClientSide && CLIENT_STATS.containsKey(statId)) {
+                return CLIENT_STATS.getOrDefault(statId, 0);
             }
-            if (player.level().isClientSide) return CLIENT_STATS.getOrDefault(statId, 0);
+            if (player instanceof ServerPlayer sp) {
+                return resolveStatValue(sp.getStats(), statId);
+            }
+            if (player.level().isClientSide) {
+                try {
+                    Class<?> mcClass = Class.forName("net.minecraft.client.Minecraft");
+                    Object mc = mcClass.getMethod("getInstance").invoke(null);
+                    Object srvObj = mcClass.getMethod("getSingleplayerServer").invoke(mc);
+                    if (srvObj instanceof net.minecraft.server.MinecraftServer srv) {
+                        ServerPlayer sp = srv.getPlayerList().getPlayer(player.getUUID());
+                        if (sp != null) return resolveStatValue(sp.getStats(), statId);
+                    }
+                    Object connection = mcClass.getMethod("getConnection").invoke(mc);
+                    if (connection != null) {
+                        Object statsCounter = connection.getClass().getMethod("getStats").invoke(connection);
+                        if (statsCounter != null) return resolveStatValue(statsCounter, statId);
+                    }
+                } catch (Throwable ignored) {}
+                return CLIENT_STATS.getOrDefault(statId, 0);
+            }
         } catch (Exception ignored) {}
         return 0;
+    }
+
+    public static boolean markFlagProgress(ServerPlayer player, String key) {
+        if (player == null || key == null || key.isBlank()) return false;
+        return !QuestObjectiveState.get(player.serverLevel()).getFlagDone(player.getUUID(), key)
+                && QuestObjectiveState.get(player.serverLevel()).updateFlagDone(player.getUUID(), key, true);
+    }
+
+    private static int resolveStatValue(Object statsSource, String statId) {
+        if (statsSource == null || statId == null || statId.isBlank()) return 0;
+        int first = statId.indexOf(':');
+        int second = statId.indexOf(':', first + 1);
+        boolean typed = second > first;
+        String type = typed ? statId.substring(0, first) : "custom";
+        String name = typed ? statId.substring(first + 1) : statId;
+        ResourceLocation rl = ResourceLocation.tryParse(name);
+        if (rl == null) return 0;
+        Object stat = switch (type) {
+            case "custom" -> Stats.CUSTOM.get(rl);
+            case "mine_block" -> {
+                var block = BuiltInRegistries.BLOCK.getOptional(rl).orElse(null);
+                yield block == null ? null : Stats.BLOCK_MINED.get(block);
+            }
+            case "use_item" -> {
+                var item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
+                yield item == null ? null : Stats.ITEM_USED.get(item);
+            }
+            case "kill_entity" -> {
+                var et = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+                yield et == null ? null : Stats.ENTITY_KILLED.get(et);
+            }
+            default -> null;
+        };
+        if (stat == null) return 0;
+        try {
+            Object value = statsSource.getClass().getMethod("getValue", net.minecraft.stats.Stat.class).invoke(statsSource, stat);
+            return value instanceof Integer i ? i : 0;
+        } catch (Throwable ignored) {
+            return 0;
+        }
     }
 
     public static int getCountInInventory(String id, Player player) {
@@ -492,12 +720,139 @@ public final class QuestTracker {
         return found;
     }
 
+    public static int getAcceptedItemCountInInventory(QuestData.Target target, Player player) {
+        if (target == null) return 0;
+        int total = 0;
+        for (String acceptedId : target.acceptedIdsOrLegacy()) {
+            total += getCountInInventory(acceptedId, player);
+        }
+        return Math.max(0, total);
+    }
+
     public static int getKillCount(Player player, String entityId) {
         if (player == null || entityId == null || entityId.isBlank()) return 0;
         if (player instanceof ServerPlayer sp) {
-            return KillCounterState.get(sp.serverLevel()).snapshotFor(player.getUUID()).getOrDefault(entityId, 0);
+            return KillCounterState.get(sp.serverLevel()).get(player.getUUID(), entityId);
         }
         return CLIENT_KILLS.getOrDefault(entityId, 0);
+    }
+
+    public static int getAcceptedKillCount(QuestData.Target target, Player player) {
+        if (target == null) return 0;
+        int total = 0;
+        for (String acceptedId : target.acceptedIdsOrLegacy()) {
+            total += getKillCount(player, acceptedId);
+        }
+        return Math.max(0, total);
+    }
+
+    public static boolean isInBiome(Player player, String biomeId) {
+        if (player == null || biomeId == null || biomeId.isBlank()) return false;
+        ResourceLocation rl = tryParseCached(biomeId);
+        if (rl == null) return false;
+        return player.level().getBiome(player.blockPosition())
+                .unwrapKey()
+                .map(key -> rl.equals(key.location()))
+                .orElse(false);
+    }
+
+    public static boolean isInDimension(Player player, String dimensionId) {
+        if (player == null || dimensionId == null || dimensionId.isBlank()) return false;
+        ResourceLocation rl = tryParseCached(dimensionId);
+        if (rl == null) return false;
+        return rl.equals(player.level().dimension().location());
+    }
+
+    public static boolean isObservingTarget(Player player, String targetId) {
+        if (player == null || targetId == null || targetId.isBlank()) return false;
+        ResourceLocation rl = tryParseCached(targetId);
+        if (rl == null) return false;
+        if (BuiltInRegistries.ENTITY_TYPE.containsKey(rl)) {
+            return isLookingAtEntity(player, rl);
+        }
+        if (BuiltInRegistries.BLOCK.containsKey(rl)) {
+            return isLookingAtBlock(player, rl);
+        }
+        if (BuiltInRegistries.ITEM.containsKey(rl)) {
+            return isLookingAtItem(player, rl);
+        }
+        return false;
+    }
+
+    private static boolean isLookingAtBlock(Player player, ResourceLocation targetId) {
+        HitResult hit = player.pick(24.0D, 0.0F, false);
+        if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK) return false;
+        ResourceLocation looked = BuiltInRegistries.BLOCK.getKey(player.level().getBlockState(blockHit.getBlockPos()).getBlock());
+        return targetId.equals(looked);
+    }
+
+    private static boolean isLookingAtEntity(Player player, ResourceLocation targetId) {
+        Vec3 start = player.getEyePosition();
+        Vec3 look = player.getViewVector(1.0F);
+        Vec3 end = start.add(look.scale(24.0D));
+        AABB bounds = player.getBoundingBox().expandTowards(look.scale(24.0D)).inflate(1.0D);
+        EntityHitResult hit = ProjectileUtil.getEntityHitResult(
+                player,
+                start,
+                end,
+                bounds,
+                entity -> isObservedEntityMatch(entity, targetId),
+                24.0D * 24.0D
+        );
+        return hit != null;
+    }
+
+    private static boolean isLookingAtItem(Player player, ResourceLocation targetId) {
+        HitResult hit = player.pick(24.0D, 0.0F, false);
+        if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
+            Item blockItem = player.level().getBlockState(blockHit.getBlockPos()).getBlock().asItem();
+            ResourceLocation blockItemId = blockItem == null ? null : BuiltInRegistries.ITEM.getKey(blockItem);
+            if (targetId.equals(blockItemId)) return true;
+        }
+
+        Vec3 start = player.getEyePosition();
+        Vec3 look = player.getViewVector(1.0F);
+        Vec3 end = start.add(look.scale(24.0D));
+        AABB bounds = player.getBoundingBox().expandTowards(look.scale(24.0D)).inflate(1.0D);
+        EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(
+                player,
+                start,
+                end,
+                bounds,
+                entity -> isObservedItemMatch(entity, targetId),
+                24.0D * 24.0D
+        );
+        return entityHit != null;
+    }
+
+    private static boolean isObservedEntityMatch(Entity entity, ResourceLocation targetId) {
+        if (entity == null || !entity.isPickable()) return false;
+        ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        return targetId.equals(entityId);
+    }
+
+    private static boolean isObservedItemMatch(Entity entity, ResourceLocation targetId) {
+        if (entity == null || !entity.isPickable()) return false;
+        ItemStack stack = ItemStack.EMPTY;
+        if (entity instanceof ItemEntity itemEntity) {
+            stack = itemEntity.getItem();
+        } else if (entity instanceof ItemFrame itemFrame) {
+            stack = itemFrame.getItem();
+        }
+        if (stack.isEmpty()) return false;
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        return targetId.equals(itemId);
+    }
+
+    public static String itemProgressKey(QuestData.Quest quest, QuestData.Target target) {
+        if (quest == null || target == null) return "";
+        List<String> accepted = target.acceptedIdsOrLegacy();
+        if (accepted.size() <= 1) {
+            return quest.id + ":" + (accepted.isEmpty() ? target.id : accepted.get(0));
+        }
+        List<String> sorted = new ArrayList<>(accepted);
+        sorted.sort(String::compareTo);
+        return quest.id + ":accepted:" + String.join("|", sorted);
     }
 
     public static boolean hasEffect(Player player, String effectId) {
@@ -533,7 +888,7 @@ public final class QuestTracker {
 
             } catch (Throwable ignored) {}
 
-            return CLIENT_ADV_DONE.getOrDefault(rl.toString(), false);
+            return CLIENT_ADV_DONE.getOrDefault(progressCacheKey(player, rl.toString()), false);
         }
 
         return false;
@@ -546,8 +901,14 @@ public final class QuestTracker {
         AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(holder);
         boolean done = prog.isDone();
 
-        CLIENT_ADV_DONE.put(rl.toString(), done);
+        CLIENT_ADV_DONE.put(progressCacheKey(sp, rl.toString()), done);
         return done;
+    }
+
+    private static String progressCacheKey(Player player, String id) {
+        String playerKey = player == null ? "none" : player.getUUID().toString();
+        String value = id == null ? "" : id;
+        return playerKey + "|" + value;
     }
 
     public static boolean canCreateScroll(QuestData.Quest q, Player player) {
@@ -709,26 +1070,37 @@ public final class QuestTracker {
     private static void giveItemRewards(ServerPlayer player, QuestData.Quest q) {
         if (player == null || q == null || q.rewards == null || q.rewards.items == null) return;
         for (QuestData.RewardEntry r : q.rewards.items) {
-            if (r == null || r.item == null || r.item.isBlank()) continue;
+            if (r == null || r.acceptedItemsOrLegacy().isEmpty()) continue;
             try {
-                QuestItemSpec spec = QuestItemSpec.parse(r.item);
-                ResourceLocation rl = tryParseCached(spec.id);
-                if (rl == null) {
-                    BoundlessMod.LOGGER.warn("Skipping invalid item reward '{}' for quest {}", r.item, q.id);
-                    continue;
+                List<String> acceptedItems = r.acceptedItemsOrLegacy();
+                Map<String, Integer> grantedCounts = new LinkedHashMap<>();
+                for (int i = 0; i < Math.max(1, r.count); i++) {
+                    String rewardId = acceptedItems.get(player.getRandom().nextInt(acceptedItems.size()));
+                    grantedCounts.merge(rewardId, 1, Integer::sum);
                 }
-                Item item = spec.item();
-                if (item == null) {
-                    BoundlessMod.LOGGER.warn("Skipping missing item reward '{}' for quest {}", r.item, q.id);
-                    continue;
-                }
-                ItemStack stack = createRewardStack(player, spec, item, Math.max(1, r.count));
-                if (!player.getInventory().add(stack) && !stack.isEmpty()) {
-                    player.drop(stack, false);
+                for (Map.Entry<String, Integer> granted : grantedCounts.entrySet()) {
+                    String rewardId = granted.getKey();
+                    int amount = granted.getValue() == null ? 0 : granted.getValue();
+                    if (amount <= 0) continue;
+                    QuestItemSpec spec = QuestItemSpec.parse(rewardId);
+                    ResourceLocation rl = tryParseCached(spec.id);
+                    if (rl == null) {
+                        BoundlessMod.LOGGER.warn("Skipping invalid item reward '{}' for quest {}", rewardId, q.id);
+                        continue;
+                    }
+                    Item item = spec.item();
+                    if (item == null) {
+                        BoundlessMod.LOGGER.warn("Skipping missing item reward '{}' for quest {}", rewardId, q.id);
+                        continue;
+                    }
+                    ItemStack stack = createRewardStack(player, spec, item, Math.max(1, amount));
+                    if (!player.getInventory().add(stack) && !stack.isEmpty()) {
+                        player.drop(stack, false);
+                    }
                 }
             } catch (Throwable t) {
                 BoundlessMod.LOGGER.error("Failed to grant item reward {} x{} for quest {} to player {}",
-                        r.item, Math.max(1, r.count), q.id, player.getGameProfile().getName(), t);
+                        r.acceptedItemsOrLegacy(), Math.max(1, r.count), q.id, player.getGameProfile().getName(), t);
             }
         }
     }
@@ -860,17 +1232,39 @@ public final class QuestTracker {
         }
         if (st == Status.INCOMPLETE) {
             activeStateMap().remove(questId);
-            clearClientInputForQuest(questId);
+            clearClientObjectiveForQuest(questId);
         } else {
             activeStateMap().put(questId, st);
-            if (st == Status.REDEEMED) clearClientInputForQuest(questId);
+            if (st == Status.REDEEMED) clearClientObjectiveForQuest(questId);
         }
         if (FMLEnvironment.dist == Dist.CLIENT && ACTIVE_KEY != null) ClientOnly.saveClientState(ACTIVE_KEY);
     }
 
-    private static void clearClientInputForQuest(String questId) {
+    private static void clearClientObjectiveForQuest(String questId) {
         if (questId == null || questId.isBlank()) return;
+        CLIENT_ITEM_PROGRESS.entrySet().removeIf(e -> e.getKey() != null && e.getKey().startsWith(questId + ":"));
+        CLIENT_EFFECT_PROGRESS.entrySet().removeIf(e -> e.getKey() != null && e.getKey().startsWith(questId + ":"));
         CLIENT_INPUT_PROGRESS.entrySet().removeIf(e -> e.getKey() != null && e.getKey().startsWith(questId + ":"));
+    }
+
+    public static void clientSetItemProgress(String key, int count) {
+        if (key == null || key.isBlank()) return;
+        int sanitized = Math.max(0, count);
+        if (sanitized <= 0) CLIENT_ITEM_PROGRESS.remove(key);
+        else CLIENT_ITEM_PROGRESS.put(key, sanitized);
+    }
+
+    public static void clientSetFlagProgress(String key, boolean done) {
+        if (key == null || key.isBlank()) return;
+        if (done) CLIENT_EFFECT_PROGRESS.put(key, true);
+        else CLIENT_EFFECT_PROGRESS.remove(key);
+    }
+
+    public static void clientSetInputProgress(String key, String value) {
+        if (key == null || key.isBlank()) return;
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isBlank()) CLIENT_INPUT_PROGRESS.remove(key);
+        else CLIENT_INPUT_PROGRESS.put(key, normalized);
     }
 
     public static void clientSetClaimCount(String questId, int count) {
@@ -896,6 +1290,13 @@ public final class QuestTracker {
         CLIENT_KILLS.put(entityId, Math.max(0, count));
     }
 
+    public static void clientSetStat(String statId, int count) {
+        if (statId == null || statId.isBlank()) return;
+        int sanitized = Math.max(0, count);
+        if (sanitized <= 0) CLIENT_STATS.remove(statId);
+        else CLIENT_STATS.put(statId, sanitized);
+    }
+
     public static void clientClearAll() {
         CLIENT_KILLS.clear();
         CLIENT_ADV_DONE.clear();
@@ -915,6 +1316,9 @@ public final class QuestTracker {
 
     public static void tickPlayer(Player player) {
         if (player == null || !player.level().isClientSide) return;
+        if (player.tickCount % 10 == 0) {
+            clientReportObservedTargets(player);
+        }
         if (isClientMultiplayer()) return;
 
         ensureClientStateLoaded(player);
@@ -926,7 +1330,7 @@ public final class QuestTracker {
             Status cur = getStatus(q, player);
             if (cur == Status.REDEEMED || cur == Status.REJECTED) continue;
 
-            boolean ready = dependenciesMet(q, player) && isReady(q, player);
+            boolean ready = updateProgressAndCheckReady(q, player);
             boolean hasItemTargets = hasItemOrSubmitTargets(q);
 
             if (ready && cur == Status.INCOMPLETE) {
@@ -941,10 +1345,23 @@ public final class QuestTracker {
         }
     }
 
+    private static void clientReportObservedTargets(Player player) {
+        if (player == null || !player.level().isClientSide || !isClientMultiplayer()) return;
+        QuestData.loadClient(false);
+        for (QuestData.Quest quest : QuestData.all()) {
+            if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
+            for (QuestData.Target target : quest.completion.targets) {
+                if (target == null || !target.isObserve() || target.id == null || target.id.isBlank()) continue;
+                if (!isObservingTarget(player, target.id)) continue;
+                net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                        new net.revilodev.boundless.network.BoundlessNetwork.ReportObserve(quest.id, target.id)
+                );
+            }
+        }
+    }
+
     public static void serverTickPlayer(ServerPlayer sp) {
         if (sp == null) return;
-
-        QuestData.allServer(sp.server);
 
         for (QuestData.Quest q : QuestData.allServer(sp.server)) {
             if (q == null) continue;
@@ -953,7 +1370,7 @@ public final class QuestTracker {
             Status cur = getServerStatus(sp, q.id);
             if (cur == Status.REDEEMED || cur == Status.REJECTED) continue;
 
-            boolean ready = dependenciesMet(q, sp) && isReady(q, sp);
+            boolean ready = updateProgressAndCheckReady(q, sp);
             boolean hasItemTargets = hasItemOrSubmitTargets(q);
 
             if (ready && cur == Status.INCOMPLETE) {
@@ -972,6 +1389,10 @@ public final class QuestTracker {
                 setServerStatus(sp, q.id, Status.INCOMPLETE);
                 BoundlessNetwork.sendStatus(sp, q.id, Status.INCOMPLETE.name());
             }
+        }
+
+        if (sp.tickCount % 20 == 0) {
+            BoundlessNetwork.sendObjectiveProgress(sp);
         }
     }
 

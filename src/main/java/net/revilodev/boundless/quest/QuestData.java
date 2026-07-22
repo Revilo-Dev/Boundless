@@ -43,6 +43,7 @@ public final class QuestData {
     private static final Map<String, Quest> QUESTS = new LinkedHashMap<>();
     private static final Map<String, Category> CATEGORIES = new LinkedHashMap<>();
     private static final Map<String, SubCategory> SUBCATEGORIES = new LinkedHashMap<>();
+    private static final Collection<Quest> QUESTS_VIEW = Collections.unmodifiableCollection(QUESTS.values());
     private static boolean loadedClient = false;
     private static boolean loadedServer = false;
 
@@ -148,11 +149,29 @@ public final class QuestData {
 
     public static final class RewardEntry {
         public final String item;
+        public final List<String> acceptedItems;
         public final int count;
 
         public RewardEntry(String item, int count) {
-            this.item = item;
+            this(item == null || item.isBlank() ? List.of() : List.of(item), count);
+        }
+
+        public RewardEntry(List<String> acceptedItems, int count) {
+            List<String> normalized = new ArrayList<>();
+            if (acceptedItems != null) {
+                for (String acceptedItem : acceptedItems) {
+                    if (acceptedItem == null) continue;
+                    String trimmed = acceptedItem.trim();
+                    if (!trimmed.isBlank() && !normalized.contains(trimmed)) normalized.add(trimmed);
+                }
+            }
+            this.acceptedItems = List.copyOf(normalized);
+            this.item = this.acceptedItems.isEmpty() ? "" : this.acceptedItems.get(0);
             this.count = Math.max(1, count);
+        }
+
+        public List<String> acceptedItemsOrLegacy() {
+            return acceptedItems.isEmpty() && item != null && !item.isBlank() ? List.of(item) : acceptedItems;
         }
     }
 
@@ -191,16 +210,34 @@ public final class QuestData {
     public static final class Target {
         public final String kind;
         public final String id;
+        public final List<String> acceptedIds;
         public final int count;
         public final String hint;
 
         public Target(String kind, String id, int count) {
-            this(kind, id, count, "");
+            this(kind, id == null || id.isBlank() ? List.of() : List.of(id), count, "");
         }
 
         public Target(String kind, String id, int count, String hint) {
+            this(kind, id == null || id.isBlank() ? List.of() : List.of(id), count, hint);
+        }
+
+        public Target(String kind, List<String> acceptedIds, int count) {
+            this(kind, acceptedIds, count, "");
+        }
+
+        public Target(String kind, List<String> acceptedIds, int count, String hint) {
             this.kind = kind;
-            this.id = id;
+            List<String> normalized = new ArrayList<>();
+            if (acceptedIds != null) {
+                for (String acceptedId : acceptedIds) {
+                    if (acceptedId == null) continue;
+                    String trimmed = acceptedId.trim();
+                    if (!trimmed.isBlank() && !normalized.contains(trimmed)) normalized.add(trimmed);
+                }
+            }
+            this.acceptedIds = List.copyOf(normalized);
+            this.id = this.acceptedIds.isEmpty() ? "" : this.acceptedIds.get(0);
             this.count = Math.max(1, count);
             this.hint = hint == null ? "" : hint;
         }
@@ -214,6 +251,12 @@ public final class QuestData {
         public boolean isXp() { return "xp".equals(kind); }
         public boolean isLevelUpLevel() { return "levelup_level".equals(kind); }
         public boolean isFieldInput() { return "field".equals(kind); }
+        public boolean isObserve() { return "observe".equals(kind); }
+        public boolean isCheck() { return "check".equals(kind); }
+        public boolean isBiome() { return "biome".equals(kind); }
+        public boolean isDimension() { return "dimension".equals(kind); }
+        public boolean hasMultipleAcceptedIds() { return acceptedIds.size() > 1; }
+        public List<String> acceptedIdsOrLegacy() { return acceptedIds.isEmpty() && !id.isBlank() ? List.of(id) : acceptedIds; }
     }
 
     public static final class Category {
@@ -788,12 +831,12 @@ public final class QuestData {
 
     public static synchronized Collection<Quest> all() {
         if (!loadedClient) loadClient(false);
-        return Collections.unmodifiableList(new ArrayList<>(QUESTS.values()));
+        return QUESTS_VIEW;
     }
 
     public static synchronized Collection<Quest> allServer(MinecraftServer server) {
         loadServer(server, false);
-        return Collections.unmodifiableList(new ArrayList<>(QUESTS.values()));
+        return QUESTS_VIEW;
     }
 
     public static synchronized Optional<Quest> byId(String id) {
@@ -1024,7 +1067,9 @@ public final class QuestData {
                 String item = optString(r, "item");
                 int count = r.has("count") && r.get("count").isJsonPrimitive() && r.getAsJsonPrimitive("count").isNumber()
                         ? r.getAsJsonPrimitive("count").getAsInt() : 1;
-                if (item != null && !item.isBlank()) items.add(new RewardEntry(item, count));
+                List<String> accepted = readAcceptedIds(r, "acceptedItems", "item");
+                if (!accepted.isEmpty()) items.add(new RewardEntry(accepted, count));
+                else if (item != null && !item.isBlank()) items.add(new RewardEntry(item, count));
             }
             return new Rewards(items, commands, functions, lootTables, expType, expAmount);
         }
@@ -1042,13 +1087,17 @@ public final class QuestData {
                 String item = optString(r, "item");
                 int count = r.has("count") && r.get("count").isJsonPrimitive() && r.getAsJsonPrimitive("count").isNumber()
                         ? r.getAsJsonPrimitive("count").getAsInt() : 1;
-                if (item != null && !item.isBlank()) items.add(new RewardEntry(item, count));
+                List<String> accepted = readAcceptedIds(r, "acceptedItems", "item");
+                if (!accepted.isEmpty()) items.add(new RewardEntry(accepted, count));
+                else if (item != null && !item.isBlank()) items.add(new RewardEntry(item, count));
             }
         } else if (obj.has("item")) {
             String item = optString(obj, "item");
             int count = obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
                     ? obj.getAsJsonPrimitive("count").getAsInt() : 1;
-            if (item != null && !item.isBlank()) items.add(new RewardEntry(item, count));
+            List<String> accepted = readAcceptedIds(obj, "acceptedItems", "item");
+            if (!accepted.isEmpty()) items.add(new RewardEntry(accepted, count));
+            else if (item != null && !item.isBlank()) items.add(new RewardEntry(item, count));
         }
 
         if (obj.has("command") && obj.get("command").isJsonPrimitive()) {
@@ -1153,18 +1202,10 @@ public final class QuestData {
             JsonObject obj = el.getAsJsonObject();
 
             if (obj.has("collect")) {
-                JsonElement cEl = obj.get("collect");
+                List<String> accepted = readAcceptedIds(obj, "acceptedItems", "collect");
                 int count = obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
                         ? obj.getAsJsonPrimitive("count").getAsInt() : 1;
-
-                if (cEl.isJsonArray()) {
-                    for (JsonElement ce : cEl.getAsJsonArray()) {
-                        if (!ce.isJsonPrimitive()) continue;
-                        out.add(new Target("item", ce.getAsString(), count));
-                    }
-                } else if (cEl.isJsonPrimitive()) {
-                    out.add(new Target("item", cEl.getAsString(), count));
-                }
+                if (!accepted.isEmpty()) out.add(new Target("item", accepted, count));
                 return new Completion(out);
             }
 
@@ -1177,21 +1218,36 @@ public final class QuestData {
             }
 
             if (obj.has("item")) {
-                out.add(new Target("item", optString(obj, "item"),
+                out.add(new Target("item", List.of(optString(obj, "item")),
                         obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
                                 ? obj.getAsJsonPrimitive("count").getAsInt() : 1));
                 return new Completion(out);
             }
+            if (obj.has("acceptedItems")) {
+                List<String> accepted = readAcceptedIds(obj, "acceptedItems", "");
+                int count = obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
+                        ? obj.getAsJsonPrimitive("count").getAsInt() : 1;
+                if (!accepted.isEmpty()) out.add(new Target("item", accepted, count));
+                return new Completion(out);
+            }
             if (obj.has("submit")) {
-                out.add(new Target("submit", optString(obj, "submit"),
+                List<String> accepted = readAcceptedIds(obj, "acceptedItems", "submit");
+                out.add(new Target("submit", accepted,
                         obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
                                 ? obj.getAsJsonPrimitive("count").getAsInt() : 1));
                 return new Completion(out);
             }
             if (obj.has("entity")) {
-                out.add(new Target("entity", optString(obj, "entity"),
+                out.add(new Target("entity", List.of(optString(obj, "entity")),
                         obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
                                 ? obj.getAsJsonPrimitive("count").getAsInt() : 1));
+                return new Completion(out);
+            }
+            if (obj.has("kill") || obj.has("acceptedMobs")) {
+                List<String> accepted = readAcceptedIds(obj, "acceptedMobs", "kill");
+                int count = obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
+                        ? obj.getAsJsonPrimitive("count").getAsInt() : 1;
+                if (!accepted.isEmpty()) out.add(new Target("entity", accepted, count));
                 return new Completion(out);
             }
             if (obj.has("effect")) {
@@ -1206,6 +1262,24 @@ public final class QuestData {
                 out.add(new Target("stat", optString(obj, "stat"),
                         obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
                                 ? obj.getAsJsonPrimitive("count").getAsInt() : 1));
+                return new Completion(out);
+            }
+            if (obj.has("observe")) {
+                out.add(new Target("observe", optString(obj, "observe"), 1));
+                return new Completion(out);
+            }
+            if (obj.has("check")) {
+                String text = obj.get("check").isJsonPrimitive() ? obj.get("check").getAsString() : "";
+                if (text == null || text.isBlank() || "true".equalsIgnoreCase(text.trim())) text = "Understand";
+                out.add(new Target("check", text, 1));
+                return new Completion(out);
+            }
+            if (obj.has("biome")) {
+                out.add(new Target("biome", optString(obj, "biome"), 1));
+                return new Completion(out);
+            }
+            if (obj.has("dimension")) {
+                out.add(new Target("dimension", optString(obj, "dimension"), 1));
                 return new Completion(out);
             }
             if (obj.has("xp")) {
@@ -1230,23 +1304,23 @@ public final class QuestData {
 
     private static void parseNewFormatTarget(JsonObject o, List<Target> out) {
         if (o.has("collect")) {
-            String id = o.get("collect").getAsString();
+            List<String> ids = readAcceptedIds(o, "acceptedItems", "collect");
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            out.add(new Target("item", id, count));
+            if (!ids.isEmpty()) out.add(new Target("item", ids, count));
             return;
         }
 
         if (o.has("submit")) {
-            String id = o.get("submit").getAsString();
+            List<String> ids = readAcceptedIds(o, "acceptedItems", "submit");
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            out.add(new Target("submit", id, count));
+            if (!ids.isEmpty()) out.add(new Target("submit", ids, count));
             return;
         }
 
         if (o.has("kill")) {
-            String entity = o.get("kill").getAsString();
+            List<String> ids = readAcceptedIds(o, "acceptedMobs", "kill");
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            out.add(new Target("entity", entity, count));
+            if (!ids.isEmpty()) out.add(new Target("entity", ids, count));
             return;
         }
 
@@ -1266,6 +1340,28 @@ public final class QuestData {
             String st = o.get("stat").getAsString();
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
             out.add(new Target("stat", st, count));
+            return;
+        }
+
+        if (o.has("observe")) {
+            out.add(new Target("observe", o.get("observe").getAsString(), 1));
+            return;
+        }
+
+        if (o.has("check")) {
+            String text = o.get("check").isJsonPrimitive() ? o.get("check").getAsString() : "";
+            if (text == null || text.isBlank() || "true".equalsIgnoreCase(text.trim())) text = "Understand";
+            out.add(new Target("check", text, 1));
+            return;
+        }
+
+        if (o.has("biome")) {
+            out.add(new Target("biome", o.get("biome").getAsString(), 1));
+            return;
+        }
+
+        if (o.has("dimension")) {
+            out.add(new Target("dimension", o.get("dimension").getAsString(), 1));
             return;
         }
 
@@ -1301,23 +1397,30 @@ public final class QuestData {
 
     private static void parseTargetObject(JsonObject o, List<Target> out) {
         if (o.has("submit")) {
-            String item = optString(o, "submit");
+            List<String> items = readAcceptedIds(o, "acceptedItems", "submit");
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            if (item != null && !item.isBlank()) out.add(new Target("submit", item, count));
+            if (!items.isEmpty()) out.add(new Target("submit", items, count));
             return;
         }
 
         if (o.has("item")) {
-            String item = optString(o, "item");
+            List<String> items = readAcceptedIds(o, "acceptedItems", "item");
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            if (item != null && !item.isBlank()) out.add(new Target("item", item, count));
+            if (!items.isEmpty()) out.add(new Target("item", items, count));
             return;
         }
 
         if (o.has("entity")) {
-            String entity = optString(o, "entity");
+            List<String> entities = readAcceptedIds(o, "acceptedMobs", "entity");
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            if (entity != null && !entity.isBlank()) out.add(new Target("entity", entity, count));
+            if (!entities.isEmpty()) out.add(new Target("entity", entities, count));
+            return;
+        }
+
+        if (o.has("kill") || o.has("acceptedMobs")) {
+            List<String> entities = readAcceptedIds(o, "acceptedMobs", "kill");
+            int count = o.has("count") ? o.get("count").getAsInt() : 1;
+            if (!entities.isEmpty()) out.add(new Target("entity", entities, count));
             return;
         }
 
@@ -1337,6 +1440,31 @@ public final class QuestData {
             String stat = optString(o, "stat");
             int count = o.has("count") ? o.get("count").getAsInt() : 1;
             if (stat != null && !stat.isBlank()) out.add(new Target("stat", stat, count));
+            return;
+        }
+
+        if (o.has("observe")) {
+            String observe = optString(o, "observe");
+            if (observe != null && !observe.isBlank()) out.add(new Target("observe", observe, 1));
+            return;
+        }
+
+        if (o.has("check")) {
+            String text = optString(o, "check");
+            if (text == null || text.isBlank() || "true".equalsIgnoreCase(text.trim())) text = "Understand";
+            out.add(new Target("check", text, 1));
+            return;
+        }
+
+        if (o.has("biome")) {
+            String biome = optString(o, "biome");
+            if (biome != null && !biome.isBlank()) out.add(new Target("biome", biome, 1));
+            return;
+        }
+
+        if (o.has("dimension")) {
+            String dimension = optString(o, "dimension");
+            if (dimension != null && !dimension.isBlank()) out.add(new Target("dimension", dimension, 1));
             return;
         }
 
@@ -1365,6 +1493,36 @@ public final class QuestData {
             if (hint == null || hint.isBlank()) hint = optString(o, "fieldText");
             out.add(new Target("field", fieldValue, 1, hint));
         }
+    }
+
+    private static List<String> readAcceptedIds(JsonObject obj, String listKey, String singleKey) {
+        List<String> out = new ArrayList<>();
+        if (obj == null) return out;
+        if (listKey != null && obj.has(listKey) && obj.get(listKey).isJsonArray()) {
+            for (JsonElement element : obj.getAsJsonArray(listKey)) {
+                if (element != null && element.isJsonPrimitive()) {
+                    String value = element.getAsString();
+                    if (value != null && !value.isBlank() && !out.contains(value)) out.add(value);
+                }
+            }
+        }
+        if (singleKey != null && obj.has(singleKey)) {
+            JsonElement element = obj.get(singleKey);
+            if (element != null) {
+                if (element.isJsonArray()) {
+                    for (JsonElement value : element.getAsJsonArray()) {
+                        if (value != null && value.isJsonPrimitive()) {
+                            String raw = value.getAsString();
+                            if (raw != null && !raw.isBlank() && !out.contains(raw)) out.add(raw);
+                        }
+                    }
+                } else if (element.isJsonPrimitive()) {
+                    String value = element.getAsString();
+                    if (value != null && !value.isBlank() && !out.contains(value)) out.add(value);
+                }
+            }
+        }
+        return out;
     }
 
     public static synchronized void applyNetworkJson(String json) {
@@ -1549,11 +1707,18 @@ public final class QuestData {
                                 if (!te.isJsonObject()) continue;
                                 JsonObject to = te.getAsJsonObject();
                                 String kind = optString(to, "kind");
-                                String tid = optString(to, "id");
+                                List<String> acceptedIds = switch (kind == null ? "" : kind) {
+                                    case "item", "submit" -> readAcceptedIds(to, "acceptedItems", "id");
+                                    case "entity" -> readAcceptedIds(to, "acceptedMobs", "id");
+                                    default -> {
+                                        String tid = optString(to, "id");
+                                        yield tid == null || tid.isBlank() ? List.of() : List.of(tid);
+                                    }
+                                };
                                 int count = to.has("count") ? to.get("count").getAsInt() : 1;
                                 String hint = optString(to, "hint");
-                                if (kind != null && !kind.isBlank() && tid != null && !tid.isBlank()) {
-                                    targets.add(new Target(kind, tid, count, hint));
+                                if (kind != null && !kind.isBlank() && !acceptedIds.isEmpty()) {
+                                    targets.add(new Target(kind, acceptedIds, count, hint));
                                 }
                             }
                         }

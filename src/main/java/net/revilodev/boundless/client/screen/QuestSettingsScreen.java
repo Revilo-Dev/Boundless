@@ -103,6 +103,7 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiHideHeaderRow;
     private ConfigRow uiFilterDisplayRow;
     private ConfigRow uiDisableCategoriesRow;
+    private ConfigRow uiQuestPackTypeRow;
     private ConfigRow uiHideQuestWidgetIconsRow;
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
@@ -135,6 +136,7 @@ public final class QuestSettingsScreen extends Screen {
     private int uiHideHeaderBaseY;
     private int uiFilterDisplayBaseY;
     private int uiDisableCategoriesBaseY;
+    private int uiQuestPackTypeBaseY;
     private int uiHideQuestWidgetIconsBaseY;
     private int uiQuestTextScaleBaseY;
     private int uiQuestIconScaleBaseY;
@@ -154,6 +156,7 @@ public final class QuestSettingsScreen extends Screen {
     private boolean hideCategoryHeader;
     private String filterDisplayMode;
     private boolean disableCategories;
+    private String questPackDisplayType;
     private boolean hideQuestWidgetIcons;
     private double questTextScale;
     private double questIconScale;
@@ -219,13 +222,14 @@ public final class QuestSettingsScreen extends Screen {
         uiHideHeaderBaseY = uiRow1 + rowGap * 4;
         uiFilterDisplayBaseY = uiRow1 + rowGap * 5;
         uiDisableCategoriesBaseY = uiRow1 + rowGap * 6;
-        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 7;
-        uiQuestTextScaleBaseY = uiRow1 + rowGap * 8;
-        uiQuestIconScaleBaseY = uiRow1 + rowGap * 9;
-        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 10;
-        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 11;
-        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 12;
-        functionalityHeaderBaseY = uiRow1 + rowGap * 13 + 4;
+        uiQuestPackTypeBaseY = uiRow1 + rowGap * 7;
+        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 8;
+        uiQuestTextScaleBaseY = uiRow1 + rowGap * 9;
+        uiQuestIconScaleBaseY = uiRow1 + rowGap * 10;
+        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 11;
+        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 12;
+        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 13;
+        functionalityHeaderBaseY = uiRow1 + rowGap * 14 + 4;
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
         functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
@@ -263,6 +267,10 @@ public final class QuestSettingsScreen extends Screen {
                 "Disable category tabs and category-based filtering.",
                 () -> disableCategories ? "Disabled" : "Enabled",
                 () -> disableCategories = !disableCategories);
+        uiQuestPackTypeRow = new ConfigRow(px, uiQuestPackTypeBaseY, pw, "Questpack Type",
+                "Choose how questpacks are presented. Quest Tree is a teaser only for now and is not yet available.",
+                this::formatQuestPackDisplayType,
+                this::cycleQuestPackDisplayType);
         uiHideQuestWidgetIconsRow = new ConfigRow(px, uiHideQuestWidgetIconsBaseY, pw, "Disable Widget Icons",
                 "Hide icons in quest list widgets.",
                 () -> hideQuestWidgetIcons ? "On" : "Off",
@@ -325,6 +333,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiCenterInventoryWithPanelRow, ConfigTab.UI);
         addConfigRow(uiFilterDisplayRow, ConfigTab.UI);
         addConfigRow(uiDisableCategoriesRow, ConfigTab.UI);
+        addConfigRow(uiQuestPackTypeRow, ConfigTab.UI);
         addConfigRow(uiEnableSearchBoxRow, ConfigTab.UI);
 
         addConfigRow(uiEnableQuestToastsRow, ConfigTab.FEATURES);
@@ -409,6 +418,8 @@ public final class QuestSettingsScreen extends Screen {
         uiFilterDisplayRow.active = config;
         uiDisableCategoriesRow.visible = config;
         uiDisableCategoriesRow.active = config;
+        uiQuestPackTypeRow.visible = config;
+        uiQuestPackTypeRow.active = config;
         uiHideQuestWidgetIconsRow.visible = config;
         uiHideQuestWidgetIconsRow.active = config;
         uiQuestTextScaleRow.visible = config;
@@ -459,6 +470,7 @@ public final class QuestSettingsScreen extends Screen {
         hideCategoryHeader = Config.hideCategoryHeader();
         filterDisplayMode = Config.filterDisplayMode();
         disableCategories = Config.disableCategories();
+        questPackDisplayType = normalizeQuestPackDisplayType(Config.questPackDisplayType());
         hideQuestWidgetIcons = Config.hideQuestWidgetIcons();
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
@@ -491,6 +503,19 @@ public final class QuestSettingsScreen extends Screen {
             case "buttons" -> "As Buttons";
             case "hidden" -> "Hidden";
             default -> "As Tabs";
+        };
+    }
+
+    private void cycleQuestPackDisplayType() {
+        questPackDisplayType = "default_list".equals(questPackDisplayType)
+                ? "quest_tree_coming_soon"
+                : "default_list";
+    }
+
+    private String formatQuestPackDisplayType() {
+        return switch (normalizeQuestPackDisplayType(questPackDisplayType)) {
+            case "quest_tree_coming_soon" -> "Quest Tree (Coming Soon)";
+            default -> "Default List";
         };
     }
 
@@ -540,6 +565,7 @@ public final class QuestSettingsScreen extends Screen {
         Config.HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
         Config.FILTER_DISPLAY_MODE.set(filterDisplayMode);
         Config.DISABLE_CATEGORIES.set(disableCategories);
+        Config.QUEST_PACK_DISPLAY_TYPE.set(normalizeQuestPackDisplayType(questPackDisplayType));
         Config.HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
@@ -600,6 +626,7 @@ public final class QuestSettingsScreen extends Screen {
             centerInventoryWithQuestPanel = true;
             filterDisplayMode = "tabs";
             disableCategories = false;
+            questPackDisplayType = "default_list";
             enableQuestSearchBox = false;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.STYLE) {
@@ -662,6 +689,14 @@ public final class QuestSettingsScreen extends Screen {
         return ("beside_recipe_book".equals(lower) || "above_offhand_slot".equals(lower))
                 ? lower
                 : "beside_recipe_book";
+    }
+
+    private String normalizeQuestPackDisplayType(String raw) {
+        if (raw == null) return "default_list";
+        String lower = raw.trim().toLowerCase();
+        return ("default_list".equals(lower) || "quest_tree_coming_soon".equals(lower))
+                ? lower
+                : "default_list";
     }
 
     @Override
