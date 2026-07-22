@@ -408,12 +408,11 @@ public final class PinnedQuestHud {
         try {
             if (t.isItem()) {
                 int need = Math.max(1, t.count);
-                int found = QuestTracker.getCountInInventory(t.id, player);
+                int found = QuestTracker.getAcceptedItemCountInInventory(t, player);
 
                 int perm = found;
                 try {
-                    String progressKey = q.id + ":" + t.id;
-                    perm = QuestTracker.getPermanentItemProgress(progressKey, found, need);
+                    perm = QuestTracker.getTrackedItemProgress(q, t, player);
                 } catch (Throwable ignored) {}
 
                 int shown = Math.min(perm, need);
@@ -424,7 +423,7 @@ public final class PinnedQuestHud {
 
             if (t.isEntity()) {
                 int need = Math.max(1, t.count);
-                int have = Math.min(QuestTracker.getKillCount(player, t.id), need);
+                int have = Math.min(QuestTracker.getAcceptedKillCount(t, player), need);
                 boolean done = have >= need;
 
                 ResourceLocation rl = ResourceLocation.tryParse(t.id);
@@ -452,6 +451,26 @@ public final class PinnedQuestHud {
                 int have = Math.min(QuestTracker.getStatCount(player, t.id), need);
                 boolean done = have >= need;
                 return new TargetView(new ItemStack(Items.PAPER), have + "/" + need, done);
+            }
+
+            if (t.isObserve()) {
+                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
+                return new TargetView(new ItemStack(Items.SPYGLASS), done ? "1/1" : "0/1", done);
+            }
+
+            if (t.isCheck()) {
+                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
+                return new TargetView(new ItemStack(Items.LIME_DYE), done ? "1/1" : "0/1", done);
+            }
+
+            if (t.isBiome()) {
+                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
+                return new TargetView(new ItemStack(Items.GRASS_BLOCK), done ? "1/1" : "0/1", done);
+            }
+
+            if (t.isDimension()) {
+                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
+                return new TargetView(new ItemStack(Items.ENDER_PEARL), done ? "1/1" : "0/1", done);
             }
 
             if (t.isLevelUpLevel()) {

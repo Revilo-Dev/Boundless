@@ -132,13 +132,12 @@ public final class QuestProgressState extends SavedData {
     }
 
     public String get(UUID player, String questId) {
-        return progress(player, questId).status();
+        QuestProgress progress = rawProgress(player, questId);
+        return progress == null ? null : progress.status();
     }
 
     public QuestProgress progress(UUID player, String questId) {
-        Map<String, QuestProgress> m = byPlayer.get(player.toString());
-        if (m == null) return new QuestProgress();
-        QuestProgress progress = m.get(questId);
+        QuestProgress progress = rawProgress(player, questId);
         return progress == null ? new QuestProgress() : new QuestProgress(progress.status(), progress.claimCount(), progress.scrollRedeemed(), progress.scrollCreated());
     }
 
@@ -146,7 +145,15 @@ public final class QuestProgressState extends SavedData {
         String key = player.toString();
         Map<String, QuestProgress> m = byPlayer.computeIfAbsent(key, k -> new HashMap<>());
         QuestProgress progress = m.computeIfAbsent(questId, ignored -> new QuestProgress());
-        progress.status = sanitizeStatus(status);
+        String sanitized = sanitizeStatus(status);
+        if ((progress.status == null && sanitized == null) || (progress.status != null && progress.status.equals(sanitized))) {
+            if (progress.isEmpty()) {
+                m.remove(questId);
+                if (m.isEmpty()) byPlayer.remove(key);
+            }
+            return;
+        }
+        progress.status = sanitized;
         if (progress.isEmpty()) {
             m.remove(questId);
         }
@@ -157,7 +164,8 @@ public final class QuestProgressState extends SavedData {
     }
 
     public int getClaimCount(UUID player, String questId) {
-        return progress(player, questId).claimCount();
+        QuestProgress progress = rawProgress(player, questId);
+        return progress == null ? 0 : progress.claimCount();
     }
 
     public boolean hasEverClaimed(UUID player, String questId) {
@@ -174,17 +182,26 @@ public final class QuestProgressState extends SavedData {
     }
 
     public boolean hasRedeemedScroll(UUID player, String questId) {
-        return progress(player, questId).scrollRedeemed();
+        QuestProgress progress = rawProgress(player, questId);
+        return progress != null && progress.scrollRedeemed();
     }
 
     public boolean hasCreatedScroll(UUID player, String questId) {
-        return progress(player, questId).scrollCreated();
+        QuestProgress progress = rawProgress(player, questId);
+        return progress != null && progress.scrollCreated();
     }
 
     public void setScrollRedeemed(UUID player, String questId, boolean redeemed) {
         String key = player.toString();
         Map<String, QuestProgress> m = byPlayer.computeIfAbsent(key, k -> new HashMap<>());
         QuestProgress progress = m.computeIfAbsent(questId, ignored -> new QuestProgress());
+        if (progress.scrollRedeemed == redeemed) {
+            if (progress.isEmpty()) {
+                m.remove(questId);
+                if (m.isEmpty()) byPlayer.remove(key);
+            }
+            return;
+        }
         progress.scrollRedeemed = redeemed;
         if (progress.isEmpty()) {
             m.remove(questId);
@@ -199,6 +216,13 @@ public final class QuestProgressState extends SavedData {
         String key = player.toString();
         Map<String, QuestProgress> m = byPlayer.computeIfAbsent(key, k -> new HashMap<>());
         QuestProgress progress = m.computeIfAbsent(questId, ignored -> new QuestProgress());
+        if (progress.scrollCreated == created) {
+            if (progress.isEmpty()) {
+                m.remove(questId);
+                if (m.isEmpty()) byPlayer.remove(key);
+            }
+            return;
+        }
         progress.scrollCreated = created;
         if (progress.isEmpty()) {
             m.remove(questId);
@@ -216,5 +240,10 @@ public final class QuestProgressState extends SavedData {
 
     private static String sanitizeStatus(String status) {
         return status == null || status.isBlank() ? null : status;
+    }
+
+    private QuestProgress rawProgress(UUID player, String questId) {
+        Map<String, QuestProgress> m = byPlayer.get(player.toString());
+        return m == null ? null : m.get(questId);
     }
 }

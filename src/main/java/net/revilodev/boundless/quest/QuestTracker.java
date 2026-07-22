@@ -6,13 +6,16 @@ import com.google.gson.JsonObject;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.minecraft.advancements.Advancement;
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.nbt.TagParser;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.commands.arguments.item.ItemInput;
+import net.minecraft.commands.arguments.item.ItemParser;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.effect.MobEffect;
@@ -24,9 +27,9 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.revilodev.boundless.BoundlessMod;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -62,7 +65,7 @@ public final class QuestTracker {
     private static final Map<String, Boolean> CLIENT_SCROLL_CREATED = new HashMap<>();
     private static final Map<String, ResourceLocation> RL_CACHE = new HashMap<>();
     private static final Map<String, Optional<Item>> ITEM_BY_ID_CACHE = new HashMap<>();
-    private static final Map<String, MobEffect> EFFECT_BY_ID_CACHE = new HashMap<>();
+    private static final Map<String, Holder<MobEffect>> EFFECT_BY_ID_CACHE = new HashMap<>();
 
     private static boolean SERVER_TOASTS_DISABLED = false;
     private static String ACTIVE_KEY = null;
@@ -460,6 +463,7 @@ public final class QuestTracker {
 
         Item direct = resolveItemById(key);
         int found = 0;
+        var registries = player.registryAccess();
         var inventory = player.getInventory();
         int containerSize = inventory.getContainerSize();
 
@@ -467,13 +471,13 @@ public final class QuestTracker {
             var itemTag = net.minecraft.tags.TagKey.create(Registries.ITEM, rl);
             for (int i = 0; i < containerSize; i++) {
                 ItemStack s = inventory.getItem(i);
-                if (!s.isEmpty() && s.is(itemTag) && spec.matches(s, null)) found += s.getCount();
+                if (!s.isEmpty() && s.is(itemTag) && spec.matches(s, registries)) found += s.getCount();
             }
             if (found == 0) {
                 var blockTag = net.minecraft.tags.TagKey.create(Registries.BLOCK, rl);
                 for (int i = 0; i < containerSize; i++) {
                     ItemStack s = inventory.getItem(i);
-                    if (!s.isEmpty() && s.getItem() instanceof BlockItem bi && bi.getBlock().builtInRegistryHolder().is(blockTag) && spec.componentsMatch(s, null)) {
+                    if (!s.isEmpty() && s.getItem() instanceof BlockItem bi && bi.getBlock().builtInRegistryHolder().is(blockTag) && spec.componentsMatch(s, registries)) {
                         found += s.getCount();
                     }
                 }
@@ -481,7 +485,7 @@ public final class QuestTracker {
         } else {
             for (int i = 0; i < containerSize; i++) {
                 ItemStack s = inventory.getItem(i);
-                if (!s.isEmpty() && s.is(direct) && spec.matches(s, null)) found += s.getCount();
+                if (!s.isEmpty() && s.is(direct) && spec.matches(s, registries)) found += s.getCount();
             }
         }
 
@@ -498,13 +502,13 @@ public final class QuestTracker {
 
     public static boolean hasEffect(Player player, String effectId) {
         if (player == null || effectId == null || effectId.isBlank()) return false;
-        MobEffect effect = EFFECT_BY_ID_CACHE.get(effectId);
+        Holder<MobEffect> holder = EFFECT_BY_ID_CACHE.get(effectId);
         if (!EFFECT_BY_ID_CACHE.containsKey(effectId)) {
             ResourceLocation rl = tryParseCached(effectId);
-            effect = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getOptional(rl).orElse(null);
-            EFFECT_BY_ID_CACHE.put(effectId, effect);
+            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
+            EFFECT_BY_ID_CACHE.put(effectId, holder);
         }
-        return effect != null && player.hasEffect(effect);
+        return holder != null && player.hasEffect(holder);
     }
 
     public static boolean hasAdvancement(Player player, String advId) {
@@ -536,10 +540,10 @@ public final class QuestTracker {
     }
 
     private static boolean hasAdvancementServer(ServerPlayer sp, ResourceLocation rl) {
-        Advancement advancement = sp.server.getAdvancements().getAdvancement(rl);
-        if (advancement == null) return false;
+        AdvancementHolder holder = sp.server.getAdvancements().get(rl);
+        if (holder == null) return false;
 
-        AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(advancement);
+        AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(holder);
         boolean done = prog.isDone();
 
         CLIENT_ADV_DONE.put(rl.toString(), done);
@@ -675,7 +679,8 @@ public final class QuestTracker {
             if (rl == null) continue;
             LootTable table;
             try {
-                table = player.server.getLootData().getLootTable(rl);
+                table = player.server.reloadableRegistries()
+                        .getLootTable(ResourceKey.create(Registries.LOOT_TABLE, rl));
             } catch (Throwable ignored) {
                 table = null;
             }
@@ -685,7 +690,7 @@ public final class QuestTracker {
                     .withParameter(LootContextParams.ORIGIN, player.position())
                     .withParameter(LootContextParams.THIS_ENTITY, player)
                     .create(LootContextParamSets.GIFT);
-            ObjectArrayList<ItemStack> generated = table.getRandomItems(params);
+            ObjectArrayList<ItemStack> generated = table.getRandomItems(params, player.getRandom());
             for (ItemStack stack : generated) {
                 if (stack == null || stack.isEmpty()) continue;
                 try {
@@ -731,11 +736,8 @@ public final class QuestTracker {
     private static ItemStack createRewardStack(ServerPlayer player, QuestItemSpec spec, Item item, int count) {
         if (player != null && spec != null && !spec.components.isBlank()) {
             try {
-                ItemStack stack = new ItemStack(item, count);
-                if (spec.components.startsWith("{") && spec.components.endsWith("}")) {
-                    stack.setTag(TagParser.parseTag(spec.components));
-                }
-                return stack;
+                ItemParser.ItemResult parsed = new ItemParser(player.registryAccess()).parse(new StringReader(spec.commandSyntax()));
+                return new ItemInput(parsed.item(), parsed.components()).createItemStack(count, false);
             } catch (CommandSyntaxException e) {
                 BoundlessMod.LOGGER.warn("Could not parse item reward components '{}'; granting base item", spec.serialized(), e);
             } catch (Throwable t) {
