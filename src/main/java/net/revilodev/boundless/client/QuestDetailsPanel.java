@@ -99,6 +99,14 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return accepted.get(index);
     }
 
+    private String cycledAcceptedRewardId(QuestData.RewardEntry reward) {
+        if (reward == null) return "";
+        List<String> accepted = reward.acceptedItemsOrLegacy();
+        if (accepted.isEmpty()) return "";
+        int index = accepted.size() == 1 ? 0 : (int) ((Util.getMillis() / 1200L) % accepted.size());
+        return accepted.get(index);
+    }
+
     private List<Component> acceptedEntriesTooltip(QuestData.Target target) {
         List<Component> lines = new ArrayList<>();
         if (target == null) return lines;
@@ -126,6 +134,24 @@ public final class QuestDetailsPanel extends AbstractWidget {
         if (spec.tag) return acceptedId;
         Item item = spec.item();
         return item == null ? acceptedId : new ItemStack(item).getHoverName().getString();
+    }
+
+    private List<Component> acceptedRewardEntriesTooltip(QuestData.RewardEntry reward) {
+        List<Component> lines = new ArrayList<>();
+        if (reward == null) return lines;
+        List<String> accepted = reward.acceptedItemsOrLegacy();
+        if (accepted.isEmpty()) return lines;
+        lines.add(Component.literal("reward:"));
+        for (String acceptedId : accepted) {
+            QuestItemSpec spec = QuestItemSpec.parse(acceptedId);
+            if (spec.tag) {
+                lines.add(Component.literal(acceptedId));
+                continue;
+            }
+            Item item = spec.item();
+            lines.add(Component.literal(item == null ? acceptedId : new ItemStack(item).getHoverName().getString()));
+        }
+        return lines;
     }
 
     private String objectiveDisplayName(QuestData.Target target) {
@@ -814,7 +840,10 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         if (hasItemRewards) {
             for (QuestData.RewardEntry re : quest.rewards.items) {
-                Item item = resolveItem(QuestItemSpec.stripComponents(re.item));
+                String rewardId = cycledAcceptedRewardId(re);
+                if (rewardId.isBlank()) rewardId = re.item;
+                QuestItemSpec rewardSpec = QuestItemSpec.parse(rewardId);
+                Item item = resolveItem(rewardSpec.id);
                 int lineY = curY[0];
                 if (item != null) {
                     ItemStack st = new ItemStack(item, Math.max(1, re.count));
@@ -822,11 +851,15 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     itemRegions.add(new ItemClickRegion(x + 4, lineY, 16, 16, st.copy(), false));
                     drawScaledString(gg, "x" + st.getCount(), x + 24, lineY + 6, 0xA8FFA8);
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
-                        hoveredTooltips.add(st.getHoverName());
+                        if (re.acceptedItemsOrLegacy().size() > 1) {
+                            hoveredTooltips.addAll(acceptedRewardEntriesTooltip(re));
+                        } else {
+                            hoveredTooltips.add(st.getHoverName());
+                        }
                     }
                 } else {
                     drawScaledWordWrap(gg,
-                            Component.literal("- " + re.item + " x" + Math.max(1, re.count)),
+                            Component.literal("- " + rewardId + " x" + Math.max(1, re.count)),
                             x + 4, lineY, w - 8, 0xA8FFA8);
                 }
                 curY[0] += scaledRowHeight();

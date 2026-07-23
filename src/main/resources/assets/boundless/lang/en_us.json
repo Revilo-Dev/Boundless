@@ -58,7 +58,7 @@
   "ui.boundless.editor.disabled": "Disabled",
   "ui.boundless.editor.legacy_pack": "Legacy Pack",
   "ui.boundless.editor.tooltip.right_click_options": "Right click for options",
-  "ui.boundless.editor.tooltip.import_questpacks": "Import Questpacks",
+  "ui.boundless.editor.tooltip.import_questpacks": "Open Boundless Folder",
   "ui.boundless.editor.tooltip.duplicate": "Duplicate",
   "ui.boundless.editor.tooltip.delete": "Delete",
   "ui.boundless.editor.tooltip.confirm_delete": "Confirm Delete",
@@ -102,7 +102,7 @@
   "ui.boundless.editor.status.questpack_enabled": "Questpack %s enabled",
   "ui.boundless.editor.status.questpack_disabled": "Questpack %s disabled",
   "ui.boundless.editor.status.confirm_delete": "Are you sure? Click delete again to confirm",
-  "ui.boundless.editor.status.place_questpacks": "Place questpacks in config/boundless/questpacks",
+  "ui.boundless.editor.status.place_questpacks": "Place questpacks in config/boundless",
   "ui.boundless.editor.error.update_questpack_failed": "Failed to update questpack",
 
   "item.boundless.quest_book": "Quest Book",

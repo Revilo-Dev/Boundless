@@ -1,11 +1,14 @@
 package net.revilodev.boundless;
 
 import java.util.List;
+import java.nio.file.Path;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class Config {
+    private static final int QUEST_PACK_BACKUP_LIMIT = 5;
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_CATEGORIES =
@@ -112,6 +115,22 @@ public final class Config {
     }
 
     public static final ModConfigSpec SPEC = BUILDER.build();
+
+    public static Path boundlessConfigRoot() {
+        return FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").normalize();
+    }
+
+    public static Path questPacksRoot() {
+        return boundlessConfigRoot().resolve("questpacks").normalize();
+    }
+
+    public static Path questPackBackupsRoot() {
+        return boundlessConfigRoot().resolve("backups").resolve("questpacks").normalize();
+    }
+
+    public static int questPackBackupLimit() {
+        return QUEST_PACK_BACKUP_LIMIT;
+    }
 
     public static List<? extends String> disabledCategories() {
         return DISABLED_CATEGORIES.get();

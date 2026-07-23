@@ -34,6 +34,7 @@ import net.revilodev.boundless.quest.KillCounterState;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestEvents;
 import net.revilodev.boundless.quest.ServerQuestEvents;
+import net.revilodev.boundless.quest.QuestTracker;
 import org.slf4j.Logger;
 
 import java.util.List;
@@ -57,6 +58,8 @@ public final class BoundlessMod {
         NeoForge.EVENT_BUS.register(this);
         NeoForge.EVENT_BUS.addListener(QuestEvents::onPlayerTick);
         NeoForge.EVENT_BUS.addListener(ServerQuestEvents::onLogout);
+        NeoForge.EVENT_BUS.addListener(ServerQuestEvents::onChangedDimension);
+        NeoForge.EVENT_BUS.addListener(ServerQuestEvents::onRespawn);
         NeoForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.ServerQuestTicker::onPlayerTick);
 
     }
@@ -105,6 +108,8 @@ public final class BoundlessMod {
             if (!Config.disableQuestBook() && Config.spawnWithQuestBook() && !hasQuestBook(sp)) {
                 sp.getInventory().add(new ItemStack(ModItems.QUEST_BOOK.get()));
             }
+            QuestTracker.refreshPersistentContextTargets(sp);
+            QuestTracker.serverTickPlayer(sp);
             BoundlessNetwork.syncPlayer(sp);
         }
     }
