@@ -45,10 +45,10 @@ import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestItemSpec;
+import net.revilodev.boundless.quest.QuestPackStorage;
 import org.lwjgl.glfw.GLFW;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -1146,10 +1146,9 @@ public final class QuestEditorScreen extends Screen {
             JsonObject obj = readJson(entry.path);
             if (obj == null) continue;
             obj.addProperty(key, i);
-            try (BufferedWriter writer = Files.newBufferedWriter(entry.path, StandardCharsets.UTF_8)) {
-                gson.toJson(obj, writer);
-            }
+            QuestPackStorage.writeJsonAtomically(gson, obj, entry.path);
         }
+        backupCurrentPack("reordered");
     }
 
     private void openPackCreate() {
@@ -1472,7 +1471,8 @@ public final class QuestEditorScreen extends Screen {
             QuestPack pack = new QuestPack(name, namespace, root, false, true);
             pack.ensureDirs();
             currentPack = pack;
-            setMode(Mode.PACK_MENU);
+            backupCurrentPack("created");
+            setMode(Mode.CATEGORY_LIST);
             stagePackChange(pack, "Pack staged");
         } catch (Exception e) {
             setError("Failed to create pack");
@@ -1539,6 +1539,7 @@ public final class QuestEditorScreen extends Screen {
                 deleteAppliedPackArtifactsSafe(oldName);
             }
             stagePackChange(currentPack, "Pack options saved");
+            backupCurrentPack("saved");
             refreshLeftList();
             showPackOptions(currentPack);
             markCurrentEditorSaved();
@@ -1639,8 +1640,8 @@ public final class QuestEditorScreen extends Screen {
         String orderToken = questOrderTokenForSave(id);
         Path target = currentPack.questsDir.resolve(questFileBaseName(id, orderToken) + ".json");
         boolean creatingNewQuest = editingPath == null;
-        saveJson(obj, target, editingPath);
         questOrderToken = orderToken;
+        saveJson(obj, target, editingPath);
         if (creatingNewQuest && editingPath != null) {
             stagedPacks.remove(currentPack.name);
             stagedDeletedPackNames.remove(currentPack.name);
@@ -1721,16 +1722,18 @@ public final class QuestEditorScreen extends Screen {
 
     private void saveJson(JsonObject obj, Path target, Path original) {
         try {
-            Files.createDirectories(target.getParent());
-            try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-                gson.toJson(obj, writer);
-            }
+            QuestPackStorage.writeJsonAtomically(gson, obj, target);
             if (original != null && !original.equals(target)) {
+                QuestPackStorage.archiveReplacedFile(currentPack == null ? null : currentPack.root,
+                        currentPack == null ? null : currentPack.name,
+                        original,
+                        "renamed");
                 Files.deleteIfExists(original);
             }
             editingPath = target;
             markCurrentEditorSaved();
             stageCurrentPackChange("Saved to staging");
+            backupCurrentPack("saved");
             refreshLeftList();
             QuestPanelClient.applyConfigChanges();
         } catch (IOException e) {
@@ -1750,9 +1753,10 @@ public final class QuestEditorScreen extends Screen {
             Path target = packsRoot().resolve(duplicateName);
             mirrorDirectory(currentPack.root, target);
         writePackMeta(target, duplicateName, safe(meta.description), safe(meta.iconPath), meta.enabled);
-        QuestPack duplicated = new QuestPack(duplicateName, currentPack.namespace, target, false, currentPack.enabled);
+            QuestPack duplicated = new QuestPack(duplicateName, currentPack.namespace, target, false, currentPack.enabled);
             duplicated.ensureDirs();
             currentPack = duplicated;
+            backupCurrentPack("duplicated");
             invalidateQuestListIndex();
             selectedEntryId = duplicated.name;
             stagePackChange(duplicated, "Pack duplicated");
@@ -1780,11 +1784,11 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void openImportQuestPackDirectory() {
-        Path importRoot = modDataQuestPacksRoot();
+        Path importRoot = Config.boundlessConfigRoot();
         try {
             Files.createDirectories(importRoot);
             Util.getPlatform().openFile(importRoot.toFile());
-        statusMessage = trs("status.place_questpacks");
+            statusMessage = trs("status.place_questpacks");
             statusColor = 0xA0A0A0;
         } catch (Exception e) {
             setError("Failed to open import directory");
@@ -3965,7 +3969,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void markCurrentEditorLoaded(boolean existingEntry) {
         clearPendingDiscardState();
-        savedEditorState = existingEntry ? currentEditorStateSignature() : null;
+        savedEditorState = currentEditorStateSignature();
     }
 
     private void markCurrentEditorUnsaved() {
@@ -4214,10 +4218,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private Path modDataQuestPacksRoot() {
-        return Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config")
-                .resolve("boundless")
-                .resolve("questpacks");
+        return Config.questPacksRoot();
     }
 
     private boolean isInvalidPackFolderName(String name) {
@@ -4412,6 +4413,7 @@ public final class QuestEditorScreen extends Screen {
         try {
             PackMeta meta = readPackMeta(pack.root, pack.name);
             writePackMeta(pack.root, pack.name, safe(meta.description), safe(meta.iconPath), enabled);
+            QuestPackStorage.snapshotQuestPack(pack.root, pack.name, "enabled");
             return true;
         } catch (Exception ignored) {
             return false;
@@ -4530,11 +4532,12 @@ public final class QuestEditorScreen extends Screen {
         pack.add("boundless", boundless);
 
         Path meta = packMetaPath(root);
-        Files.createDirectories(meta.getParent());
-        try (BufferedWriter writer = Files.newBufferedWriter(meta, StandardCharsets.UTF_8)) {
-            gson.toJson(pack, writer);
-        }
-        Files.deleteIfExists(root.resolve("pack.mcmeta"));
+        QuestPackStorage.writeJsonAtomically(gson, pack, meta);
+    }
+
+    private void backupCurrentPack(String reason) throws IOException {
+        if (currentPack == null || currentPack.root == null || currentPack.name == null) return;
+        QuestPackStorage.snapshotQuestPack(currentPack.root, currentPack.name, reason);
     }
 
     private Path packMetaPath(Path root) {
@@ -8102,7 +8105,7 @@ public final class QuestEditorScreen extends Screen {
     private void ensureStatIdCache() {
         if (!statIdCache.isEmpty()) return;
         for (ResourceLocation rl : BuiltInRegistries.CUSTOM_STAT.keySet()) {
-            if (rl != null) statIdCache.add("custom:" + rl);
+            if (rl != null) statIdCache.add(rl.toString());
         }
         for (ResourceLocation rl : BuiltInRegistries.BLOCK.keySet()) {
             if (rl != null && !"minecraft:air".equals(rl.toString())) statIdCache.add("mine_block:" + rl);

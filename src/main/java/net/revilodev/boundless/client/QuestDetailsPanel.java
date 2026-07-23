@@ -91,6 +91,89 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return rl == null ? null : BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
     }
 
+    private String cycledAcceptedId(QuestData.Target target) {
+        if (target == null) return "";
+        List<String> accepted = target.acceptedIdsOrLegacy();
+        if (accepted.isEmpty()) return "";
+        int index = accepted.size() == 1 ? 0 : (int) ((Util.getMillis() / 1200L) % accepted.size());
+        return accepted.get(index);
+    }
+
+    private List<Component> acceptedEntriesTooltip(QuestData.Target target) {
+        List<Component> lines = new ArrayList<>();
+        if (target == null) return lines;
+        List<String> accepted = target.acceptedIdsOrLegacy();
+        if (accepted.isEmpty()) return lines;
+        String label = target.isSubmit()
+                ? "submit:"
+                : target.isEntity()
+                ? "kill:"
+                : "collect:";
+        lines.add(Component.literal(label));
+        for (String acceptedId : accepted) {
+            lines.add(Component.literal(acceptedEntryName(target, acceptedId)));
+        }
+        return lines;
+    }
+
+    private String acceptedEntryName(QuestData.Target target, String acceptedId) {
+        if (target != null && target.isEntity()) {
+            ResourceLocation rl = safeParse(acceptedId);
+            EntityType<?> type = rl == null ? null : BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+            return type == null ? acceptedId : type.getDescription().getString();
+        }
+        QuestItemSpec spec = QuestItemSpec.parse(acceptedId);
+        if (spec.tag) return acceptedId;
+        Item item = spec.item();
+        return item == null ? acceptedId : new ItemStack(item).getHoverName().getString();
+    }
+
+    private String objectiveDisplayName(QuestData.Target target) {
+        if (target == null) return "";
+        if (target.isObserve()) {
+            ResourceLocation rl = safeParse(target.id);
+            if (rl != null) {
+                Item item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
+                if (item != null && item != Items.AIR) {
+                    return new ItemStack(item).getHoverName().getString();
+                }
+                EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+                if (type != null) return type.getDescription().getString();
+                var block = BuiltInRegistries.BLOCK.getOptional(rl).orElse(null);
+                if (block != null && block.asItem() != Items.AIR) {
+                    return new ItemStack(block.asItem()).getHoverName().getString();
+                }
+            }
+        }
+        if (target.isBiome() || target.isDimension()) {
+            ResourceLocation rl = safeParse(target.id);
+            if (rl != null) return rl.getPath();
+        }
+        return target.id == null ? "" : target.id;
+    }
+
+    private String pendingCheckLabel() {
+        if (quest == null || quest.completion == null || quest.completion.targets == null) return "Understand";
+        for (QuestData.Target target : quest.completion.targets) {
+            if (target == null || !target.isCheck()) continue;
+            String label = target.id == null ? "" : target.id.trim();
+            return label.isBlank() ? "Understand" : label;
+        }
+        return "Understand";
+    }
+
+    private List<QuestData.Category> unlockedCategoriesForQuest() {
+        List<QuestData.Category> unlocked = new ArrayList<>();
+        if (quest == null || quest.id == null || quest.id.isBlank()) return unlocked;
+        for (QuestData.Category category : QuestData.categoriesOrdered()) {
+            if (category == null || category.id == null || category.id.isBlank()) continue;
+            if ("all".equalsIgnoreCase(category.id)) continue;
+            if (!quest.id.equals(category.dependency)) continue;
+            unlocked.add(category);
+        }
+        return unlocked;
+    }
+
     private static final class DepClickRegion {
         final int x, y, w, h;
         final String questId;
@@ -123,12 +206,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 QuestTracker.Status status = QuestTracker.getStatus(quest, mc.player);
                 if (status == QuestTracker.Status.REJECTED && quest.optional) {
                     PacketDistributor.sendToServer(new BoundlessNetwork.UndoReject(quest.id));
+                    if (this.onBack != null) this.onBack.run();
+                } else if (QuestTracker.canAcknowledge(quest, mc.player)) {
+                    PacketDistributor.sendToServer(new BoundlessNetwork.Redeem(quest.id));
                 } else if (QuestTracker.canRestartRepeatable(quest, mc.player)) {
                     PacketDistributor.sendToServer(new BoundlessNetwork.RestartRepeatable(quest.id));
+                    if (this.onBack != null) this.onBack.run();
                 } else {
                     PacketDistributor.sendToServer(new BoundlessNetwork.Redeem(quest.id));
+                    if (this.onBack != null) this.onBack.run();
                 }
-                if (this.onBack != null) this.onBack.run();
             }
         });
         this.complete.visible = false;
@@ -165,18 +252,24 @@ public final class QuestDetailsPanel extends AbstractWidget {
         final int h;
         final ItemStack stack;
         final boolean jeiEnabled;
+        final boolean customTooltip;
 
         ItemClickRegion(int x, int y, int w, int h, ItemStack stack) {
-            this(x, y, w, h, stack, true);
+            this(x, y, w, h, stack, true, false);
         }
 
         ItemClickRegion(int x, int y, int w, int h, ItemStack stack, boolean jeiEnabled) {
+            this(x, y, w, h, stack, jeiEnabled, false);
+        }
+
+        ItemClickRegion(int x, int y, int w, int h, ItemStack stack, boolean jeiEnabled, boolean customTooltip) {
             this.x = x;
             this.y = y;
             this.w = w;
             this.h = h;
             this.stack = stack;
             this.jeiEnabled = jeiEnabled;
+            this.customTooltip = customTooltip;
         }
 
         boolean contains(double mx, double my) {
@@ -381,6 +474,25 @@ public final class QuestDetailsPanel extends AbstractWidget {
             curY[0] += 2;
         }
 
+        List<QuestData.Category> unlockedCategories = unlockedCategoriesForQuest();
+        if (!unlockedCategories.isEmpty()) {
+            Component unlocksLabel = Component.literal("Unlocks Categories");
+            drawScaledWordWrap(gg, unlocksLabel, x + 4, curY[0], w - 8, 0x55CCFF);
+            curY[0] += scaledWrappedHeight(unlocksLabel, w - 8) + 2;
+
+            for (QuestData.Category category : unlockedCategories) {
+                int lineY = curY[0];
+                Item iconItem = resolveItem(category.icon);
+                if (iconItem != null) {
+                    renderScaledItem(gg, new ItemStack(iconItem), x + 4, lineY);
+                }
+                String categoryName = category.name == null || category.name.isBlank() ? category.id : category.name;
+                drawScaledString(gg, categoryName, x + 24, lineY + 4, 0xA8E8FF);
+                curY[0] += scaledRowHeight();
+            }
+            curY[0] += 2;
+        }
+
         if (quest.completion != null && !quest.completion.targets.isEmpty() && mc.player != null) {
 
             boolean printedCollectHeader = false;
@@ -462,7 +574,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         }
                     }
 
-                    String raw = t.id;
+                    String raw = cycledAcceptedId(t);
                     QuestItemSpec spec = QuestItemSpec.parse(raw);
                     boolean isTagSyntax = spec.tag;
                     String key = spec.id;
@@ -476,10 +588,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     boolean treatAsTag = isTagSyntax || direct == null;
 
                     int need = t.count;
-                    int found = QuestTracker.getCountInInventory(t.id, mc.player);
+                    int found = QuestTracker.getAcceptedItemCountInInventory(t, mc.player);
 
-                    String progressKey = quest.id + ":" + t.id;
-                    int permFound = QuestTracker.getPermanentItemProgress(progressKey, found, need);
+                    int permFound = QuestTracker.getTrackedItemProgress(quest, t, mc.player);
 
                     int shownCount = Math.min(permFound, need);
                     boolean ready = shownCount >= need;
@@ -499,9 +610,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     if (iconItem != null) {
                         ItemStack st = new ItemStack(iconItem);
                         renderScaledItem(gg, st, px, curY[0]);
-                        itemRegions.add(new ItemClickRegion(px, curY[0], 16, 16, st.copy()));
+                        itemRegions.add(new ItemClickRegion(px, curY[0], 16, 16, st.copy(), true, true));
                         if (mouseX >= px && mouseX <= px + 16 && mouseY >= curY[0] && mouseY <= curY[0] + 16) {
-                            hoveredTooltips.add(st.getHoverName());
+                            hoveredTooltips.addAll(acceptedEntriesTooltip(t));
                         }
                         px += 20;
                     }
@@ -516,7 +627,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         printedKillHeader = true;
                     }
 
-                    ResourceLocation rl = safeParse(t.id);
+                    ResourceLocation rl = safeParse(cycledAcceptedId(t));
                     if (rl == null) {
                         drawScaledString(gg, Component.translatable("ui.boundless.questbook.invalid_entity_target"), x + 4, curY[0] + 4, 0xFF5555);
                         curY[0] += scaledRowHeight();
@@ -525,7 +636,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     EntityType<?> et = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
                     String eName = et == null ? rl.toString() : et.getDescription().getString();
 
-                    int rawKills = QuestTracker.getKillCount(mc.player, t.id);
+                    int rawKills = QuestTracker.getAcceptedKillCount(t, mc.player);
                     int have = Math.min(rawKills, t.count);
                     int color = have >= t.count ? 0x55FF55 : 0xFF5555;
 
@@ -541,7 +652,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     renderScaledItem(gg, icon, x + 4, curY[0]);
 
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
-                        hoveredTooltips.add(Component.literal(eName));
+                        hoveredTooltips.addAll(acceptedEntriesTooltip(t));
                     }
 
                     drawScaledString(gg, have + "/" + t.count, x + 24, curY[0] + 4, color);
@@ -632,6 +743,42 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         hoveredTooltips.add(Component.literal(t.id));
                     }
                     curY[0] += scaledRowHeight();
+                } else if (t.isObserve()) {
+                    drawScaledString(gg, Component.literal("Observe:"), x + 4, curY[0], 0xB46CFF);
+                    curY[0] += scaledLineHeight() + 2;
+                    boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
+                    int color = done ? 0x55FF55 : 0xFF5555;
+                    renderScaledItem(gg, new ItemStack(Items.SPYGLASS), x + 4, curY[0]);
+                    String name = objectiveDisplayName(t);
+                    drawScaledString(gg, name, x + 24, curY[0] + 4, color);
+                    if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
+                        hoveredTooltips.add(Component.literal(name));
+                    }
+                    curY[0] += scaledRowHeight();
+                } else if (t.isBiome()) {
+                    drawScaledString(gg, Component.literal("Biome:"), x + 4, curY[0], 0x55CC55);
+                    curY[0] += scaledLineHeight() + 2;
+                    boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
+                    int color = done ? 0x55FF55 : 0xFF5555;
+                    renderScaledItem(gg, new ItemStack(Items.GRASS_BLOCK), x + 4, curY[0]);
+                    String biomeName = objectiveDisplayName(t);
+                    drawScaledString(gg, biomeName, x + 24, curY[0] + 4, color);
+                    if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
+                        hoveredTooltips.add(Component.literal(t.id));
+                    }
+                    curY[0] += scaledRowHeight();
+                } else if (t.isDimension()) {
+                    drawScaledString(gg, Component.literal("Dimension:"), x + 4, curY[0], 0xFF5555);
+                    curY[0] += scaledLineHeight() + 2;
+                    boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
+                    int color = done ? 0x55FF55 : 0xFF5555;
+                    renderScaledItem(gg, new ItemStack(Items.ENDER_PEARL), x + 4, curY[0]);
+                    String dimensionName = objectiveDisplayName(t);
+                    drawScaledString(gg, dimensionName, x + 24, curY[0] + 4, color);
+                    if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
+                        hoveredTooltips.add(Component.literal(t.id));
+                    }
+                    curY[0] += scaledRowHeight();
                 }
             }
 
@@ -647,14 +794,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         boolean hasAnyReward = hasItemRewards || hasCommandRewards || hasFunctionRewards || hasLootTableRewards || hasExpReward;
         for (ItemClickRegion region : itemRegions) {
-            if (region.contains(mouseX, mouseY) && region.stack != null && !region.stack.isEmpty()) {
+            if (!region.customTooltip && region.contains(mouseX, mouseY) && region.stack != null && !region.stack.isEmpty()) {
                 hoveredTooltips.add(region.stack.getHoverName());
                 break;
             }
         }
         if (!hasAnyReward) {
             gg.disableScissor();
-            for (Component tip : hoveredTooltips) gg.renderTooltip(mc.font, tip, mouseX, mouseY);
+            if (!hoveredTooltips.isEmpty()) {
+                gg.renderComponentTooltip(mc.font, hoveredTooltips, mouseX, mouseY);
+            }
             updateBottomButtons();
             return;
         }
@@ -799,7 +948,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         gg.disableScissor();
 
-        for (Component tip : hoveredTooltips) gg.renderTooltip(mc.font, tip, mouseX, mouseY);
+        if (!hoveredTooltips.isEmpty()) {
+            gg.renderComponentTooltip(mc.font, hoveredTooltips, mouseX, mouseY);
+        }
 
         updateBottomButtons();
     }
@@ -814,14 +965,17 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean red = status == QuestTracker.Status.REDEEMED;
         boolean rej = status == QuestTracker.Status.REJECTED;
         boolean done = red || rej;
+        boolean canAcknowledge = depsMet && !done && QuestTracker.canAcknowledge(quest, mc.player);
         boolean ready = depsMet && !done
                 && (status == QuestTracker.Status.COMPLETED || QuestTracker.isReady(quest, mc.player));
         boolean canUndoReject = rej && quest.optional;
 
         complete.setMessage(canUndoReject
                 ? Component.literal("Undo Reject")
+                : canAcknowledge
+                ? Component.literal(pendingCheckLabel())
                 : Component.translatable(canRepeat ? "ui.boundless.questbook.repeat" : "quest.boundless.complete"));
-        complete.active = canUndoReject || canRepeat || ready;
+        complete.active = canUndoReject || canRepeat || canAcknowledge || ready;
         complete.visible = canUndoReject || (!rej && (canRepeat || !red));
 
         reject.setOptionalAllowed(quest.optional);
@@ -860,6 +1014,12 @@ public final class QuestDetailsPanel extends AbstractWidget {
             y += quest.dependencies.size() * scaledRowHeight() + 2;
         }
 
+        List<QuestData.Category> unlockedCategories = unlockedCategoriesForQuest();
+        if (!unlockedCategories.isEmpty()) {
+            y += scaledWrappedHeight(Component.literal("Unlocks Categories"), w - 8) + 2;
+            y += unlockedCategories.size() * scaledRowHeight() + 2;
+        }
+
         if (quest.completion != null && !quest.completion.targets.isEmpty()) {
             boolean printedCollectHeader = false;
             boolean printedSubmitHeader = false;
@@ -881,8 +1041,13 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         y += scaledLineHeight() + 2;
                         printedKillHeader = true;
                     }
-                } else if (target.isEffect() || target.isAdvancement() || target.isStat()) {
+                } else if (target.isEffect() || target.isAdvancement() || target.isStat()
+                        || target.isObserve() || target.isBiome() || target.isDimension()) {
                     y += scaledLineHeight() + 2;
+                }
+
+                if (target.isCheck()) {
+                    continue;
                 }
 
                 if (target.isFieldInput()) {

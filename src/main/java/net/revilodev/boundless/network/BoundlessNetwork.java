@@ -19,7 +19,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -32,6 +31,7 @@ import net.revilodev.boundless.quest.KillCounterState;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestObjectiveState;
+import net.revilodev.boundless.quest.QuestPackStorage;
 import net.revilodev.boundless.quest.QuestProgressState;
 import net.revilodev.boundless.quest.QuestTracker;
 
@@ -61,8 +61,7 @@ public final class BoundlessNetwork {
 
     private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
     private static final int QUEST_CHUNK_BYTES = 60000;
-    private static final Path INSTANCE_QUEST_PACKS_ROOT =
-            FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks").normalize();
+    private static final Path INSTANCE_QUEST_PACKS_ROOT = Config.questPacksRoot();
 
     private BoundlessNetwork() {}
 
@@ -668,7 +667,7 @@ public final class BoundlessNetwork {
             if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
             for (QuestData.Target target : quest.completion.targets) {
                 if (target == null || !target.isStat()) continue;
-                String statId = target.id == null ? "" : target.id.trim();
+                String statId = QuestTracker.normalizeStatId(target.id);
                 if (statId.isBlank() || !seen.add(statId)) continue;
                 entries.add(new StatEntry(statId, Math.max(0, QuestTracker.getStatCount(player, statId))));
             }
@@ -973,6 +972,7 @@ public final class BoundlessNetwork {
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
                 if (QuestTracker.canAcknowledge(q, sp)) {
                     if (!QuestTracker.acknowledgeCheckObjectives(q, sp)) return;
+                    sendObjectiveProgress(sp);
                     if (!QuestTracker.updateProgressAndCheckReady(q, sp)) return;
                     if (Config.autoClaimQuestRewards()) {
                         claimQuest(sp, q);
@@ -1230,8 +1230,7 @@ public final class BoundlessNetwork {
             }
         }
 
-        deleteDirectoryIfExists(targetRoot);
-        Files.move(tempRoot, targetRoot, StandardCopyOption.REPLACE_EXISTING);
+        QuestPackStorage.replaceDirectoryWithArchive(targetRoot, tempRoot, id, "uploaded");
     }
 
     private static void deleteDirectoryIfExists(Path root) throws IOException {

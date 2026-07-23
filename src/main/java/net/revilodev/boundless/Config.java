@@ -1,6 +1,9 @@
 package net.revilodev.boundless;
 
 import java.util.List;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
@@ -53,6 +56,13 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_CATEGORIES =
             BUILDER.comment("If true, disables category tabs and category-based filtering.")
                     .define("disableCategories", false);
+    public static final ModConfigSpec.ConfigValue<String> QUEST_PACK_DISPLAY_TYPE =
+            BUILDER.comment("Quest pack presentation type: default_list, quest_tree_coming_soon.")
+                    .define("questPackDisplayType", "default_list", o -> {
+                        if (!(o instanceof String s)) return false;
+                        s = s.trim().toLowerCase();
+                        return s.equals("default_list") || s.equals("quest_tree_coming_soon");
+                    });
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_BUILTIN_QUEST_PACK =
             BUILDER.comment("If false, disables the built-in Boundless quest pack.")
                     .define("enableBuiltinQuestPack", true);
@@ -258,6 +268,13 @@ public final class Config {
 
     public static boolean disableCategories() {
         return DISABLE_CATEGORIES.get();
+    }
+
+    public static String questPackDisplayType() {
+        String s = QUEST_PACK_DISPLAY_TYPE.get();
+        if (s == null) return "default_list";
+        s = s.trim().toLowerCase();
+        return (s.equals("default_list") || s.equals("quest_tree_coming_soon")) ? s : "default_list";
     }
 
     public static boolean hideQuestWidgetIcons() {

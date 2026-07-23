@@ -24,6 +24,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestTracker;
 
 import java.io.BufferedReader;
@@ -328,6 +329,14 @@ public final class PinnedQuestHud {
 
     private record TargetView(ItemStack icon, String text, boolean done) {}
 
+    private static String cycledAcceptedId(QuestData.Target target) {
+        if (target == null) return "";
+        List<String> accepted = target.acceptedIdsOrLegacy();
+        if (accepted.isEmpty()) return "";
+        int index = accepted.size() == 1 ? 0 : (int) ((System.currentTimeMillis() / 1200L) % accepted.size());
+        return accepted.get(index);
+    }
+
     private static void renderTargetsRow(GuiGraphics gg, Minecraft mc, QuestData.Quest q, Player player, int startX, int baseY, int maxX) {
         if (q.completion == null || q.completion.targets == null || q.completion.targets.isEmpty()) return;
 
@@ -417,7 +426,9 @@ public final class PinnedQuestHud {
 
                 int shown = Math.min(perm, need);
                 boolean done = shown >= need;
-                ItemStack icon = resolveItemIcon(t.id);
+                String iconId = cycledAcceptedId(t);
+                if (iconId.isBlank()) iconId = t.id;
+                ItemStack icon = resolveItemIcon(iconId);
                 return new TargetView(icon, shown + "/" + need, done);
             }
 
@@ -426,7 +437,9 @@ public final class PinnedQuestHud {
                 int have = Math.min(QuestTracker.getAcceptedKillCount(t, player), need);
                 boolean done = have >= need;
 
-                ResourceLocation rl = ResourceLocation.tryParse(t.id);
+                String entityId = cycledAcceptedId(t);
+                if (entityId.isBlank()) entityId = t.id;
+                ResourceLocation rl = ResourceLocation.tryParse(entityId);
                 ItemStack icon = new ItemStack(Items.DIAMOND_SWORD);
                 if (rl != null) {
                     ResourceLocation eggRl = new ResourceLocation(rl.getNamespace(), rl.getPath() + "_spawn_egg");
@@ -498,8 +511,9 @@ public final class PinnedQuestHud {
         try {
             if (rawId == null || rawId.isBlank()) return ItemStack.EMPTY;
 
-            boolean isTagSyntax = rawId.startsWith("#");
-            String key = isTagSyntax ? rawId.substring(1) : rawId;
+            QuestItemSpec spec = QuestItemSpec.parse(rawId);
+            boolean isTagSyntax = spec.tag;
+            String key = spec.id;
 
             ResourceLocation rl = ResourceLocation.tryParse(key);
             if (rl == null) return ItemStack.EMPTY;
