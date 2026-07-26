@@ -539,16 +539,11 @@ public final class QuestTracker {
         Status status = getStatus(q, player);
         if (status == Status.REDEEMED || status == Status.REJECTED) return false;
 
-        boolean hasPendingCheck = false;
         for (QuestData.Target t : q.completion.targets) {
             if (t == null) continue;
-            if (t.isCheck()) {
-                if (!evaluateTarget(q, t, player, false)) hasPendingCheck = true;
-                continue;
-            }
-            if (!evaluateTarget(q, t, player, false)) return false;
+            if (t.isCheck() && !evaluateTarget(q, t, player, false)) return true;
         }
-        return hasPendingCheck;
+        return false;
     }
 
     public static boolean acknowledgeCheckObjectives(QuestData.Quest q, Player player) {
@@ -613,12 +608,14 @@ public final class QuestTracker {
 
     public static int getStatCount(Player player, String statId) {
         if (player == null || statId == null || statId.isBlank()) return 0;
+        String normalizedStatId = normalizeStatId(statId);
+        if (normalizedStatId.isBlank()) return 0;
         try {
-            if (player.level().isClientSide && CLIENT_STATS.containsKey(statId)) {
-                return CLIENT_STATS.getOrDefault(statId, 0);
+            if (player.level().isClientSide && CLIENT_STATS.containsKey(normalizedStatId)) {
+                return CLIENT_STATS.getOrDefault(normalizedStatId, 0);
             }
             if (player instanceof ServerPlayer sp) {
-                return resolveStatValue(sp.getStats(), statId);
+                return resolveStatValue(sp.getStats(), normalizedStatId);
             }
             if (player.level().isClientSide) {
                 try {
@@ -627,15 +624,15 @@ public final class QuestTracker {
                     Object srvObj = mcClass.getMethod("getSingleplayerServer").invoke(mc);
                     if (srvObj instanceof net.minecraft.server.MinecraftServer srv) {
                         ServerPlayer sp = srv.getPlayerList().getPlayer(player.getUUID());
-                        if (sp != null) return resolveStatValue(sp.getStats(), statId);
+                        if (sp != null) return resolveStatValue(sp.getStats(), normalizedStatId);
                     }
                     Object connection = mcClass.getMethod("getConnection").invoke(mc);
                     if (connection != null) {
                         Object statsCounter = connection.getClass().getMethod("getStats").invoke(connection);
-                        if (statsCounter != null) return resolveStatValue(statsCounter, statId);
+                        if (statsCounter != null) return resolveStatValue(statsCounter, normalizedStatId);
                     }
                 } catch (Throwable ignored) {}
-                return CLIENT_STATS.getOrDefault(statId, 0);
+                return CLIENT_STATS.getOrDefault(normalizedStatId, 0);
             }
         } catch (Exception ignored) {}
         return 0;
@@ -647,13 +644,49 @@ public final class QuestTracker {
                 && QuestObjectiveState.get(player.serverLevel()).updateFlagDone(player.getUUID(), key, true);
     }
 
+    public static boolean refreshPersistentContextTargets(ServerPlayer player) {
+        return refreshPersistentContextTargets(player, true, true, true);
+    }
+
+    public static boolean refreshPersistentContextTargets(ServerPlayer player, boolean observe, boolean biome, boolean dimension) {
+        if (player == null) return false;
+
+        boolean changed = false;
+        for (QuestData.Quest quest : QuestData.allServer(player.server)) {
+            if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
+            if (Config.disabledCategories().contains(quest.category)) continue;
+
+            Status status = getServerStatus(player, quest.id);
+            if (status == Status.REDEEMED || status == Status.REJECTED) continue;
+            if (!dependenciesMet(quest, player)) continue;
+
+            for (QuestData.Target target : quest.completion.targets) {
+                if (target == null) continue;
+
+                boolean matches = (observe && target.isObserve() && isObservingTarget(player, target.id))
+                        || (biome && target.isBiome() && isInBiome(player, target.id))
+                        || (dimension && target.isDimension() && isInDimension(player, target.id));
+                if (!matches) continue;
+
+                changed |= markFlagProgress(player, flagProgressKey(quest, target));
+            }
+        }
+
+        return changed;
+    }
+
     private static int resolveStatValue(Object statsSource, String statId) {
         if (statsSource == null || statId == null || statId.isBlank()) return 0;
-        int first = statId.indexOf(':');
-        int second = statId.indexOf(':', first + 1);
-        boolean typed = second > first;
-        String type = typed ? statId.substring(0, first) : "custom";
-        String name = typed ? statId.substring(first + 1) : statId;
+        String normalized = normalizeStatId(statId);
+        if (normalized.isBlank()) return 0;
+        int split = normalized.indexOf(':');
+        boolean typed = split > 0
+                && ("custom".equals(normalized.substring(0, split))
+                || "mine_block".equals(normalized.substring(0, split))
+                || "use_item".equals(normalized.substring(0, split))
+                || "kill_entity".equals(normalized.substring(0, split)));
+        String type = typed ? normalized.substring(0, split) : "custom";
+        String name = typed ? normalized.substring(split + 1) : normalized;
         ResourceLocation rl = ResourceLocation.tryParse(name);
         if (rl == null) return 0;
         Object stat = switch (type) {
@@ -679,6 +712,18 @@ public final class QuestTracker {
         } catch (Throwable ignored) {
             return 0;
         }
+    }
+
+    public static String normalizeStatId(String statId) {
+        String normalized = statId == null ? "" : statId.trim();
+        if (normalized.isBlank()) return "";
+        if (normalized.startsWith("custom:")) {
+            String candidate = normalized.substring("custom:".length()).trim();
+            if (ResourceLocation.tryParse(candidate) != null) {
+                return candidate;
+            }
+        }
+        return normalized;
     }
 
     public static int getCountInInventory(String id, Player player) {
@@ -1291,10 +1336,11 @@ public final class QuestTracker {
     }
 
     public static void clientSetStat(String statId, int count) {
-        if (statId == null || statId.isBlank()) return;
+        String normalizedStatId = normalizeStatId(statId);
+        if (normalizedStatId.isBlank()) return;
         int sanitized = Math.max(0, count);
-        if (sanitized <= 0) CLIENT_STATS.remove(statId);
-        else CLIENT_STATS.put(statId, sanitized);
+        if (sanitized <= 0) CLIENT_STATS.remove(normalizedStatId);
+        else CLIENT_STATS.put(normalizedStatId, sanitized);
     }
 
     public static void clientClearAll() {
@@ -1362,6 +1408,8 @@ public final class QuestTracker {
 
     public static void serverTickPlayer(ServerPlayer sp) {
         if (sp == null) return;
+
+        refreshPersistentContextTargets(sp);
 
         for (QuestData.Quest q : QuestData.allServer(sp.server)) {
             if (q == null) continue;

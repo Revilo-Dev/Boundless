@@ -6,17 +6,16 @@ import net.minecraftforge.event.TickEvent;
 public final class ServerQuestTicker {
     private ServerQuestTicker() {}
 
-    // check once per second per player
+    // Check each player once per second, but spread players across the full second.
     private static final int CHECK_INTERVAL_TICKS = 20;
 
     public static void onPlayerTick(TickEvent.PlayerTickEvent e) {
         if (e.phase != TickEvent.Phase.END) return;
         if (!(e.player instanceof ServerPlayer sp)) return;
         if (sp.level().isClientSide) return;
-        if ((sp.tickCount % CHECK_INTERVAL_TICKS) != 0) return;
+        int slot = Math.floorMod(sp.getUUID().hashCode(), CHECK_INTERVAL_TICKS);
+        if ((sp.tickCount % CHECK_INTERVAL_TICKS) != slot) return;
 
-        // Update statuses server-side and notify client on changes
         QuestTracker.serverTickPlayer(sp);
-
     }
 }

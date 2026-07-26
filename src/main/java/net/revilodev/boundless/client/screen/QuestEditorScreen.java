@@ -449,10 +449,22 @@ public final class QuestEditorScreen extends Screen {
     private String itemPickerSearchQuery = "";
     private String cachedTagFilterQuery = "";
     private final List<String> cachedFilteredTagIds = new ArrayList<>();
+    private final LinkedHashMap<String, PickerPageData> itemPickerPageCache = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, PickerPageData> eldest) {
+            return size() > 16;
+        }
+    };
     private final LinkedHashMap<String, TagPageData> itemTagPageCache = new LinkedHashMap<>(8, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, TagPageData> eldest) {
             return size() > 8;
+        }
+    };
+    private final LinkedHashMap<String, List<Item>> itemTagIconItemCache = new LinkedHashMap<>(128, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, List<Item>> eldest) {
+            return size() > 128;
         }
     };
     private List<Component> pendingEditorTooltip = List.of();
@@ -7327,33 +7339,21 @@ public final class QuestEditorScreen extends Screen {
             int col = (int) ((mouseX - gridX) / ITEM_PICKER_CELL);
             int row = (int) ((mouseY - gridY) / ITEM_PICKER_CELL);
             int idx = row * ITEM_PICKER_COLS + col;
-            List<ItemStack> items = itemPickerDisplayItems();
-            int start = itemPickerPage * (ITEM_PICKER_COLS * ITEM_PICKER_ROWS);
-            int at = start + idx;
-            int itemIndex = (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) ? idx : at;
-            if (itemIndex >= 0 && itemIndex < items.size()) {
+            PickerPageData page = currentPickerPageData();
+            List<ItemStack> items = page.items();
+            List<String> ids = page.ids();
+            if (idx >= 0 && idx < items.size()) {
                 if (itemPickerMultiSelect && isItemPickerMultiToggleAvailable()) {
-                    String selectedId = "";
-                    if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
-                        List<String> tagIds = itemTagPickerIds();
-                        if (at < tagIds.size()) selectedId = tagIds.get(at);
-                    } else if (pickerMode == PickerMode.MOBS) {
-                        List<String> mobIds = mobPickerIds();
-                        if (at < mobIds.size()) selectedId = mobIds.get(at);
-                    } else {
-                        selectedId = pickerSelectionId(items.get(at));
-                    }
+                    String selectedId = idx < ids.size() ? ids.get(idx) : pickerSelectionId(items.get(idx));
                     togglePendingItemPickerSelection(selectedId);
                     return true;
                 }
                 if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
-                    List<String> tagIds = itemTagPickerIds();
-                    if (at < tagIds.size()) applyPickedItemTag(tagIds.get(at));
+                    if (idx < ids.size()) applyPickedItemTag(ids.get(idx));
                 } else if (pickerMode == PickerMode.MOBS) {
-                    List<String> mobIds = mobPickerIds();
-                    if (at < mobIds.size()) applyPickedMob(mobIds.get(at));
+                    if (idx < ids.size()) applyPickedMob(ids.get(idx));
                 } else {
-                    applyPickedItem(items.get(itemIndex));
+                    applyPickedItem(items.get(idx));
                 }
                 closeItemPicker();
             }
@@ -7368,9 +7368,7 @@ public final class QuestEditorScreen extends Screen {
         int y = itemPickerY();
         if (mouseX < x || mouseX > x + ITEM_PICKER_W || mouseY < y || mouseY > y + ITEM_PICKER_H) return false;
         int pageSize = ITEM_PICKER_COLS * ITEM_PICKER_ROWS;
-        int resultCount = (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS)
-                ? itemTagPickerIds().size()
-                : itemPickerDisplayItems().size();
+        int resultCount = currentPickerPageData().totalCount();
         int maxPage = Math.max(0, (resultCount - 1) / pageSize);
         itemPickerPage = Mth.clamp(itemPickerPage - (delta > 0 ? 1 : -1), 0, maxPage);
         return true;
@@ -7404,30 +7402,23 @@ public final class QuestEditorScreen extends Screen {
             itemPickerSearchBox.setTextColor(0xFFFFFFFF);
             itemPickerSearchBox.visible = true;
         }
-        List<ItemStack> items = itemPickerDisplayItems();
-        List<String> mobIds = pickerMode == PickerMode.MOBS ? mobPickerIds() : List.of();
-        List<String> tagIds = pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags() ? itemTagPickerIds() : List.of();
+        PickerPageData page = currentPickerPageData();
+        List<ItemStack> items = page.items();
+        List<String> ids = page.ids();
         int gridX = x + ITEM_PICKER_GRID_X;
         int gridY = y + ITEM_PICKER_GRID_Y;
-        int start = itemPickerPage * (ITEM_PICKER_COLS * ITEM_PICKER_ROWS);
         ItemStack hovered = ItemStack.EMPTY;
-        int hoveredIndex = -1;
+        String hoveredId = "";
         for (int i = 0; i < ITEM_PICKER_COLS * ITEM_PICKER_ROWS; i++) {
-            int at = start + i;
             int col = i % ITEM_PICKER_COLS;
             int row = i / ITEM_PICKER_COLS;
             int sx = gridX + col * ITEM_PICKER_CELL;
             int sy = gridY + row * ITEM_PICKER_CELL;
             boolean cellHover = mouseX >= sx && mouseX <= sx + ITEM_PICKER_CELL && mouseY >= sy && mouseY <= sy + ITEM_PICKER_CELL;
             gg.blit(BROWSER_SLOT_TEX, sx, sy, 0, 0, ITEM_PICKER_CELL, ITEM_PICKER_CELL, ITEM_PICKER_CELL, ITEM_PICKER_CELL);
-            int itemIndex = (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) ? i : at;
-            if (itemIndex < items.size()) {
-                ItemStack stack = items.get(itemIndex);
-                String selectedId = pickerMode == PickerMode.MOBS
-                        ? (at < mobIds.size() ? mobIds.get(at) : "")
-                        : (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()
-                            ? (at < tagIds.size() ? tagIds.get(at) : "")
-                            : pickerSelectionId(stack));
+            if (i < items.size()) {
+                ItemStack stack = items.get(i);
+                String selectedId = i < ids.size() ? ids.get(i) : pickerSelectionId(stack);
                 if (pickerMode == PickerMode.EFFECTS) {
                     renderEffectPickerIcon(gg, stack, sx + 1, sy + 1);
                 } else if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
@@ -7444,17 +7435,15 @@ public final class QuestEditorScreen extends Screen {
                 }
                 if (cellHover) {
                     hovered = stack;
-                    hoveredIndex = at;
+                    hoveredId = selectedId;
                 }
             }
         }
         if (!hovered.isEmpty()) {
-            if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags() && hoveredIndex >= 0) {
-                String tagId = hoveredIndex < tagIds.size() ? tagIds.get(hoveredIndex) : "";
-                gg.renderTooltip(font, Component.literal(tagId), mouseX, mouseY);
-            } else if (pickerMode == PickerMode.MOBS && hoveredIndex >= 0 && hoveredIndex < items.size()) {
-                String mobId = hoveredIndex < mobIds.size() ? mobIds.get(hoveredIndex) : "";
-                Component mobName = mobDisplayNameForMobId(mobId);
+            if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS && itemPickerAllowsTags()) {
+                gg.renderTooltip(font, Component.literal(hoveredId), mouseX, mouseY);
+            } else if (pickerMode == PickerMode.MOBS) {
+                Component mobName = mobDisplayNameForMobId(hoveredId);
                 gg.renderTooltip(font, mobName, mouseX, mouseY);
             } else if (pickerMode == PickerMode.EFFECTS) {
                 gg.renderTooltip(font, effectDisplayNameForPickerItem(hovered), mouseX, mouseY);
@@ -7540,7 +7529,9 @@ public final class QuestEditorScreen extends Screen {
     private void invalidateTagPageCache() {
         cachedTagFilterQuery = "";
         cachedFilteredTagIds.clear();
+        itemPickerPageCache.clear();
         itemTagPageCache.clear();
+        itemTagIconItemCache.clear();
     }
 
     private int itemPickerX() {
@@ -7632,39 +7623,6 @@ public final class QuestEditorScreen extends Screen {
         return key.toString();
     }
 
-    private List<ItemStack> itemPickerItems() {
-        String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
-        List<ItemStack> out = new ArrayList<>();
-        if (itemPickerTab == ItemPickerTab.CREATIVE) {
-            ensureItemIdCache();
-            for (String id : itemIdCache) {
-                if ("minecraft:air".equals(id)) continue;
-                if (!query.isBlank() && !id.contains(query)) continue;
-                ResourceLocation rl = ResourceLocation.tryParse(id);
-                if (rl == null) continue;
-                Item item = BuiltInRegistries.ITEM.get(rl);
-                if (item == null || item == net.minecraft.world.item.Items.AIR) continue;
-                out.add(new ItemStack(item));
-            }
-            return out;
-        }
-        if (itemPickerTab == ItemPickerTab.TAGS) {
-            for (TagPageEntry pageEntry : currentTagPageData().entries) {
-                out.add(pageEntry.icon());
-            }
-            return out;
-        }
-        if (minecraft.player == null) return out;
-        for (ItemStack stack : minecraft.player.getInventory().items) {
-            if (stack == null || stack.isEmpty()) continue;
-            if (stack.getItem() == net.minecraft.world.item.Items.AIR) continue;
-            String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-            if (!query.isBlank() && !id.contains(query)) continue;
-            out.add(stack.copy());
-        }
-        return out;
-    }
-
     private List<String> itemTagPickerIds() {
         ensureItemTagIdCache();
         String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
@@ -7685,13 +7643,15 @@ public final class QuestEditorScreen extends Screen {
         ResourceLocation tagRl = ResourceLocation.tryParse(stripTagPrefix(tagId));
         if (tagRl != null) {
             TagKey<Item> tag = TagKey.create(net.minecraft.core.registries.Registries.ITEM, tagRl);
-            List<Item> matching = new ArrayList<>();
-            for (Item item : BuiltInRegistries.ITEM) {
-                if (item == null || item == net.minecraft.world.item.Items.AIR) continue;
-                ItemStack stack = new ItemStack(item);
-                if (stack.is(tag)) {
-                    matching.add(item);
+            List<Item> matching = itemTagIconItemCache.get(tagId);
+            if (matching == null) {
+                matching = new ArrayList<>();
+                for (Item item : BuiltInRegistries.ITEM) {
+                    if (item == null || item == net.minecraft.world.item.Items.AIR) continue;
+                    ItemStack stack = new ItemStack(item);
+                    if (stack.is(tag)) matching.add(item);
                 }
+                itemTagIconItemCache.put(tagId, matching);
             }
             if (!matching.isEmpty()) {
                 int index = (int) ((Util.getMillis() / 900L) % matching.size());
@@ -7720,45 +7680,100 @@ public final class QuestEditorScreen extends Screen {
             String tagId = filtered.get(i);
             entries.add(new TagPageEntry(tagId, itemTagIconStack(tagId), Component.literal(tagId)));
         }
-        TagPageData created = new TagPageData(entries);
+        TagPageData created = new TagPageData(filtered.size(), entries);
         itemTagPageCache.put(cacheKey, created);
         return created;
     }
 
-    private List<ItemStack> itemPickerDisplayItems() {
-        if (pickerMode == PickerMode.ITEMS) return itemPickerItems();
+    private PickerPageData currentPickerPageData() {
+        if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.TAGS) {
+            TagPageData tagPage = currentTagPageData();
+            List<ItemStack> items = new ArrayList<>(tagPage.entries().size());
+            List<String> ids = new ArrayList<>(tagPage.entries().size());
+            for (TagPageEntry entry : tagPage.entries()) {
+                items.add(entry.icon());
+                ids.add(entry.tagId());
+            }
+            return new PickerPageData(tagPage.totalCount(), items, ids);
+        }
+
         String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
-        List<ItemStack> out = new ArrayList<>();
+        String cacheKey = pickerMode + "|" + itemPickerTab + "|" + itemPickerPage + "|" + query;
+        if (pickerMode != PickerMode.ITEMS || itemPickerTab != ItemPickerTab.INVENTORY) {
+            PickerPageData cached = itemPickerPageCache.get(cacheKey);
+            if (cached != null) return cached;
+        }
+
+        int pageSize = ITEM_PICKER_COLS * ITEM_PICKER_ROWS;
+        int start = itemPickerPage * pageSize;
+        List<ItemStack> items = new ArrayList<>(pageSize);
+        List<String> ids = new ArrayList<>(pageSize);
+        int matched = 0;
+
         switch (pickerMode) {
+            case ITEMS -> {
+                if (itemPickerTab == ItemPickerTab.CREATIVE) {
+                    ensureItemIdCache();
+                    for (String id : itemIdCache) {
+                        if ("minecraft:air".equals(id)) continue;
+                        if (!query.isBlank() && !id.contains(query)) continue;
+                        ResourceLocation rl = ResourceLocation.tryParse(id);
+                        if (rl == null) continue;
+                        Item item = BuiltInRegistries.ITEM.get(rl);
+                        if (item == null || item == net.minecraft.world.item.Items.AIR) continue;
+                        if (matched >= start && items.size() < pageSize) {
+                            items.add(new ItemStack(item));
+                            ids.add(id);
+                        }
+                        matched++;
+                    }
+                } else if (minecraft.player != null) {
+                    for (ItemStack stack : minecraft.player.getInventory().items) {
+                        if (stack == null || stack.isEmpty()) continue;
+                        if (stack.getItem() == net.minecraft.world.item.Items.AIR) continue;
+                        String id = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                        if (!query.isBlank() && !id.contains(query)) continue;
+                        if (matched >= start && items.size() < pageSize) {
+                            items.add(stack.copy());
+                            ids.add(id);
+                        }
+                        matched++;
+                    }
+                }
+            }
             case EFFECTS -> {
                 ensureEffectIdCache();
                 for (String effectId : effectIdCache) {
                     if (!query.isBlank() && !effectId.toLowerCase(Locale.ROOT).contains(query)) continue;
-                    out.add(effectIconStack(effectId));
+                    if (matched >= start && items.size() < pageSize) {
+                        items.add(effectIconStack(effectId));
+                        ids.add(effectId);
+                    }
+                    matched++;
                 }
             }
             case MOBS -> {
-                for (String mobId : mobPickerIds()) {
-                    ItemStack egg = mobEggIconStack(mobId);
-                    out.add(egg.isEmpty() ? new ItemStack(net.minecraft.world.item.Items.EGG) : egg);
+                ensureEntityIdCache();
+                for (String mobId : entityIdCache) {
+                    if (!isSelectableMobEntityId(mobId)) continue;
+                    if (!query.isBlank() && !mobId.toLowerCase(Locale.ROOT).contains(query)) continue;
+                    if (matched >= start && items.size() < pageSize) {
+                        ItemStack egg = mobEggIconStack(mobId);
+                        items.add(egg.isEmpty() ? new ItemStack(net.minecraft.world.item.Items.EGG) : egg);
+                        ids.add(mobId);
+                    }
+                    matched++;
                 }
             }
             default -> {
             }
         }
-        return out;
-    }
 
-    private List<String> mobPickerIds() {
-        ensureEntityIdCache();
-        String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
-        List<String> out = new ArrayList<>();
-        for (String entityId : entityIdCache) {
-            if (!isSelectableMobEntityId(entityId)) continue;
-            if (!query.isBlank() && !entityId.toLowerCase(Locale.ROOT).contains(query)) continue;
-            out.add(entityId);
+        PickerPageData created = new PickerPageData(matched, items, ids);
+        if (pickerMode != PickerMode.ITEMS || itemPickerTab != ItemPickerTab.INVENTORY) {
+            itemPickerPageCache.put(cacheKey, created);
         }
-        return out;
+        return created;
     }
 
     private boolean isSelectableMobEntityId(String entityId) {
@@ -9729,7 +9744,9 @@ public final class QuestEditorScreen extends Screen {
 
     private record TagPageEntry(String tagId, ItemStack icon, Component tooltip) {}
 
-    private record TagPageData(List<TagPageEntry> entries) {}
+    private record TagPageData(int totalCount, List<TagPageEntry> entries) {}
+
+    private record PickerPageData(int totalCount, List<ItemStack> items, List<String> ids) {}
 
     private static final class MultiLineEntryContext {
         final boolean hasTypeSeparator;

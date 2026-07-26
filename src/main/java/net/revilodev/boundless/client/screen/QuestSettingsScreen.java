@@ -108,6 +108,9 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiQuestIconScaleRow;
     private ConfigRow uiEnableSearchBoxRow;
     private ConfigRow uiEnableDescriptionColorsRow;
+    private ConfigRow uiEnableDescriptionReadMoreRow;
+    private ConfigRow uiEnableDescriptionWrappingRow;
+    private ConfigRow uiDescriptionAlignmentRow;
     private ConfigRow uiEnableQuestToastsRow;
     private ConfigRow functionalityDisablePinningRow;
     private ConfigRow functionalityAutoClaimRow;
@@ -141,6 +144,9 @@ public final class QuestSettingsScreen extends Screen {
     private int uiQuestIconScaleBaseY;
     private int uiEnableSearchBoxBaseY;
     private int uiEnableDescriptionColorsBaseY;
+    private int uiEnableDescriptionReadMoreBaseY;
+    private int uiEnableDescriptionWrappingBaseY;
+    private int uiDescriptionAlignmentBaseY;
     private int uiEnableQuestToastsBaseY;
     private int functionalityDisablePinningBaseY;
     private int functionalityAutoClaimBaseY;
@@ -161,6 +167,9 @@ public final class QuestSettingsScreen extends Screen {
     private double questIconScale;
     private boolean enableQuestSearchBox;
     private boolean enableDescriptionColors;
+    private boolean enableDescriptionReadMore;
+    private boolean enableDescriptionTextWrapping;
+    private String descriptionTextAlignment;
     private boolean enableQuestToasts;
     private boolean disableQuestPinning;
     private boolean autoClaimQuestRewards;
@@ -227,8 +236,11 @@ public final class QuestSettingsScreen extends Screen {
         uiQuestIconScaleBaseY = uiRow1 + rowGap * 10;
         uiEnableSearchBoxBaseY = uiRow1 + rowGap * 11;
         uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 12;
-        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 13;
-        functionalityHeaderBaseY = uiRow1 + rowGap * 14 + 4;
+        uiEnableDescriptionReadMoreBaseY = uiRow1 + rowGap * 13;
+        uiEnableDescriptionWrappingBaseY = uiRow1 + rowGap * 14;
+        uiDescriptionAlignmentBaseY = uiRow1 + rowGap * 15;
+        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 16;
+        functionalityHeaderBaseY = uiRow1 + rowGap * 17 + 4;
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
         functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
@@ -290,6 +302,18 @@ public final class QuestSettingsScreen extends Screen {
                 "Allow formated text to color quest descriptions.",
                 () -> enableDescriptionColors ? "On" : "Off",
                 () -> enableDescriptionColors = !enableDescriptionColors);
+        uiEnableDescriptionReadMoreRow = new ConfigRow(px, uiEnableDescriptionReadMoreBaseY, pw, "Read More",
+                "Collapse long quest descriptions behind a read-more toggle.",
+                () -> enableDescriptionReadMore ? "On" : "Off",
+                () -> enableDescriptionReadMore = !enableDescriptionReadMore);
+        uiEnableDescriptionWrappingRow = new ConfigRow(px, uiEnableDescriptionWrappingBaseY, pw, "Description Wrap",
+                "Wrap quest descriptions to the panel width.",
+                () -> enableDescriptionTextWrapping ? "On" : "Off",
+                () -> enableDescriptionTextWrapping = !enableDescriptionTextWrapping);
+        uiDescriptionAlignmentRow = new ConfigRow(px, uiDescriptionAlignmentBaseY, pw, "Description Align",
+                "Set quest description alignment.",
+                this::formatDescriptionTextAlignment,
+                this::cycleDescriptionTextAlignment);
         uiEnableQuestToastsRow = new ConfigRow(px, uiEnableQuestToastsBaseY, pw, "Quest Toasts",
                 "Show toast popups when quests are unlocked.",
                 () -> enableQuestToasts ? "On" : "Off",
@@ -324,6 +348,9 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiQuestTextScaleRow, ConfigTab.STYLE);
         addConfigRow(uiQuestIconScaleRow, ConfigTab.STYLE);
         addConfigRow(uiEnableDescriptionColorsRow, ConfigTab.STYLE);
+        addConfigRow(uiEnableDescriptionReadMoreRow, ConfigTab.STYLE);
+        addConfigRow(uiEnableDescriptionWrappingRow, ConfigTab.STYLE);
+        addConfigRow(uiDescriptionAlignmentRow, ConfigTab.STYLE);
         addConfigRow(uiHideHeaderRow, ConfigTab.STYLE);
 
         addConfigRow(uiPinnedRow, ConfigTab.UI);
@@ -429,6 +456,12 @@ public final class QuestSettingsScreen extends Screen {
         uiEnableSearchBoxRow.active = config;
         uiEnableDescriptionColorsRow.visible = config;
         uiEnableDescriptionColorsRow.active = config;
+        uiEnableDescriptionReadMoreRow.visible = config;
+        uiEnableDescriptionReadMoreRow.active = config;
+        uiEnableDescriptionWrappingRow.visible = config;
+        uiEnableDescriptionWrappingRow.active = config;
+        uiDescriptionAlignmentRow.visible = config;
+        uiDescriptionAlignmentRow.active = config;
         uiEnableQuestToastsRow.visible = config;
         uiEnableQuestToastsRow.active = config;
         functionalityDisablePinningRow.visible = config;
@@ -475,6 +508,9 @@ public final class QuestSettingsScreen extends Screen {
         questIconScale = Config.questIconScale();
         enableQuestSearchBox = Config.enableQuestSearchBox();
         enableDescriptionColors = Config.enableDescriptionColors();
+        enableDescriptionReadMore = Config.enableDescriptionReadMore();
+        enableDescriptionTextWrapping = Config.enableDescriptionTextWrapping();
+        descriptionTextAlignment = normalizeDescriptionTextAlignment(Config.descriptionTextAlignment());
         enableQuestToasts = Config.enableQuestToasts();
         disableQuestPinning = Config.disableQuestPinning();
         autoClaimQuestRewards = Config.autoClaimQuestRewards();
@@ -548,6 +584,24 @@ public final class QuestSettingsScreen extends Screen {
         return String.format(java.util.Locale.ROOT, "%.1fx", Math.max(0.5D, Math.min(1.0D, questIconScale)));
     }
 
+    private void cycleDescriptionTextAlignment() {
+        descriptionTextAlignment = switch (normalizeDescriptionTextAlignment(descriptionTextAlignment)) {
+            case "center" -> "right";
+            case "right" -> "adjust";
+            case "adjust" -> "left";
+            default -> "center";
+        };
+    }
+
+    private String formatDescriptionTextAlignment() {
+        return switch (normalizeDescriptionTextAlignment(descriptionTextAlignment)) {
+            case "center" -> "Centre";
+            case "right" -> "Right";
+            case "adjust" -> "Adjust";
+            default -> "Left";
+        };
+    }
+
     private void saveConfig() {
         saveConfig(false);
     }
@@ -570,6 +624,9 @@ public final class QuestSettingsScreen extends Screen {
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
+        Config.ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
+        Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
+        Config.DESCRIPTION_TEXT_ALIGNMENT.set(normalizeDescriptionTextAlignment(descriptionTextAlignment));
         Config.ENABLE_QUEST_TOASTS.set(enableQuestToasts);
         Config.DISABLE_QUEST_PINNING.set(disableQuestPinning);
         Config.AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
@@ -599,6 +656,9 @@ public final class QuestSettingsScreen extends Screen {
                     questIconScale,
                     enableQuestSearchBox,
                     enableDescriptionColors,
+                    enableDescriptionReadMore,
+                    enableDescriptionTextWrapping,
+                    normalizeDescriptionTextAlignment(descriptionTextAlignment),
                     enableQuestToasts,
                     disableQuestPinning,
                     autoClaimQuestRewards,
@@ -633,6 +693,9 @@ public final class QuestSettingsScreen extends Screen {
             questTextScale = 1.0D;
             questIconScale = 1.0D;
             enableDescriptionColors = true;
+            enableDescriptionReadMore = true;
+            enableDescriptionTextWrapping = true;
+            descriptionTextAlignment = "left";
             hideCategoryHeader = false;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
@@ -696,6 +759,14 @@ public final class QuestSettingsScreen extends Screen {
         return ("default_list".equals(lower) || "quest_tree_coming_soon".equals(lower))
                 ? lower
                 : "default_list";
+    }
+
+    private String normalizeDescriptionTextAlignment(String raw) {
+        if (raw == null) return "left";
+        String lower = raw.trim().toLowerCase();
+        return ("left".equals(lower) || "center".equals(lower) || "right".equals(lower) || "adjust".equals(lower))
+                ? lower
+                : "left";
     }
 
     @Override

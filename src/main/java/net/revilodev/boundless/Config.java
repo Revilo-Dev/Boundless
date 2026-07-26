@@ -81,6 +81,19 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
             BUILDER.comment("If true, allows colored quest descriptions to render with Boundless color tokens.")
                     .define("enableDescriptionColors", true);
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_READ_MORE =
+            BUILDER.comment("If true, long quest descriptions collapse behind a read-more toggle.")
+                    .define("enableDescriptionReadMore", true);
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_TEXT_WRAPPING =
+            BUILDER.comment("If true, quest descriptions wrap to fit the detail panel width.")
+                    .define("enableDescriptionTextWrapping", true);
+    public static final ModConfigSpec.ConfigValue<String> DESCRIPTION_TEXT_ALIGNMENT =
+            BUILDER.comment("Quest description text alignment: left, center, right, adjust.")
+                    .define("descriptionTextAlignment", "left", o -> {
+                        if (!(o instanceof String s)) return false;
+                        s = s.trim().toLowerCase();
+                        return s.equals("left") || s.equals("center") || s.equals("right") || s.equals("adjust");
+                    });
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_TOASTS =
             BUILDER.comment("If true, shows quest unlocked toasts.")
                     .define("enableQuestToasts", true);
@@ -164,6 +177,9 @@ public final class Config {
             double questIconScale,
             boolean enableQuestSearchBox,
             boolean enableDescriptionColors,
+            boolean enableDescriptionReadMore,
+            boolean enableDescriptionTextWrapping,
+            String descriptionTextAlignment,
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
@@ -186,6 +202,9 @@ public final class Config {
         QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
+        ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
+        ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
+        DESCRIPTION_TEXT_ALIGNMENT.set(descriptionTextAlignment);
         ENABLE_QUEST_TOASTS.set(enableQuestToasts);
         DISABLE_QUEST_PINNING.set(disableQuestPinning);
         AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
@@ -305,6 +324,21 @@ public final class Config {
         return ENABLE_DESCRIPTION_COLORS.get();
     }
 
+    public static boolean enableDescriptionReadMore() {
+        return ENABLE_DESCRIPTION_READ_MORE.get();
+    }
+
+    public static boolean enableDescriptionTextWrapping() {
+        return ENABLE_DESCRIPTION_TEXT_WRAPPING.get();
+    }
+
+    public static String descriptionTextAlignment() {
+        String s = DESCRIPTION_TEXT_ALIGNMENT.get();
+        if (s == null) return "left";
+        s = s.trim().toLowerCase();
+        return (s.equals("left") || s.equals("center") || s.equals("right") || s.equals("adjust")) ? s : "left";
+    }
+
     public static boolean enableQuestToasts() {
         return ENABLE_QUEST_TOASTS.get();
     }
@@ -333,7 +367,7 @@ public final class Config {
     @SubscribeEvent
     public static void onLoad(ModConfigEvent.Loading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -348,6 +382,9 @@ public final class Config {
                     questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
+                    enableDescriptionReadMore(),
+                    enableDescriptionTextWrapping(),
+                    descriptionTextAlignment(),
                     enableQuestToasts(),
                     disableQuestPinning(),
                     autoClaimQuestRewards(),
@@ -359,7 +396,7 @@ public final class Config {
     @SubscribeEvent
     public static void onReload(ModConfigEvent.Reloading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -374,6 +411,9 @@ public final class Config {
                     questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
+                    enableDescriptionReadMore(),
+                    enableDescriptionTextWrapping(),
+                    descriptionTextAlignment(),
                     enableQuestToasts(),
                     disableQuestPinning(),
                     autoClaimQuestRewards(),
