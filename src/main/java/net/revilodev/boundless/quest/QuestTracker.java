@@ -6,11 +6,12 @@ import com.google.gson.JsonObject;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.minecraft.advancements.Advancement;
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.commands.arguments.item.ItemParser;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -35,9 +36,9 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.revilodev.boundless.BoundlessMod;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -73,7 +74,7 @@ public final class QuestTracker {
     private static final Map<String, Boolean> CLIENT_SCROLL_CREATED = new HashMap<>();
     private static final Map<String, ResourceLocation> RL_CACHE = new HashMap<>();
     private static final Map<String, Optional<Item>> ITEM_BY_ID_CACHE = new HashMap<>();
-    private static final Map<String, MobEffect> EFFECT_BY_ID_CACHE = new HashMap<>();
+    private static final Map<String, Holder<MobEffect>> EFFECT_BY_ID_CACHE = new HashMap<>();
 
     private static boolean SERVER_TOASTS_DISABLED = false;
     private static String ACTIVE_KEY = null;
@@ -901,10 +902,10 @@ public final class QuestTracker {
 
     public static boolean hasEffect(Player player, String effectId) {
         if (player == null || effectId == null || effectId.isBlank()) return false;
-        MobEffect holder = EFFECT_BY_ID_CACHE.get(effectId);
+        Holder<MobEffect> holder = EFFECT_BY_ID_CACHE.get(effectId);
         if (!EFFECT_BY_ID_CACHE.containsKey(effectId)) {
             ResourceLocation rl = tryParseCached(effectId);
-            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getOptional(rl).orElse(null);
+            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
             EFFECT_BY_ID_CACHE.put(effectId, holder);
         }
         return holder != null && player.hasEffect(holder);
@@ -939,7 +940,7 @@ public final class QuestTracker {
     }
 
     private static boolean hasAdvancementServer(ServerPlayer sp, ResourceLocation rl) {
-        Advancement holder = sp.server.getAdvancements().getAdvancement(rl);
+        AdvancementHolder holder = sp.server.getAdvancements().get(rl);
         if (holder == null) return false;
 
         AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(holder);
@@ -1398,7 +1399,9 @@ public final class QuestTracker {
             for (QuestData.Target target : quest.completion.targets) {
                 if (target == null || !target.isObserve() || target.id == null || target.id.isBlank()) continue;
                 if (!isObservingTarget(player, target.id)) continue;
-                BoundlessNetwork.sendToServer(new BoundlessNetwork.ReportObserve(quest.id, target.id));
+                net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                        new net.revilodev.boundless.network.BoundlessNetwork.ReportObserve(quest.id, target.id)
+                );
             }
         }
     }

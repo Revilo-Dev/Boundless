@@ -1,27 +1,30 @@
 package net.revilodev.boundless;
 
 import java.util.List;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
+import java.nio.file.Path;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class Config {
-    private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
+    private static final int QUEST_PACK_BACKUP_LIMIT = 5;
+    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DISABLED_CATEGORIES =
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_CATEGORIES =
             BUILDER.comment("A list of quest category IDs to completely disable.")
                     .defineListAllowEmpty(List.of("disabledQuestCategories"), List::of, o -> o instanceof String);
-    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> APPLIED_QUEST_PACKS =
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> APPLIED_QUEST_PACKS =
             BUILDER.comment("Instance questpack IDs explicitly enabled by the server.")
                     .defineListAllowEmpty(List.of("appliedQuestPacks"), List::of, o -> o instanceof String);
-    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> DISABLED_QUEST_PACKS =
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_QUEST_PACKS =
             BUILDER.comment("Instance questpack IDs explicitly disabled by the server.")
                     .defineListAllowEmpty(List.of("disabledQuestPacks"), List::of, o -> o instanceof String);
 
     static {
         BUILDER.push("UI");
     }
-    public static final ForgeConfigSpec.ConfigValue<String> PINNED_QUEST_HUD_POSITION =
+    public static final ModConfigSpec.ConfigValue<String> PINNED_QUEST_HUD_POSITION =
 
             BUILDER.comment("Pin the Quest hud to the: bottom_left, bottom_right, top_left, top_right")
                     .define("pinnedQuestHudPosition", "bottom_left", o -> {
@@ -30,101 +33,104 @@ public final class Config {
                 return s.equals("top_left") || s.equals("top_right") || s.equals("bottom_left") || s.equals("bottom_right");
             });
 
-    public static final ForgeConfigSpec.ConfigValue<Boolean> HIDE_QUEST_BOOK_IN_INVENTORY =
+    public static final ModConfigSpec.ConfigValue<Boolean> HIDE_QUEST_BOOK_IN_INVENTORY =
             BUILDER.comment("If true, hides the quest book button in the inventory screen.")
                     .define("hideQuestBookInInventory", false);
-    public static final ForgeConfigSpec.ConfigValue<String> QUEST_BOOK_INVENTORY_BUTTON_POSITION =
+    public static final ModConfigSpec.ConfigValue<String> QUEST_BOOK_INVENTORY_BUTTON_POSITION =
             BUILDER.comment("Quest book button position in inventory: beside_recipe_book, above_offhand_slot")
                     .define("questBookInventoryButtonPosition", "beside_recipe_book", o -> {
                         if (!(o instanceof String s)) return false;
                         s = s.trim().toLowerCase();
                         return s.equals("beside_recipe_book") || s.equals("above_offhand_slot");
                     });
-    public static final ForgeConfigSpec.ConfigValue<Boolean> CENTER_INVENTORY_WITH_QUEST_PANEL =
+    public static final ModConfigSpec.ConfigValue<Boolean> CENTER_INVENTORY_WITH_QUEST_PANEL =
             BUILDER.comment("If true, centers inventory and quest panel together when the quest panel is open.")
                     .define("centerInventoryWithQuestPanel", true);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> HIDE_CATEGORY_HEADER =
+    public static final ModConfigSpec.ConfigValue<Boolean> HIDE_CATEGORY_HEADER =
             BUILDER.comment("If true, hides the category header bar.")
                     .define("hideCategoryHeader", false);
-    public static final ForgeConfigSpec.ConfigValue<String> FILTER_DISPLAY_MODE =
+    public static final ModConfigSpec.ConfigValue<String> FILTER_DISPLAY_MODE =
             BUILDER.comment("How quest filters are displayed: tabs, buttons, hidden.")
                     .define("filterDisplayMode", "tabs", o -> {
                         if (!(o instanceof String s)) return false;
                         s = s.trim().toLowerCase();
                         return s.equals("tabs") || s.equals("buttons") || s.equals("hidden");
                     });
-    public static final ForgeConfigSpec.ConfigValue<Boolean> DISABLE_CATEGORIES =
+    public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_CATEGORIES =
             BUILDER.comment("If true, disables category tabs and category-based filtering.")
                     .define("disableCategories", false);
-    public static final ForgeConfigSpec.ConfigValue<String> QUEST_PACK_DISPLAY_TYPE =
+    public static final ModConfigSpec.ConfigValue<String> QUEST_PACK_DISPLAY_TYPE =
             BUILDER.comment("Quest pack presentation type: default_list, quest_tree_coming_soon.")
                     .define("questPackDisplayType", "default_list", o -> {
                         if (!(o instanceof String s)) return false;
                         s = s.trim().toLowerCase();
                         return s.equals("default_list") || s.equals("quest_tree_coming_soon");
                     });
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_BUILTIN_QUEST_PACK =
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_BUILTIN_QUEST_PACK =
             BUILDER.comment("If false, disables the built-in Boundless quest pack.")
                     .define("enableBuiltinQuestPack", true);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> HIDE_QUEST_WIDGET_ICONS =
+    public static final ModConfigSpec.ConfigValue<Boolean> HIDE_QUEST_WIDGET_ICONS =
             BUILDER.comment("If true, hides icons in quest list widgets.")
                     .define("hideQuestWidgetIcons", false);
-    public static final ForgeConfigSpec.DoubleValue QUEST_TEXT_SCALE =
+    public static final ModConfigSpec.DoubleValue QUEST_TEXT_SCALE =
             BUILDER.comment("Scales quest list widget titles and quest detail description, task, and reward text. Range: 0.5 to 1.0.")
                     .defineInRange("questTextScale", 1.0D, 0.5D, 1.0D);
-    public static final ForgeConfigSpec.DoubleValue QUEST_ICON_SCALE =
+    public static final ModConfigSpec.DoubleValue QUEST_ICON_SCALE =
             BUILDER.comment("Scales quest widget icons and quest detail panel icons. Range: 0.5 to 1.0.")
                     .defineInRange("questIconScale", 1.0D, 0.5D, 1.0D);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
                     .define("enableQuestSearchBox", false);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
             BUILDER.comment("If true, allows colored quest descriptions to render with Boundless color tokens.")
                     .define("enableDescriptionColors", true);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_READ_MORE =
-            BUILDER.comment("If true, long quest descriptions collapse behind a read-more toggle.")
-                    .define("enableDescriptionReadMore", true);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_TEXT_WRAPPING =
-            BUILDER.comment("If true, quest descriptions wrap to fit the detail panel width.")
-                    .define("enableDescriptionTextWrapping", true);
-    public static final ForgeConfigSpec.ConfigValue<String> DESCRIPTION_TEXT_ALIGNMENT =
-            BUILDER.comment("Quest description text alignment: left, center, right, adjust.")
-                    .define("descriptionTextAlignment", "left", o -> {
-                        if (!(o instanceof String s)) return false;
-                        s = s.trim().toLowerCase();
-                        return s.equals("left") || s.equals("center") || s.equals("right") || s.equals("adjust");
-                    });
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_TOASTS =
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_TOASTS =
             BUILDER.comment("If true, shows quest unlocked toasts.")
                     .define("enableQuestToasts", true);
     static {
         BUILDER.pop();
         BUILDER.push("Functionality");
     }
-    public static final ForgeConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_PINNING =
+    public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_PINNING =
             BUILDER.comment("If true, quest pinning and pinned HUD are disabled.")
                     .define("disableQuestPinning", false);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> AUTO_CLAIM_QUEST_REWARDS =
+    public static final ModConfigSpec.ConfigValue<Boolean> AUTO_CLAIM_QUEST_REWARDS =
             BUILDER.comment("If true, quest rewards are automatically claimed when a quest becomes complete.")
                     .define("autoClaimQuestRewards", false);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
             BUILDER.comment("If true, quest completion scrolls can be created and used.")
                     .define("enableQuestScrolls", true);
     static {
         BUILDER.pop();
         BUILDER.push("Gameplay");
     }
-    public static final ForgeConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_BOOK =
+    public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_BOOK =
             BUILDER.comment("If true, quest book opening is disabled.")
                     .define("disableQuestBook", false);
-    public static final ForgeConfigSpec.ConfigValue<Boolean> SPAWN_WITH_QUEST_BOOK =
+    public static final ModConfigSpec.ConfigValue<Boolean> SPAWN_WITH_QUEST_BOOK =
             BUILDER.comment("If true, players spawn with the quest book.")
                     .define("spawnWithQuestBook", false);
     static {
         BUILDER.pop();
     }
 
-    public static final ForgeConfigSpec SPEC = BUILDER.build();
+    public static final ModConfigSpec SPEC = BUILDER.build();
+
+    public static Path boundlessConfigRoot() {
+        return FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").normalize();
+    }
+
+    public static Path questPacksRoot() {
+        return boundlessConfigRoot().resolve("questpacks").normalize();
+    }
+
+    public static Path questPackBackupsRoot() {
+        return boundlessConfigRoot().resolve("backups").resolve("questpacks").normalize();
+    }
+
+    public static int questPackBackupLimit() {
+        return QUEST_PACK_BACKUP_LIMIT;
+    }
 
     public static List<? extends String> disabledCategories() {
         return DISABLED_CATEGORIES.get();
@@ -177,9 +183,6 @@ public final class Config {
             double questIconScale,
             boolean enableQuestSearchBox,
             boolean enableDescriptionColors,
-            boolean enableDescriptionReadMore,
-            boolean enableDescriptionTextWrapping,
-            String descriptionTextAlignment,
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
@@ -202,9 +205,6 @@ public final class Config {
         QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
-        ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
-        ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
-        DESCRIPTION_TEXT_ALIGNMENT.set(descriptionTextAlignment);
         ENABLE_QUEST_TOASTS.set(enableQuestToasts);
         DISABLE_QUEST_PINNING.set(disableQuestPinning);
         AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
@@ -324,21 +324,6 @@ public final class Config {
         return ENABLE_DESCRIPTION_COLORS.get();
     }
 
-    public static boolean enableDescriptionReadMore() {
-        return ENABLE_DESCRIPTION_READ_MORE.get();
-    }
-
-    public static boolean enableDescriptionTextWrapping() {
-        return ENABLE_DESCRIPTION_TEXT_WRAPPING.get();
-    }
-
-    public static String descriptionTextAlignment() {
-        String s = DESCRIPTION_TEXT_ALIGNMENT.get();
-        if (s == null) return "left";
-        s = s.trim().toLowerCase();
-        return (s.equals("left") || s.equals("center") || s.equals("right") || s.equals("adjust")) ? s : "left";
-    }
-
     public static boolean enableQuestToasts() {
         return ENABLE_QUEST_TOASTS.get();
     }
@@ -367,7 +352,7 @@ public final class Config {
     @SubscribeEvent
     public static void onLoad(ModConfigEvent.Loading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -382,9 +367,6 @@ public final class Config {
                     questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
-                    enableDescriptionReadMore(),
-                    enableDescriptionTextWrapping(),
-                    descriptionTextAlignment(),
                     enableQuestToasts(),
                     disableQuestPinning(),
                     autoClaimQuestRewards(),
@@ -396,7 +378,7 @@ public final class Config {
     @SubscribeEvent
     public static void onReload(ModConfigEvent.Reloading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -411,9 +393,6 @@ public final class Config {
                     questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
-                    enableDescriptionReadMore(),
-                    enableDescriptionTextWrapping(),
-                    descriptionTextAlignment(),
                     enableQuestToasts(),
                     disableQuestPinning(),
                     autoClaimQuestRewards(),
