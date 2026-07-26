@@ -321,6 +321,34 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    private static final class DescriptionLine {
+        final List<StyledDescriptionChar> chars;
+        final int width;
+        final boolean justify;
+
+        DescriptionLine(List<StyledDescriptionChar> chars, int width, boolean justify) {
+            this.chars = chars;
+            this.width = width;
+            this.justify = justify;
+        }
+
+        int spaceCount() {
+            int count = 0;
+            for (StyledDescriptionChar ch : chars) {
+                if (ch.value == ' ') count++;
+            }
+            return count;
+        }
+
+        String plainText() {
+            StringBuilder out = new StringBuilder(chars.size());
+            for (StyledDescriptionChar ch : chars) {
+                out.append(ch.value);
+            }
+            return out.toString();
+        }
+    }
+
     public AbstractButton backButton() { return back; }
     public AbstractButton completeButton() { return complete; }
     public AbstractButton rejectButton() { return reject; }
@@ -428,7 +456,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         if (!quest.description.isBlank()) {
             String full = quest.description;
-            boolean needsMore = full.length() > DESC_CHAR_LIMIT;
+            boolean needsMore = Config.enableDescriptionReadMore() && full.length() > DESC_CHAR_LIMIT;
 
             String shown = full;
             if (needsMore && !descExpanded) {
@@ -438,7 +466,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             }
 
             int wrapHeight = drawFormattedDescription(gg, shown, x + 4, curY[0], w - 8, 0xCFCFCF);
-            addDescriptionItemRegions(stripColorTokens(shown), x + 4, curY[0], w - 8);
+            addDescriptionItemRegions(shown, x + 4, curY[0], w - 8);
 
             if (needsMore) {
                 int toggleY = curY[0] + wrapHeight + 2;
@@ -1028,7 +1056,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         if (!quest.description.isBlank()) {
             String full = quest.description;
-            boolean needsMore = full.length() > DESC_CHAR_LIMIT;
+            boolean needsMore = Config.enableDescriptionReadMore() && full.length() > DESC_CHAR_LIMIT;
 
             String shown = full;
             if (needsMore && !descExpanded) {
@@ -1203,25 +1231,25 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private int drawFormattedDescription(GuiGraphics gg, String raw, int x, int y, int physicalWidth, int defaultColor) {
         if (physicalWidth <= 0) return 0;
-        if (!Config.enableDescriptionColors()) {
-            Component plain = Component.literal(stripColorTokens(raw)).withStyle(Style.EMPTY.withColor(defaultColor));
-            drawScaledWordWrap(gg, plain, x, y, physicalWidth, defaultColor);
-            return scaledWrappedHeight(plain, physicalWidth);
-        }
-        List<List<StyledDescriptionChar>> lines = wrapFormattedDescription(raw, scaledWrapWidth(physicalWidth), defaultColor);
+        List<DescriptionLine> lines = buildDescriptionLines(raw, physicalWidth, defaultColor, Config.enableDescriptionColors());
         if (lines.isEmpty()) return scaledLineHeight();
 
         float scale = textScale();
         float inv = 1.0f / scale;
         int baseX = (int) (x * inv);
         int baseY = (int) (y * inv);
+        int wrapWidth = scaledWrapWidth(physicalWidth);
         gg.pose().pushPose();
         gg.pose().scale(scale, scale, 1f);
         int globalIndex = 0;
         for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
-            int drawX = baseX;
+            DescriptionLine line = lines.get(lineIndex);
+            int drawX = baseX + descriptionAlignmentOffset(line, wrapWidth);
             int drawY = baseY + lineIndex * mc.font.lineHeight;
-            for (StyledDescriptionChar ch : lines.get(lineIndex)) {
+            int extraSpace = descriptionExtraSpacePerGap(line, wrapWidth);
+            int remainder = descriptionExtraSpaceRemainder(line, wrapWidth);
+            int spacesSeen = 0;
+            for (StyledDescriptionChar ch : line.chars) {
                 int color = ch.highlight ? highlightColor(ch.color, globalIndex) : ch.color;
                 drawX = gg.drawString(mc.font,
                         Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
@@ -1233,6 +1261,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         drawY,
                         color,
                         false);
+                if (ch.value == ' ' && extraSpace > 0) {
+                    drawX += extraSpace;
+                    if (spacesSeen < remainder) drawX += 1;
+                    spacesSeen++;
+                }
                 globalIndex++;
             }
         }
@@ -1242,27 +1275,28 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private int formattedDescriptionHeight(String raw, int physicalWidth, int defaultColor) {
         if (physicalWidth <= 0) return 0;
-        if (!Config.enableDescriptionColors()) {
-            return scaledWrappedHeight(Component.literal(stripColorTokens(raw)).withStyle(Style.EMPTY.withColor(defaultColor)), physicalWidth);
-        }
-        return Math.max(1, Math.round(wrapFormattedDescription(raw, scaledWrapWidth(physicalWidth), defaultColor).size() * mc.font.lineHeight * textScale()));
+        return Math.max(1, Math.round(buildDescriptionLines(raw, physicalWidth, defaultColor, Config.enableDescriptionColors()).size() * mc.font.lineHeight * textScale()));
     }
 
-    private List<List<StyledDescriptionChar>> wrapFormattedDescription(String raw, int wrapWidth, int defaultColor) {
-        List<StyledDescriptionChar> chars = parseDescriptionChars(raw, defaultColor);
-        List<List<StyledDescriptionChar>> lines = new ArrayList<>();
+    private List<DescriptionLine> buildDescriptionLines(String raw, int physicalWidth, int defaultColor, boolean allowFormatting) {
+        List<StyledDescriptionChar> chars = allowFormatting
+                ? parseDescriptionChars(raw, defaultColor)
+                : parsePlainDescriptionChars(stripColorTokens(raw), defaultColor);
+        int wrapWidth = scaledWrapWidth(physicalWidth);
+        boolean wrap = Config.enableDescriptionTextWrapping();
+        List<DescriptionLine> lines = new ArrayList<>();
         List<StyledDescriptionChar> line = new ArrayList<>();
         int lineWidth = 0;
         for (StyledDescriptionChar ch : chars) {
             if (ch.value == '\n') {
-                lines.add(line);
+                lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, false));
                 line = new ArrayList<>();
                 lineWidth = 0;
                 continue;
             }
             int charWidth = mc.font.width(String.valueOf(ch.value));
-            if (!line.isEmpty() && lineWidth + charWidth > wrapWidth) {
-                lines.add(line);
+            if (wrap && !line.isEmpty() && lineWidth + charWidth > wrapWidth) {
+                lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, true));
                 line = new ArrayList<>();
                 lineWidth = 0;
                 if (ch.value == ' ') continue;
@@ -1270,8 +1304,17 @@ public final class QuestDetailsPanel extends AbstractWidget {
             line.add(ch);
             lineWidth += charWidth;
         }
-        if (!line.isEmpty() || lines.isEmpty()) lines.add(line);
+        if (!line.isEmpty() || lines.isEmpty()) lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, false));
         return lines;
+    }
+
+    private List<StyledDescriptionChar> parsePlainDescriptionChars(String raw, int defaultColor) {
+        List<StyledDescriptionChar> chars = new ArrayList<>();
+        String text = raw == null ? "" : raw;
+        for (int i = 0; i < text.length(); i++) {
+            chars.add(new StyledDescriptionChar(text.charAt(i), defaultColor, false, false, false, false));
+        }
+        return chars;
     }
 
     private List<StyledDescriptionChar> parseDescriptionChars(String raw, int defaultColor) {
@@ -1368,15 +1411,23 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private void addDescriptionItemRegions(String text, int x, int y, int maxWidth) {
         if (text == null || text.isBlank() || maxWidth <= 0) return;
         float scale = textScale();
-        List<String> lines = wrapPlainText(text, scaledWrapWidth(maxWidth));
+        int wrapWidth = scaledWrapWidth(maxWidth);
+        List<DescriptionLine> lines = buildDescriptionLines(text, maxWidth, 0xCFCFCF, false);
         int lineY = y;
-        for (String line : lines) {
-            Matcher matcher = ITEM_ID_PATTERN.matcher(line);
+        for (DescriptionLine line : lines) {
+            String plain = line.plainText();
+            Matcher matcher = ITEM_ID_PATTERN.matcher(plain);
+            int offset = descriptionAlignmentOffset(line, wrapWidth);
+            int extraSpace = descriptionExtraSpacePerGap(line, wrapWidth);
+            int remainder = descriptionExtraSpaceRemainder(line, wrapWidth);
             while (matcher.find()) {
                 String token = matcher.group();
                 Item item = resolveItem(token);
                 if (item == null) continue;
-                int startX = x + Math.round(mc.font.width(line.substring(0, matcher.start())) * scale);
+                int prefixWidth = mc.font.width(plain.substring(0, matcher.start()));
+                int spacesBefore = countSpaces(plain, matcher.start());
+                int justifyOffset = spacesBefore * extraSpace + Math.min(spacesBefore, remainder);
+                int startX = x + Math.round((offset + prefixWidth + justifyOffset) * scale);
                 int width = Math.round(mc.font.width(token) * scale);
                 itemRegions.add(new ItemClickRegion(startX, lineY, width, scaledLineHeight(), new ItemStack(item)));
             }
@@ -1384,25 +1435,38 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
-    private List<String> wrapPlainText(String text, int maxWidth) {
-        List<String> out = new ArrayList<>();
-        if (text == null || text.isBlank()) return out;
-        String[] words = text.split("\\s+");
-        StringBuilder line = new StringBuilder();
-        for (String word : words) {
-            if (word == null || word.isBlank()) continue;
-            String candidate = line.isEmpty() ? word : line + " " + word;
-            if (!line.isEmpty() && mc.font.width(candidate) > maxWidth) {
-                out.add(line.toString());
-                line.setLength(0);
-                line.append(word);
-            } else {
-                if (!line.isEmpty()) line.append(' ');
-                line.append(word);
-            }
+    private int descriptionAlignmentOffset(DescriptionLine line, int wrapWidth) {
+        String alignment = Config.descriptionTextAlignment();
+        if ("center".equals(alignment)) {
+            return Math.max(0, (wrapWidth - line.width) / 2);
         }
-        if (!line.isEmpty()) out.add(line.toString());
-        return out;
+        if ("right".equals(alignment)) {
+            return Math.max(0, wrapWidth - line.width);
+        }
+        return 0;
+    }
+
+    private int descriptionExtraSpacePerGap(DescriptionLine line, int wrapWidth) {
+        if (!"adjust".equals(Config.descriptionTextAlignment()) || !Config.enableDescriptionTextWrapping() || !line.justify) return 0;
+        int gaps = line.spaceCount();
+        if (gaps <= 0) return 0;
+        return Math.max(0, (wrapWidth - line.width) / gaps);
+    }
+
+    private int descriptionExtraSpaceRemainder(DescriptionLine line, int wrapWidth) {
+        if (!"adjust".equals(Config.descriptionTextAlignment()) || !Config.enableDescriptionTextWrapping() || !line.justify) return 0;
+        int gaps = line.spaceCount();
+        if (gaps <= 0) return 0;
+        return Math.max(0, (wrapWidth - line.width) % gaps);
+    }
+
+    private int countSpaces(String text, int endExclusive) {
+        int count = 0;
+        int end = Math.max(0, Math.min(text.length(), endExclusive));
+        for (int i = 0; i < end; i++) {
+            if (text.charAt(i) == ' ') count++;
+        }
+        return count;
     }
 
     private Component formatColorCodes(String raw, int defaultColor) {

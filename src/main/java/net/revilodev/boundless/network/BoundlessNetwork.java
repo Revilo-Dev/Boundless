@@ -52,7 +52,7 @@ import java.util.zip.ZipInputStream;
 public final class BoundlessNetwork {
 
     private static final String CHANNEL = "boundless";
-    private static final String VERSION = "2";
+    private static final String VERSION = "3";
     private static boolean REGISTERED = false;
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
@@ -203,6 +203,9 @@ public final class BoundlessNetwork {
             double questIconScale,
             boolean enableQuestSearchBox,
             boolean enableDescriptionColors,
+            boolean enableDescriptionReadMore,
+            boolean enableDescriptionTextWrapping,
+            String descriptionTextAlignment,
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
@@ -225,6 +228,9 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
                     buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeBoolean(p.enableDescriptionReadMore);
+                    buf.writeBoolean(p.enableDescriptionTextWrapping);
+                    buf.writeUtf(p.descriptionTextAlignment == null ? "" : p.descriptionTextAlignment);
                     buf.writeBoolean(p.enableQuestToasts);
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
@@ -245,6 +251,9 @@ public final class BoundlessNetwork {
                         buf.readDouble(),
                         buf.readBoolean(),
                         buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -516,6 +525,9 @@ public final class BoundlessNetwork {
             double questIconScale,
             boolean enableQuestSearchBox,
             boolean enableDescriptionColors,
+            boolean enableDescriptionReadMore,
+            boolean enableDescriptionTextWrapping,
+            String descriptionTextAlignment,
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
@@ -542,6 +554,9 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
                     buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeBoolean(p.enableDescriptionReadMore);
+                    buf.writeBoolean(p.enableDescriptionTextWrapping);
+                    buf.writeUtf(p.descriptionTextAlignment == null ? "" : p.descriptionTextAlignment);
                     buf.writeBoolean(p.enableQuestToasts);
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
@@ -566,6 +581,9 @@ public final class BoundlessNetwork {
                         buf.readDouble(),
                         buf.readBoolean(),
                         buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
+                        buf.readUtf(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -693,6 +711,9 @@ public final class BoundlessNetwork {
                 Config.questIconScale(),
                 Config.enableQuestSearchBox(),
                 Config.enableDescriptionColors(),
+                Config.enableDescriptionReadMore(),
+                Config.enableDescriptionTextWrapping(),
+                Config.descriptionTextAlignment(),
                 Config.enableQuestToasts(),
                 Config.disableQuestPinning(),
                 Config.autoClaimQuestRewards(),
@@ -1098,6 +1119,9 @@ public final class BoundlessNetwork {
             Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
             Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
             Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
+            Config.ENABLE_DESCRIPTION_READ_MORE.set(p.enableDescriptionReadMore());
+            Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(p.enableDescriptionTextWrapping());
+            Config.DESCRIPTION_TEXT_ALIGNMENT.set(p.descriptionTextAlignment());
             Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
             Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
             Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
@@ -1341,6 +1365,9 @@ public final class BoundlessNetwork {
                 p.questIconScale(),
                 p.enableQuestSearchBox(),
                 p.enableDescriptionColors(),
+                p.enableDescriptionReadMore(),
+                p.enableDescriptionTextWrapping(),
+                p.descriptionTextAlignment(),
                 p.enableQuestToasts(),
                 p.disableQuestPinning(),
                 p.autoClaimQuestRewards(),
