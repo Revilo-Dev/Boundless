@@ -121,6 +121,8 @@ public final class QuestData {
         public final List<CommandReward> commands;
         public final List<FunctionReward> functions;
         public final List<LootTableReward> lootTables;
+        public final List<AdvancementReward> advancements;
+        public final List<ToastReward> toasts;
         public final String expType;
         public final int expAmount;
 
@@ -128,12 +130,16 @@ public final class QuestData {
                        List<CommandReward> commands,
                        List<FunctionReward> functions,
                        List<LootTableReward> lootTables,
+                       List<AdvancementReward> advancements,
+                       List<ToastReward> toasts,
                        String expType,
                        int expAmount) {
             this.items = items == null ? List.of() : List.copyOf(items);
             this.commands = commands == null ? List.of() : List.copyOf(commands);
             this.functions = functions == null ? List.of() : List.copyOf(functions);
             this.lootTables = lootTables == null ? List.of() : List.copyOf(lootTables);
+            this.advancements = advancements == null ? List.of() : List.copyOf(advancements);
+            this.toasts = toasts == null ? List.of() : List.copyOf(toasts);
             this.expType = expType == null ? "" : expType;
             this.expAmount = Math.max(0, expAmount);
         }
@@ -142,8 +148,16 @@ public final class QuestData {
         public boolean hasCommands() { return commands != null && !commands.isEmpty(); }
         public boolean hasFunctions() { return functions != null && !functions.isEmpty(); }
         public boolean hasLootTables() { return lootTables != null && !lootTables.isEmpty(); }
+        public boolean hasAdvancements() { return advancements != null && !advancements.isEmpty(); }
+        public boolean hasToasts() { return toasts != null && !toasts.isEmpty(); }
         public boolean hasAny() {
-            return (items != null && !items.isEmpty()) || hasCommands() || hasFunctions() || hasLootTables() || hasExp();
+            return (items != null && !items.isEmpty())
+                    || hasCommands()
+                    || hasFunctions()
+                    || hasLootTables()
+                    || hasAdvancements()
+                    || hasToasts()
+                    || hasExp();
         }
     }
 
@@ -199,6 +213,26 @@ public final class QuestData {
         }
     }
 
+    public static final class AdvancementReward {
+        public final String advancement;
+
+        public AdvancementReward(String advancement) {
+            this.advancement = advancement == null ? "" : advancement;
+        }
+    }
+
+    public static final class ToastReward {
+        public final String title;
+        public final String description;
+        public final String icon;
+
+        public ToastReward(String title, String description, String icon) {
+            this.title = title == null ? "" : title;
+            this.description = description == null ? "" : description;
+            this.icon = icon == null ? "" : icon;
+        }
+    }
+
     public static final class Completion {
         public final List<Target> targets;
 
@@ -247,7 +281,6 @@ public final class QuestData {
         public boolean isEntity() { return "entity".equals(kind); }
         public boolean isEffect() { return "effect".equals(kind); }
         public boolean isAdvancement() { return "advancement".equals(kind); }
-        public boolean isStat() { return "stat".equals(kind); }
         public boolean isXp() { return "xp".equals(kind); }
         public boolean isLevelUpLevel() { return "levelup_level".equals(kind); }
         public boolean isFieldInput() { return "field".equals(kind); }
@@ -255,6 +288,7 @@ public final class QuestData {
         public boolean isCheck() { return "check".equals(kind); }
         public boolean isBiome() { return "biome".equals(kind); }
         public boolean isDimension() { return "dimension".equals(kind); }
+        public boolean isStructure() { return "structure".equals(kind); }
         public boolean hasMultipleAcceptedIds() { return acceptedIds.size() > 1; }
         public List<String> acceptedIdsOrLegacy() { return acceptedIds.isEmpty() && !id.isBlank() ? List.of(id) : acceptedIds; }
     }
@@ -1044,20 +1078,22 @@ public final class QuestData {
 
     private static Rewards parseRewards(JsonElement el) {
         if (el == null || el.isJsonNull()) {
-            return new Rewards(List.of(), List.of(), List.of(), List.of(), "", 0);
+            return new Rewards(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), "", 0);
         }
 
         List<RewardEntry> items = new ArrayList<>();
         List<CommandReward> commands = new ArrayList<>();
         List<FunctionReward> functions = new ArrayList<>();
         List<LootTableReward> lootTables = new ArrayList<>();
+        List<AdvancementReward> advancements = new ArrayList<>();
+        List<ToastReward> toasts = new ArrayList<>();
         String expType = "";
         int expAmount = 0;
 
         if (el.isJsonPrimitive()) {
             String cmd = el.getAsString();
             if (cmd != null && !cmd.isBlank()) commands.add(new CommandReward(cmd, "", ""));
-            return new Rewards(items, commands, functions, lootTables, expType, expAmount);
+            return new Rewards(items, commands, functions, lootTables, advancements, toasts, expType, expAmount);
         }
 
         if (el.isJsonArray()) {
@@ -1071,11 +1107,11 @@ public final class QuestData {
                 if (!accepted.isEmpty()) items.add(new RewardEntry(accepted, count));
                 else if (item != null && !item.isBlank()) items.add(new RewardEntry(item, count));
             }
-            return new Rewards(items, commands, functions, lootTables, expType, expAmount);
+            return new Rewards(items, commands, functions, lootTables, advancements, toasts, expType, expAmount);
         }
 
         if (!el.isJsonObject()) {
-            return new Rewards(items, commands, functions, lootTables, expType, expAmount);
+            return new Rewards(items, commands, functions, lootTables, advancements, toasts, expType, expAmount);
         }
 
         JsonObject obj = el.getAsJsonObject();
@@ -1167,6 +1203,48 @@ public final class QuestData {
             }
         }
 
+        if (obj.has("advancement") && obj.get("advancement").isJsonPrimitive()) {
+            String advancement = obj.get("advancement").getAsString();
+            if (advancement != null && !advancement.isBlank()) advancements.add(new AdvancementReward(advancement));
+        }
+
+        if (obj.has("advancements") && obj.get("advancements").isJsonArray()) {
+            for (JsonElement ae : obj.getAsJsonArray("advancements")) {
+                if (ae == null) continue;
+                if (ae.isJsonPrimitive()) {
+                    String advancement = ae.getAsString();
+                    if (advancement != null && !advancement.isBlank()) advancements.add(new AdvancementReward(advancement));
+                    continue;
+                }
+                if (!ae.isJsonObject()) continue;
+                String advancement = optString(ae.getAsJsonObject(), "advancement");
+                if (advancement != null && !advancement.isBlank()) advancements.add(new AdvancementReward(advancement));
+            }
+        }
+
+        if (obj.has("toast") && obj.get("toast").isJsonObject()) {
+            JsonObject toast = obj.getAsJsonObject("toast");
+            String title = optString(toast, "title");
+            String description = optString(toast, "description");
+            String icon = optString(toast, "icon");
+            if ((title != null && !title.isBlank()) || (description != null && !description.isBlank()) || (icon != null && !icon.isBlank())) {
+                toasts.add(new ToastReward(title, description, icon));
+            }
+        }
+
+        if (obj.has("toasts") && obj.get("toasts").isJsonArray()) {
+            for (JsonElement te : obj.getAsJsonArray("toasts")) {
+                if (!te.isJsonObject()) continue;
+                JsonObject toast = te.getAsJsonObject();
+                String title = optString(toast, "title");
+                String description = optString(toast, "description");
+                String icon = optString(toast, "icon");
+                if ((title != null && !title.isBlank()) || (description != null && !description.isBlank()) || (icon != null && !icon.isBlank())) {
+                    toasts.add(new ToastReward(title, description, icon));
+                }
+            }
+        }
+
         if (obj.has("exp") && obj.get("exp").isJsonPrimitive()) {
             expType = obj.get("exp").getAsString();
         }
@@ -1174,7 +1252,7 @@ public final class QuestData {
             expAmount = obj.getAsJsonPrimitive("count").getAsInt();
         }
 
-        return new Rewards(items, commands, functions, lootTables, expType, expAmount);
+        return new Rewards(items, commands, functions, lootTables, advancements, toasts, expType, expAmount);
     }
 
     private static Completion parseCompletion(JsonElement el, String type) {
@@ -1258,12 +1336,6 @@ public final class QuestData {
                 out.add(new Target("advancement", optString(obj, "advancement"), 1));
                 return new Completion(out);
             }
-            if (obj.has("stat")) {
-                out.add(new Target("stat", optString(obj, "stat"),
-                        obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
-                                ? obj.getAsJsonPrimitive("count").getAsInt() : 1));
-                return new Completion(out);
-            }
             if (obj.has("observe")) {
                 out.add(new Target("observe", optString(obj, "observe"), 1));
                 return new Completion(out);
@@ -1280,6 +1352,10 @@ public final class QuestData {
             }
             if (obj.has("dimension")) {
                 out.add(new Target("dimension", optString(obj, "dimension"), 1));
+                return new Completion(out);
+            }
+            if (obj.has("structure")) {
+                out.add(new Target("structure", optString(obj, "structure"), 1));
                 return new Completion(out);
             }
             if (obj.has("xp")) {
@@ -1336,13 +1412,6 @@ public final class QuestData {
             return;
         }
 
-        if (o.has("stat")) {
-            String st = o.get("stat").getAsString();
-            int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            out.add(new Target("stat", st, count));
-            return;
-        }
-
         if (o.has("observe")) {
             out.add(new Target("observe", o.get("observe").getAsString(), 1));
             return;
@@ -1362,6 +1431,11 @@ public final class QuestData {
 
         if (o.has("dimension")) {
             out.add(new Target("dimension", o.get("dimension").getAsString(), 1));
+            return;
+        }
+
+        if (o.has("structure")) {
+            out.add(new Target("structure", o.get("structure").getAsString(), 1));
             return;
         }
 
@@ -1436,13 +1510,6 @@ public final class QuestData {
             return;
         }
 
-        if (o.has("stat")) {
-            String stat = optString(o, "stat");
-            int count = o.has("count") ? o.get("count").getAsInt() : 1;
-            if (stat != null && !stat.isBlank()) out.add(new Target("stat", stat, count));
-            return;
-        }
-
         if (o.has("observe")) {
             String observe = optString(o, "observe");
             if (observe != null && !observe.isBlank()) out.add(new Target("observe", observe, 1));
@@ -1465,6 +1532,12 @@ public final class QuestData {
         if (o.has("dimension")) {
             String dimension = optString(o, "dimension");
             if (dimension != null && !dimension.isBlank()) out.add(new Target("dimension", dimension, 1));
+            return;
+        }
+
+        if (o.has("structure")) {
+            String structure = optString(o, "structure");
+            if (structure != null && !structure.isBlank()) out.add(new Target("structure", structure, 1));
             return;
         }
 
@@ -1620,7 +1693,7 @@ public final class QuestData {
                             parseBoolFlexible(o, "lockAfterDependency", false));
                     boolean hiddenUnderDependency = parseBoolFlexible(o, "hiddenUnderDependency", false);
 
-                    Rewards rewards = new Rewards(List.of(), List.of(), List.of(), List.of(), "", 0);
+                    Rewards rewards = new Rewards(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), "", 0);
                     if (o.has("rewards") && o.get("rewards").isJsonObject()) {
                         JsonObject ro = o.getAsJsonObject("rewards");
 
@@ -1689,11 +1762,40 @@ public final class QuestData {
                             }
                         }
 
+                        List<AdvancementReward> advancements = new ArrayList<>();
+                        if (ro.has("advancements") && ro.get("advancements").isJsonArray()) {
+                            for (JsonElement ae : ro.getAsJsonArray("advancements")) {
+                                if (ae == null) continue;
+                                if (ae.isJsonPrimitive()) {
+                                    String advancement = ae.getAsString();
+                                    if (advancement != null && !advancement.isBlank()) advancements.add(new AdvancementReward(advancement));
+                                    continue;
+                                }
+                                if (!ae.isJsonObject()) continue;
+                                String advancement = optString(ae.getAsJsonObject(), "advancement");
+                                if (advancement != null && !advancement.isBlank()) advancements.add(new AdvancementReward(advancement));
+                            }
+                        }
+
+                        List<ToastReward> toasts = new ArrayList<>();
+                        if (ro.has("toasts") && ro.get("toasts").isJsonArray()) {
+                            for (JsonElement te : ro.getAsJsonArray("toasts")) {
+                                if (!te.isJsonObject()) continue;
+                                JsonObject toast = te.getAsJsonObject();
+                                String title = optString(toast, "title");
+                                String description = optString(toast, "description");
+                                String icon = optString(toast, "icon");
+                                if ((title != null && !title.isBlank()) || (description != null && !description.isBlank()) || (icon != null && !icon.isBlank())) {
+                                    toasts.add(new ToastReward(title, description, icon));
+                                }
+                            }
+                        }
+
                         String expType = optString(ro, "expType");
                         int expAmount = ro.has("expAmount") && ro.get("expAmount").isJsonPrimitive() && ro.getAsJsonPrimitive("expAmount").isNumber()
                                 ? ro.getAsJsonPrimitive("expAmount").getAsInt() : 0;
 
-                        rewards = new Rewards(rItems, cmds, fns, lootTables, expType, expAmount);
+                        rewards = new Rewards(rItems, cmds, fns, lootTables, advancements, toasts, expType, expAmount);
                     }
 
                     String type = optString(o, "type");

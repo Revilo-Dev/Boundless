@@ -102,12 +102,13 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiHideHeaderRow;
     private ConfigRow uiFilterDisplayRow;
     private ConfigRow uiDisableCategoriesRow;
-    private ConfigRow uiQuestPackTypeRow;
     private ConfigRow uiHideQuestWidgetIconsRow;
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
     private ConfigRow uiEnableSearchBoxRow;
     private ConfigRow uiEnableDescriptionColorsRow;
+    private ConfigRow uiQuestWidgetTextColorRow;
+    private ConfigRow uiDescriptionTextColorRow;
     private ConfigRow uiEnableDescriptionReadMoreRow;
     private ConfigRow uiEnableDescriptionWrappingRow;
     private ConfigRow uiDescriptionAlignmentRow;
@@ -138,12 +139,13 @@ public final class QuestSettingsScreen extends Screen {
     private int uiHideHeaderBaseY;
     private int uiFilterDisplayBaseY;
     private int uiDisableCategoriesBaseY;
-    private int uiQuestPackTypeBaseY;
     private int uiHideQuestWidgetIconsBaseY;
     private int uiQuestTextScaleBaseY;
     private int uiQuestIconScaleBaseY;
     private int uiEnableSearchBoxBaseY;
     private int uiEnableDescriptionColorsBaseY;
+    private int uiQuestWidgetTextColorBaseY;
+    private int uiDescriptionTextColorBaseY;
     private int uiEnableDescriptionReadMoreBaseY;
     private int uiEnableDescriptionWrappingBaseY;
     private int uiDescriptionAlignmentBaseY;
@@ -161,12 +163,13 @@ public final class QuestSettingsScreen extends Screen {
     private boolean hideCategoryHeader;
     private String filterDisplayMode;
     private boolean disableCategories;
-    private String questPackDisplayType;
     private boolean hideQuestWidgetIcons;
     private double questTextScale;
     private double questIconScale;
     private boolean enableQuestSearchBox;
     private boolean enableDescriptionColors;
+    private String questWidgetTextColor;
+    private String descriptionTextColor;
     private boolean enableDescriptionReadMore;
     private boolean enableDescriptionTextWrapping;
     private String descriptionTextAlignment;
@@ -230,17 +233,18 @@ public final class QuestSettingsScreen extends Screen {
         uiHideHeaderBaseY = uiRow1 + rowGap * 4;
         uiFilterDisplayBaseY = uiRow1 + rowGap * 5;
         uiDisableCategoriesBaseY = uiRow1 + rowGap * 6;
-        uiQuestPackTypeBaseY = uiRow1 + rowGap * 7;
-        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 8;
-        uiQuestTextScaleBaseY = uiRow1 + rowGap * 9;
-        uiQuestIconScaleBaseY = uiRow1 + rowGap * 10;
-        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 11;
-        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 12;
-        uiEnableDescriptionReadMoreBaseY = uiRow1 + rowGap * 13;
-        uiEnableDescriptionWrappingBaseY = uiRow1 + rowGap * 14;
-        uiDescriptionAlignmentBaseY = uiRow1 + rowGap * 15;
-        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 16;
-        functionalityHeaderBaseY = uiRow1 + rowGap * 17 + 4;
+        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 7;
+        uiQuestTextScaleBaseY = uiRow1 + rowGap * 8;
+        uiQuestIconScaleBaseY = uiRow1 + rowGap * 9;
+        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 10;
+        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 11;
+        uiQuestWidgetTextColorBaseY = uiRow1 + rowGap * 12;
+        uiDescriptionTextColorBaseY = uiRow1 + rowGap * 13;
+        uiEnableDescriptionReadMoreBaseY = uiRow1 + rowGap * 14;
+        uiEnableDescriptionWrappingBaseY = uiRow1 + rowGap * 15;
+        uiDescriptionAlignmentBaseY = uiRow1 + rowGap * 16;
+        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 17;
+        functionalityHeaderBaseY = uiRow1 + rowGap * 18 + 4;
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
         functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
@@ -278,10 +282,6 @@ public final class QuestSettingsScreen extends Screen {
                 "Disable category tabs and category-based filtering.",
                 () -> disableCategories ? "Disabled" : "Enabled",
                 () -> disableCategories = !disableCategories);
-        uiQuestPackTypeRow = new ConfigRow(px, uiQuestPackTypeBaseY, pw, "Questpack Type",
-                "Choose how questpacks are presented. Quest Tree is a teaser only for now and is not yet available.",
-                this::formatQuestPackDisplayType,
-                this::cycleQuestPackDisplayType);
         uiHideQuestWidgetIconsRow = new ConfigRow(px, uiHideQuestWidgetIconsBaseY, pw, "Disable Widget Icons",
                 "Hide icons in quest list widgets.",
                 () -> hideQuestWidgetIcons ? "On" : "Off",
@@ -302,6 +302,14 @@ public final class QuestSettingsScreen extends Screen {
                 "Allow formated text to color quest descriptions.",
                 () -> enableDescriptionColors ? "On" : "Off",
                 () -> enableDescriptionColors = !enableDescriptionColors);
+        uiQuestWidgetTextColorRow = new ConfigRow(px, uiQuestWidgetTextColorBaseY, pw, "Widget Text Color",
+                "Change the color of text for texturepacks.",
+                this::formatQuestWidgetTextColor,
+                this::cycleQuestWidgetTextColor);
+        uiDescriptionTextColorRow = new ConfigRow(px, uiDescriptionTextColorBaseY, pw, "Description Color",
+                "Change the default color of quest description text.",
+                this::formatDescriptionTextColor,
+                this::cycleDescriptionTextColor);
         uiEnableDescriptionReadMoreRow = new ConfigRow(px, uiEnableDescriptionReadMoreBaseY, pw, "Read More",
                 "Collapse long quest descriptions behind a read-more toggle.",
                 () -> enableDescriptionReadMore ? "On" : "Off",
@@ -348,6 +356,8 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiQuestTextScaleRow, ConfigTab.STYLE);
         addConfigRow(uiQuestIconScaleRow, ConfigTab.STYLE);
         addConfigRow(uiEnableDescriptionColorsRow, ConfigTab.STYLE);
+        addConfigRow(uiQuestWidgetTextColorRow, ConfigTab.STYLE);
+        addConfigRow(uiDescriptionTextColorRow, ConfigTab.STYLE);
         addConfigRow(uiEnableDescriptionReadMoreRow, ConfigTab.STYLE);
         addConfigRow(uiEnableDescriptionWrappingRow, ConfigTab.STYLE);
         addConfigRow(uiDescriptionAlignmentRow, ConfigTab.STYLE);
@@ -359,7 +369,6 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiCenterInventoryWithPanelRow, ConfigTab.UI);
         addConfigRow(uiFilterDisplayRow, ConfigTab.UI);
         addConfigRow(uiDisableCategoriesRow, ConfigTab.UI);
-        addConfigRow(uiQuestPackTypeRow, ConfigTab.UI);
         addConfigRow(uiEnableSearchBoxRow, ConfigTab.UI);
 
         addConfigRow(uiEnableQuestToastsRow, ConfigTab.FEATURES);
@@ -444,8 +453,6 @@ public final class QuestSettingsScreen extends Screen {
         uiFilterDisplayRow.active = config;
         uiDisableCategoriesRow.visible = config;
         uiDisableCategoriesRow.active = config;
-        uiQuestPackTypeRow.visible = config;
-        uiQuestPackTypeRow.active = config;
         uiHideQuestWidgetIconsRow.visible = config;
         uiHideQuestWidgetIconsRow.active = config;
         uiQuestTextScaleRow.visible = config;
@@ -456,6 +463,10 @@ public final class QuestSettingsScreen extends Screen {
         uiEnableSearchBoxRow.active = config;
         uiEnableDescriptionColorsRow.visible = config;
         uiEnableDescriptionColorsRow.active = config;
+        uiQuestWidgetTextColorRow.visible = config;
+        uiQuestWidgetTextColorRow.active = config;
+        uiDescriptionTextColorRow.visible = config;
+        uiDescriptionTextColorRow.active = config;
         uiEnableDescriptionReadMoreRow.visible = config;
         uiEnableDescriptionReadMoreRow.active = config;
         uiEnableDescriptionWrappingRow.visible = config;
@@ -502,12 +513,13 @@ public final class QuestSettingsScreen extends Screen {
         hideCategoryHeader = Config.hideCategoryHeader();
         filterDisplayMode = Config.filterDisplayMode();
         disableCategories = Config.disableCategories();
-        questPackDisplayType = normalizeQuestPackDisplayType(Config.questPackDisplayType());
         hideQuestWidgetIcons = Config.hideQuestWidgetIcons();
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
         enableQuestSearchBox = Config.enableQuestSearchBox();
         enableDescriptionColors = Config.enableDescriptionColors();
+        questWidgetTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor());
+        descriptionTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor());
         enableDescriptionReadMore = Config.enableDescriptionReadMore();
         enableDescriptionTextWrapping = Config.enableDescriptionTextWrapping();
         descriptionTextAlignment = normalizeDescriptionTextAlignment(Config.descriptionTextAlignment());
@@ -541,19 +553,6 @@ public final class QuestSettingsScreen extends Screen {
         };
     }
 
-    private void cycleQuestPackDisplayType() {
-        questPackDisplayType = "default_list".equals(questPackDisplayType)
-                ? "quest_tree_coming_soon"
-                : "default_list";
-    }
-
-    private String formatQuestPackDisplayType() {
-        return switch (normalizeQuestPackDisplayType(questPackDisplayType)) {
-            case "quest_tree_coming_soon" -> "Quest Tree (Coming Soon)";
-            default -> "Default List";
-        };
-    }
-
     private void cycleQuestBookInventoryButtonPosition() {
         questBookInventoryButtonPosition = "above_offhand_slot".equals(questBookInventoryButtonPosition)
                 ? "beside_recipe_book"
@@ -582,6 +581,22 @@ public final class QuestSettingsScreen extends Screen {
 
     private String formatQuestIconScale() {
         return String.format(java.util.Locale.ROOT, "%.1fx", Math.max(0.5D, Math.min(1.0D, questIconScale)));
+    }
+
+    private void cycleQuestWidgetTextColor() {
+        questWidgetTextColor = nextThemeColor(questWidgetTextColor, "FFFFFF");
+    }
+
+    private String formatQuestWidgetTextColor() {
+        return "#" + normalizeThemeColor(questWidgetTextColor, "FFFFFF");
+    }
+
+    private void cycleDescriptionTextColor() {
+        descriptionTextColor = nextThemeColor(descriptionTextColor, "CFCFCF");
+    }
+
+    private String formatDescriptionTextColor() {
+        return "#" + normalizeThemeColor(descriptionTextColor, "CFCFCF");
     }
 
     private void cycleDescriptionTextAlignment() {
@@ -618,12 +633,13 @@ public final class QuestSettingsScreen extends Screen {
         Config.HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
         Config.FILTER_DISPLAY_MODE.set(filterDisplayMode);
         Config.DISABLE_CATEGORIES.set(disableCategories);
-        Config.QUEST_PACK_DISPLAY_TYPE.set(normalizeQuestPackDisplayType(questPackDisplayType));
         Config.HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
+        Config.QUEST_WIDGET_TEXT_COLOR.set(normalizeThemeColor(questWidgetTextColor, "FFFFFF"));
+        Config.DESCRIPTION_TEXT_COLOR.set(normalizeThemeColor(descriptionTextColor, "CFCFCF"));
         Config.ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
         Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
         Config.DESCRIPTION_TEXT_ALIGNMENT.set(normalizeDescriptionTextAlignment(descriptionTextAlignment));
@@ -656,6 +672,8 @@ public final class QuestSettingsScreen extends Screen {
                     questIconScale,
                     enableQuestSearchBox,
                     enableDescriptionColors,
+                    normalizeThemeColor(questWidgetTextColor, "FFFFFF"),
+                    normalizeThemeColor(descriptionTextColor, "CFCFCF"),
                     enableDescriptionReadMore,
                     enableDescriptionTextWrapping,
                     normalizeDescriptionTextAlignment(descriptionTextAlignment),
@@ -685,7 +703,6 @@ public final class QuestSettingsScreen extends Screen {
             centerInventoryWithQuestPanel = true;
             filterDisplayMode = "tabs";
             disableCategories = false;
-            questPackDisplayType = "default_list";
             enableQuestSearchBox = false;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.STYLE) {
@@ -693,6 +710,8 @@ public final class QuestSettingsScreen extends Screen {
             questTextScale = 1.0D;
             questIconScale = 1.0D;
             enableDescriptionColors = true;
+            questWidgetTextColor = "FFFFFF";
+            descriptionTextColor = "CFCFCF";
             enableDescriptionReadMore = true;
             enableDescriptionTextWrapping = true;
             descriptionTextAlignment = "left";
@@ -730,7 +749,7 @@ public final class QuestSettingsScreen extends Screen {
                 false,
                 false,
                 false,
-                new QuestData.Rewards(List.of(), List.of(), List.of(), List.of(), "", 0),
+                new QuestData.Rewards(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), "", 0),
                 "all",
                 null,
                 "",
@@ -753,20 +772,26 @@ public final class QuestSettingsScreen extends Screen {
                 : "beside_recipe_book";
     }
 
-    private String normalizeQuestPackDisplayType(String raw) {
-        if (raw == null) return "default_list";
-        String lower = raw.trim().toLowerCase();
-        return ("default_list".equals(lower) || "quest_tree_coming_soon".equals(lower))
-                ? lower
-                : "default_list";
-    }
-
     private String normalizeDescriptionTextAlignment(String raw) {
         if (raw == null) return "left";
         String lower = raw.trim().toLowerCase();
         return ("left".equals(lower) || "center".equals(lower) || "right".equals(lower) || "adjust".equals(lower))
                 ? lower
                 : "left";
+    }
+
+    private String normalizeThemeColor(String raw, String fallback) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.startsWith("#")) value = value.substring(1);
+        value = value.toUpperCase(java.util.Locale.ROOT);
+        return value.matches("[0-9A-F]{6}") ? value : fallback;
+    }
+
+    private String nextThemeColor(String current, String fallback) {
+        List<String> palette = List.of("FFFFFF", "CFCFCF", "FFD166", "55CCFF", "A8FFA8", "FFAA55");
+        String normalized = normalizeThemeColor(current, fallback);
+        int index = palette.indexOf(normalized);
+        return palette.get(index < 0 ? 0 : (index + 1) % palette.size());
     }
 
     @Override

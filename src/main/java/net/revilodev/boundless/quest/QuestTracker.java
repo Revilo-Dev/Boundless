@@ -75,6 +75,8 @@ public final class QuestTracker {
     private static final Map<String, ResourceLocation> RL_CACHE = new HashMap<>();
     private static final Map<String, Optional<Item>> ITEM_BY_ID_CACHE = new HashMap<>();
     private static final Map<String, Holder<MobEffect>> EFFECT_BY_ID_CACHE = new HashMap<>();
+    private static final Map<UUID, Integer> SERVER_QUEST_SCAN_CURSOR = new HashMap<>();
+    private static final int SERVER_QUEST_SCAN_BATCH = 32;
 
     private static boolean SERVER_TOASTS_DISABLED = false;
     private static String ACTIVE_KEY = null;
@@ -650,9 +652,18 @@ public final class QuestTracker {
 
     public static boolean refreshPersistentContextTargets(ServerPlayer player, boolean observe, boolean biome, boolean dimension) {
         if (player == null) return false;
+        return refreshPersistentContextTargets(player, new ArrayList<>(QuestData.allServer(player.server)), 0, Integer.MAX_VALUE, observe, biome, dimension);
+    }
+
+    private static boolean refreshPersistentContextTargets(ServerPlayer player, List<QuestData.Quest> quests, int start, int limit, boolean observe, boolean biome, boolean dimension) {
+        if (player == null) return false;
+        if (quests == null || quests.isEmpty() || limit <= 0) return false;
 
         boolean changed = false;
-        for (QuestData.Quest quest : QuestData.allServer(player.server)) {
+        int total = quests.size();
+        int batch = Math.min(total, Math.max(0, limit));
+        for (int processed = 0; processed < batch; processed++) {
+            QuestData.Quest quest = quests.get((start + processed) % total);
             if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
             if (Config.disabledCategories().contains(quest.category)) continue;
 
@@ -1262,6 +1273,7 @@ public final class QuestTracker {
         if (player instanceof ServerPlayer sp) {
             QuestProgressState.get(sp.serverLevel()).clear(sp.getUUID());
             QuestObjectiveState.get(sp.serverLevel()).clearPlayer(sp.getUUID());
+            SERVER_QUEST_SCAN_CURSOR.remove(sp.getUUID());
             BoundlessNetwork.syncPlayer(sp);
             CLIENT_EFFECT_PROGRESS.clear();
             if (FMLEnvironment.dist == Dist.CLIENT) clientClearAll();
@@ -1408,10 +1420,21 @@ public final class QuestTracker {
 
     public static void serverTickPlayer(ServerPlayer sp) {
         if (sp == null) return;
+        List<QuestData.Quest> quests = new ArrayList<>(QuestData.allServer(sp.server));
+        int total = quests.size();
+        if (total <= 0) {
+            SERVER_QUEST_SCAN_CURSOR.remove(sp.getUUID());
+            if (sp.tickCount % 20 == 0) {
+                BoundlessNetwork.sendObjectiveProgress(sp);
+            }
+            return;
+        }
 
-        refreshPersistentContextTargets(sp);
-
-        for (QuestData.Quest q : QuestData.allServer(sp.server)) {
+        int start = Math.floorMod(SERVER_QUEST_SCAN_CURSOR.getOrDefault(sp.getUUID(), 0), total);
+        int batch = Math.min(total, SERVER_QUEST_SCAN_BATCH);
+        refreshPersistentContextTargets(sp, quests, start, batch, true, true, true);
+        for (int processed = 0; processed < batch; processed++) {
+            QuestData.Quest q = quests.get((start + processed) % total);
             if (q == null) continue;
             if (Config.disabledCategories().contains(q.category)) continue;
 
@@ -1438,6 +1461,7 @@ public final class QuestTracker {
                 BoundlessNetwork.sendStatus(sp, q.id, Status.INCOMPLETE.name());
             }
         }
+        SERVER_QUEST_SCAN_CURSOR.put(sp.getUUID(), (start + batch) % total);
 
         if (sp.tickCount % 20 == 0) {
             BoundlessNetwork.sendObjectiveProgress(sp);

@@ -101,27 +101,6 @@ public final class BoundlessCommands {
                                                 ctx.getSource(),
                                                 EntityArgument.getPlayers(ctx, "targets"),
                                                 StringArgumentType.getString(ctx, "id"))))))
-                .then(Commands.literal("toasts")
-                        .then(Commands.literal("enable")
-                                .executes(ctx -> {
-                                    QuestTracker.setServerToastsDisabled(false);
-                                    ctx.getSource().sendSuccess(() -> Component.literal("Quest Toasts Enabled"), true);
-                                    return 1;
-                                }))
-                        .then(Commands.literal("disable")
-                                .executes(ctx -> {
-                                    QuestTracker.setServerToastsDisabled(true);
-                                    ctx.getSource().sendSuccess(() -> Component.literal("Quest Toasts Disabled"), true);
-                                    return 1;
-                                }))
-                        .then(Commands.literal("status")
-                                .executes(ctx -> {
-                                    boolean disabled = QuestTracker.serverToastsDisabled();
-                                    ctx.getSource().sendSuccess(
-                                            () -> Component.literal("Quest Toasts Are Currently: " + (disabled ? "Disabled" : "Enabled")),
-                                            false);
-                                    return 1;
-                                })))
                 .then(Commands.literal("questpack")
                         .then(Commands.literal("enable")
                                 .then(Commands.argument("id", StringArgumentType.word())

@@ -119,6 +119,10 @@ public final class QuestListWidget extends AbstractWidget {
         return useConfigScaling ? Config.questIconScale() : 1.0f;
     }
 
+    private int configuredWidgetTextColor() {
+        return useConfigScaling ? Config.questWidgetTextColor() : 0xFFFFFF;
+    }
+
     private static final class RowEntry {
         final QuestData.SubCategory subCategory;
         final QuestData.Quest quest;
@@ -373,6 +377,7 @@ public final class QuestListWidget extends AbstractWidget {
 
         List<RowEntry> rows = rowsForCurrentState();
         boolean hideIcons = Config.hideQuestWidgetIcons();
+        int widgetTextColor = configuredWidgetTextColor();
         for (RowEntry row : rows) {
             int h = row.isHeader() ? subHeaderH : rowH;
             int top = yCursor;
@@ -418,8 +423,8 @@ public final class QuestListWidget extends AbstractWidget {
                     name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - mc.font.width("..."))) + "...";
                 }
 
-                drawScaledString(gg, name, textScale, textX, textY, 0xFFFFFF);
-                drawScaledString(gg, sym, textScale, symX, textY, 0xFFFFFF);
+                drawScaledString(gg, name, textScale, textX, textY, widgetTextColor);
+                drawScaledString(gg, sym, textScale, symX, textY, widgetTextColor);
             } else {
                 QuestData.Quest q = row.quest;
                 if (q != null && q.id != null && q.id.startsWith("settings_spacer_")) {
@@ -465,7 +470,7 @@ public final class QuestListWidget extends AbstractWidget {
                 int textH = Math.round(mc.font.lineHeight * textScale);
                 int textY = top + (h - textH) / 2 + 1;
                 drawScaledString(gg, name, textScale, textX, textY,
-                        deps ? 0xFFFFFF : 0xA0A0A0);
+                        deps ? widgetTextColor : 0xA0A0A0);
             }
 
             yCursor += rowHeight(row);

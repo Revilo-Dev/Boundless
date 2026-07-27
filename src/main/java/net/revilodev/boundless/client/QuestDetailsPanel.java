@@ -144,7 +144,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
             }
         }
-        if (target.isBiome() || target.isDimension()) {
+        if (target.isBiome() || target.isDimension() || target.isStructure()) {
             ResourceLocation rl = safeParse(target.id);
             if (rl != null) return rl.getPath();
         }
@@ -298,11 +298,13 @@ public final class QuestDetailsPanel extends AbstractWidget {
         final List<StyledDescriptionChar> chars;
         final int width;
         final boolean justify;
+        final boolean continuation;
 
-        DescriptionLine(List<StyledDescriptionChar> chars, int width, boolean justify) {
+        DescriptionLine(List<StyledDescriptionChar> chars, int width, boolean justify, boolean continuation) {
             this.chars = chars;
             this.width = width;
             this.justify = justify;
+            this.continuation = continuation;
         }
 
         int spaceCount() {
@@ -319,6 +321,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 out.append(ch.value);
             }
             return out.toString();
+        }
+    }
+
+    private static final class DescriptionWordWrapResult {
+        final List<StyledDescriptionChar> line;
+        final List<StyledDescriptionChar> remainder;
+
+        DescriptionWordWrapResult(List<StyledDescriptionChar> line, List<StyledDescriptionChar> remainder) {
+            this.line = line;
+            this.remainder = remainder;
         }
     }
 
@@ -438,7 +450,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 shown = full.substring(0, cut) + "...";
             }
 
-            int wrapHeight = drawFormattedDescription(gg, shown, x + 4, curY[0], w - 8, 0xCFCFCF);
+            int wrapHeight = drawFormattedDescription(gg, shown, x + 4, curY[0], w - 8, Config.descriptionTextColor());
             addDescriptionItemRegions(shown, x + 4, curY[0], w - 8);
 
             if (needsMore) {
@@ -756,20 +768,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     }
 
                     curY[0] += scaledRowHeight();
-                } else if (t.isStat()) {
-                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.stat"), x + 4, curY[0], 0x1d9633);
-                    curY[0] += scaledLineHeight() + 2;
-
-                    int have = QuestTracker.getStatCount(mc.player, t.id);
-                    int color = have >= t.count ? 0x55FF55 : 0xFF5555;
-
-                    ItemStack icon = new ItemStack(Items.PAPER);
-                    renderScaledItem(gg, icon, x + 4, curY[0]);
-                    drawScaledString(gg, have + "/" + t.count, x + 24, curY[0] + 4, color);
-                    if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
-                        hoveredTooltips.add(Component.literal(t.id));
-                    }
-                    curY[0] += scaledRowHeight();
                 } else if (t.isObserve()) {
                     drawScaledString(gg, Component.literal("Observe:"), x + 4, curY[0], 0xB46CFF);
                     curY[0] += scaledLineHeight() + 2;
@@ -806,6 +804,18 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         hoveredTooltips.add(Component.literal(t.id));
                     }
                     curY[0] += scaledRowHeight();
+                } else if (t.isStructure()) {
+                    drawScaledString(gg, Component.literal("Structure:"), x + 4, curY[0], 0xFFD166);
+                    curY[0] += scaledLineHeight() + 2;
+                    boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
+                    int color = done ? 0x55FF55 : 0xFF5555;
+                    renderScaledItem(gg, new ItemStack(Items.MAP), x + 4, curY[0]);
+                    String structureName = objectiveDisplayName(t);
+                    drawScaledString(gg, structureName, x + 24, curY[0] + 4, color);
+                    if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
+                        hoveredTooltips.add(Component.literal(t.id));
+                    }
+                    curY[0] += scaledRowHeight();
                 }
             }
 
@@ -817,9 +827,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean hasCommandRewards = quest.rewards != null && quest.rewards.hasCommands() && quest.rewards.commands.size() > lootCommandCount;
         boolean hasFunctionRewards = quest.rewards != null && quest.rewards.hasFunctions();
         boolean hasLootTableRewards = (quest.rewards != null && quest.rewards.hasLootTables()) || lootCommandCount > 0;
+        boolean hasAdvancementRewards = quest.rewards != null && quest.rewards.hasAdvancements();
+        boolean hasToastRewards = quest.rewards != null && quest.rewards.hasToasts();
         boolean hasExpReward = quest.rewards != null && quest.rewards.hasExp();
 
-        boolean hasAnyReward = hasItemRewards || hasCommandRewards || hasFunctionRewards || hasLootTableRewards || hasExpReward;
+        boolean hasAnyReward = hasItemRewards || hasCommandRewards || hasFunctionRewards || hasLootTableRewards || hasAdvancementRewards || hasToastRewards || hasExpReward;
         for (ItemClickRegion region : itemRegions) {
             if (!region.customTooltip && region.contains(mouseX, mouseY) && region.stack != null && !region.stack.isEmpty()) {
                 hoveredTooltips.add(region.stack.getHoverName());
@@ -955,6 +967,37 @@ public final class QuestDetailsPanel extends AbstractWidget {
             }
         }
 
+        if (hasAdvancementRewards) {
+            for (QuestData.AdvancementReward ar : quest.rewards.advancements) {
+                if (ar == null || ar.advancement == null || ar.advancement.isBlank()) continue;
+                int lineY = curY[0];
+                Component displayComponent = Component.literal(ar.advancement);
+                renderScaledItem(gg, new ItemStack(Items.MOJANG_BANNER_PATTERN), x + 4, lineY);
+                drawScaledWordWrap(gg, displayComponent, x + 24, lineY + 4, w - 30, 0xA8FFA8);
+                if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
+                    hoveredTooltips.add(displayComponent);
+                }
+                curY[0] += Math.max(scaledRowHeight(), scaledWrappedHeight(displayComponent, w - 30) + 8);
+            }
+        }
+
+        if (hasToastRewards) {
+            for (QuestData.ToastReward tr : quest.rewards.toasts) {
+                if (tr == null) continue;
+                int lineY = curY[0];
+                Item iconItem = (tr.icon == null || tr.icon.isBlank()) ? Items.PAPER : resolveItem(tr.icon);
+                if (iconItem == null) iconItem = Items.PAPER;
+                String display = (tr.title == null ? "" : tr.title) + ((tr.description == null || tr.description.isBlank()) ? "" : " - " + tr.description);
+                Component displayComponent = Component.literal(display.trim());
+                renderScaledItem(gg, new ItemStack(iconItem), x + 4, lineY);
+                drawScaledWordWrap(gg, displayComponent, x + 24, lineY + 4, w - 30, 0xA8FFA8);
+                if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= lineY && mouseY <= lineY + 16) {
+                    hoveredTooltips.add(displayComponent);
+                }
+                curY[0] += Math.max(scaledRowHeight(), scaledWrappedHeight(displayComponent, w - 30) + 8);
+            }
+        }
+
         if (hasExpReward) {
             int lineY = curY[0];
             renderScaledItem(gg, new ItemStack(Items.EXPERIENCE_BOTTLE), x + 4, lineY);
@@ -1031,7 +1074,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 shown = full.substring(0, cut) + "...";
             }
 
-            int wrapH = formattedDescriptionHeight(shown, w - 8, 0xCFCFCF);
+            int wrapH = formattedDescriptionHeight(shown, w - 8, Config.descriptionTextColor());
             if (needsMore) y += wrapH + scaledLineHeight() + 6;
             else y += wrapH + 8;
         }
@@ -1068,8 +1111,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         y += scaledLineHeight() + 2;
                         printedKillHeader = true;
                     }
-                } else if (target.isEffect() || target.isAdvancement() || target.isStat()
-                        || target.isObserve() || target.isBiome() || target.isDimension()) {
+                } else if (target.isEffect() || target.isAdvancement()
+                        || target.isObserve() || target.isBiome() || target.isDimension() || target.isStructure()) {
                     y += scaledLineHeight() + 2;
                 }
 
@@ -1091,9 +1134,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean hasCommandRewards = quest.rewards != null && quest.rewards.hasCommands() && quest.rewards.commands.size() > lootCommandCount;
         boolean hasFunctionRewards = quest.rewards != null && quest.rewards.hasFunctions();
         boolean hasLootTableRewards = (quest.rewards != null && quest.rewards.hasLootTables()) || lootCommandCount > 0;
+        boolean hasAdvancementRewards = quest.rewards != null && quest.rewards.hasAdvancements();
+        boolean hasToastRewards = quest.rewards != null && quest.rewards.hasToasts();
         boolean hasExpReward = quest.rewards != null && quest.rewards.hasExp();
 
-        if (hasItemRewards || hasCommandRewards || hasFunctionRewards || hasLootTableRewards || hasExpReward) {
+        if (hasItemRewards || hasCommandRewards || hasFunctionRewards || hasLootTableRewards || hasAdvancementRewards || hasToastRewards || hasExpReward) {
             y += scaledWrappedHeight(Component.translatable("ui.boundless.questbook.reward"), w - 8) + 4;
             if (hasItemRewards) y += quest.rewards.items.size() * scaledRowHeight();
             if (hasCommandRewards) {
@@ -1123,6 +1168,17 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     String pretty = (lr.title != null && !lr.title.isBlank()) ? lr.title : prettyLootTableName(lr.lootTable);
                     String display = Component.translatable("ui.boundless.questbook.loot_table", pretty).getString();
                     y += Math.max(scaledRowHeight(), scaledWrappedHeight(Component.literal(display), w - 30) + 8);
+                }
+            }
+            if (hasAdvancementRewards) {
+                for (QuestData.AdvancementReward ar : quest.rewards.advancements) {
+                    y += Math.max(scaledRowHeight(), scaledWrappedHeight(Component.literal(ar.advancement), w - 30) + 8);
+                }
+            }
+            if (hasToastRewards) {
+                for (QuestData.ToastReward tr : quest.rewards.toasts) {
+                    String display = (tr.title == null ? "" : tr.title) + ((tr.description == null || tr.description.isBlank()) ? "" : " - " + tr.description);
+                    y += Math.max(scaledRowHeight(), scaledWrappedHeight(Component.literal(display.trim()), w - 30) + 8);
                 }
             }
             if (hasExpReward) y += scaledRowHeight();
@@ -1255,23 +1311,81 @@ public final class QuestDetailsPanel extends AbstractWidget {
         int lineWidth = 0;
         for (StyledDescriptionChar ch : chars) {
             if (ch.value == '\n') {
-                lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, false));
+                lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, false, false));
                 line = new ArrayList<>();
                 lineWidth = 0;
                 continue;
             }
             int charWidth = mc.font.width(String.valueOf(ch.value));
             if (wrap && !line.isEmpty() && lineWidth + charWidth > wrapWidth) {
-                lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, true));
+                DescriptionWordWrapResult result = wrapDescriptionLineAtWord(line, wrapWidth);
+                lines.add(new DescriptionLine(result.line, descriptionLineWidth(result.line), !result.remainder.isEmpty(), false));
+                line = new ArrayList<>(result.remainder);
+                lineWidth = descriptionLineWidth(line);
+                if (ch.value == ' ' && line.isEmpty()) continue;
+            } else if (!wrap && !line.isEmpty() && lineWidth + charWidth > wrapWidth) {
+                List<StyledDescriptionChar> clipped = clipDescriptionLineWithHyphen(line, wrapWidth);
+                lines.add(new DescriptionLine(clipped, descriptionLineWidth(clipped), false, true));
                 line = new ArrayList<>();
                 lineWidth = 0;
-                if (ch.value == ' ') continue;
             }
             line.add(ch);
             lineWidth += charWidth;
         }
-        if (!line.isEmpty() || lines.isEmpty()) lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, false));
+        if (!line.isEmpty() || lines.isEmpty()) lines.add(new DescriptionLine(new ArrayList<>(line), lineWidth, false, false));
         return lines;
+    }
+
+    private DescriptionWordWrapResult wrapDescriptionLineAtWord(List<StyledDescriptionChar> line, int wrapWidth) {
+        int split = -1;
+        for (int i = line.size() - 1; i >= 0; i--) {
+            if (line.get(i).value == ' ') {
+                split = i;
+                break;
+            }
+        }
+        if (split < 0) {
+            return new DescriptionWordWrapResult(new ArrayList<>(line), List.of());
+        }
+        List<StyledDescriptionChar> head = new ArrayList<>(line.subList(0, split));
+        while (!head.isEmpty() && head.get(head.size() - 1).value == ' ') {
+            head.remove(head.size() - 1);
+        }
+        List<StyledDescriptionChar> tail = new ArrayList<>(line.subList(split + 1, line.size()));
+        while (!tail.isEmpty() && tail.get(0).value == ' ') {
+            tail.remove(0);
+        }
+        if (head.isEmpty() || tail.isEmpty()) {
+            return new DescriptionWordWrapResult(new ArrayList<>(line), List.of());
+        }
+        return new DescriptionWordWrapResult(head, tail);
+    }
+
+    private List<StyledDescriptionChar> clipDescriptionLineWithHyphen(List<StyledDescriptionChar> line, int wrapWidth) {
+        if (line.isEmpty()) return line;
+        int hyphenWidth = mc.font.width("-");
+        List<StyledDescriptionChar> clipped = new ArrayList<>(line);
+        while (!clipped.isEmpty() && descriptionLineWidth(clipped) + hyphenWidth > wrapWidth) {
+            clipped.remove(clipped.size() - 1);
+        }
+        while (!clipped.isEmpty() && clipped.get(clipped.size() - 1).value == ' ') {
+            clipped.remove(clipped.size() - 1);
+        }
+        if (clipped.isEmpty()) {
+            StyledDescriptionChar first = line.get(0);
+            return List.of(new StyledDescriptionChar('-', first.color, first.bold, first.italic, first.encrypted, first.highlight));
+        }
+        StyledDescriptionChar style = clipped.get(clipped.size() - 1);
+        clipped.add(new StyledDescriptionChar('-', style.color, style.bold, style.italic, style.encrypted, style.highlight));
+        return clipped;
+    }
+
+    private int descriptionLineWidth(List<StyledDescriptionChar> chars) {
+        int width = 0;
+        for (StyledDescriptionChar ch : chars) {
+            width += mc.font.width(String.valueOf(ch.value));
+        }
+        return width;
     }
 
     private List<StyledDescriptionChar> parsePlainDescriptionChars(String raw, int defaultColor) {
@@ -1378,7 +1492,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         if (text == null || text.isBlank() || maxWidth <= 0) return;
         float scale = textScale();
         int wrapWidth = scaledWrapWidth(maxWidth);
-        List<DescriptionLine> lines = buildDescriptionLines(text, maxWidth, 0xCFCFCF, false);
+        List<DescriptionLine> lines = buildDescriptionLines(text, maxWidth, Config.descriptionTextColor(), false);
         int lineY = y;
         for (DescriptionLine line : lines) {
             String plain = line.plainText();
