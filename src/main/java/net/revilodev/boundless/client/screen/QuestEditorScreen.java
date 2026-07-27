@@ -30,7 +30,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.SharedConstants;
 import net.minecraft.util.StringUtil;
-import net.minecraft.stats.Stats;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -388,7 +387,6 @@ public final class QuestEditorScreen extends Screen {
     private final List<String> lootTableIdCache = new ArrayList<>();
     private final List<String> biomeIdCache = new ArrayList<>();
     private final List<String> dimensionIdCache = new ArrayList<>();
-    private final List<String> statIdCache = new ArrayList<>();
     private final List<String> observeIdCache = new ArrayList<>();
     private final Set<String> categoryIdCache = new HashSet<>();
     private final Set<String> subCategoryIdCache = new HashSet<>();
@@ -2185,12 +2183,6 @@ public final class QuestEditorScreen extends Screen {
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
                 obj.addProperty("effect", normalizedId);
             }
-            case "stat" -> {
-                String statId = safe(id).trim();
-                if (statId.isBlank()) return failCompletion(line, raiseErrors);
-                obj.addProperty("stat", statId);
-                obj.addProperty("count", count);
-            }
             case "observe" -> {
                 String normalizedId = normalizeNamespacedId(id, false);
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
@@ -2209,6 +2201,11 @@ public final class QuestEditorScreen extends Screen {
                 String normalizedId = normalizeNamespacedId(id, false);
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
                 obj.addProperty("dimension", normalizedId);
+            }
+            case "structure" -> {
+                String normalizedId = normalizeNamespacedId(id, false);
+                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
+                obj.addProperty("structure", normalizedId);
             }
             case "xp" -> {
                 String mode = safe(id).trim().toLowerCase(Locale.ROOT);
@@ -2311,6 +2308,8 @@ public final class QuestEditorScreen extends Screen {
         List<String> lines = extractEntryLines(raw);
         com.google.gson.JsonArray items = new com.google.gson.JsonArray();
         com.google.gson.JsonArray commands = new com.google.gson.JsonArray();
+        com.google.gson.JsonArray advancements = new com.google.gson.JsonArray();
+        com.google.gson.JsonArray toasts = new com.google.gson.JsonArray();
         String expType = "";
         int expAmount = 0;
 
@@ -2386,6 +2385,28 @@ public final class QuestEditorScreen extends Screen {
                     cmd.addProperty("title", safe(parsedLoot.title).isBlank() ? lootTableId : safe(parsedLoot.title));
                     commands.add(cmd);
                 }
+                case "advancement" -> {
+                    String advancementId = normalizeNamespacedId(parsed.id, false);
+                    if (advancementId.isBlank()) return failReward(line, raiseErrors);
+                    JsonObject advancement = new JsonObject();
+                    advancement.addProperty("advancement", advancementId);
+                    advancements.add(advancement);
+                }
+                case "toast" -> {
+                    ToastEditorReward parsedToast = parseToastReward(parsed.id);
+                    if (parsedToast == null || (parsedToast.title.isBlank() && parsedToast.description.isBlank())) {
+                        return failReward(line, raiseErrors);
+                    }
+                    JsonObject toast = new JsonObject();
+                    toast.addProperty("title", parsedToast.title);
+                    toast.addProperty("description", parsedToast.description);
+                    if (!parsedToast.icon.isBlank()) {
+                        String normalizedIcon = normalizeNamespacedId(parsedToast.icon, false);
+                        if (normalizedIcon.isBlank()) return failReward(line, raiseErrors);
+                        toast.addProperty("icon", normalizedIcon);
+                    }
+                    toasts.add(toast);
+                }
                 default -> {
                     return failReward(line, raiseErrors);
                 }
@@ -2395,6 +2416,8 @@ public final class QuestEditorScreen extends Screen {
         JsonObject out = new JsonObject();
         if (!items.isEmpty()) out.add("items", items);
         if (!commands.isEmpty()) out.add("commands", commands);
+        if (!advancements.isEmpty()) out.add("advancements", advancements);
+        if (!toasts.isEmpty()) out.add("toasts", toasts);
         if (!expType.isBlank()) {
             out.addProperty("exp", expType);
             out.addProperty("count", expAmount);
@@ -2457,11 +2480,11 @@ public final class QuestEditorScreen extends Screen {
                     case "entity" -> out.add(formatAcceptedEntryLine("kill", acceptedIds, count));
                     case "advancement" -> out.add("achieve: " + id);
                     case "effect" -> out.add("effect: " + id);
-                    case "stat" -> out.add("stat: " + id + " " + count);
                     case "observe" -> out.add("observe: " + id);
                     case "check" -> out.add("check: " + (id.isBlank() ? "Understand" : id));
                     case "biome" -> out.add("biome: " + id);
                     case "dimension" -> out.add("dimension: " + id);
+                    case "structure" -> out.add("structure: " + id);
                     case "xp" -> out.add("xp: " + id + " " + count);
                     case "levelup_level" -> out.add("levelup: levels " + count);
                     case "field" -> {
@@ -2486,7 +2509,6 @@ public final class QuestEditorScreen extends Screen {
             else if (obj.has("achieve")) out.add("achieve: " + optString(obj, "achieve", ""));
             else if (obj.has("advancement")) out.add("achieve: " + optString(obj, "advancement", ""));
             else if (obj.has("effect")) out.add("effect: " + optString(obj, "effect", ""));
-            else if (obj.has("stat")) out.add("stat: " + optString(obj, "stat", "") + " " + parseIntFlexible(obj, "count", 1));
             else if (obj.has("observe")) out.add("observe: " + optString(obj, "observe", ""));
             else if (obj.has("check")) {
                 String text = optString(obj, "check", "");
@@ -2494,6 +2516,7 @@ public final class QuestEditorScreen extends Screen {
             }
             else if (obj.has("biome")) out.add("biome: " + optString(obj, "biome", ""));
             else if (obj.has("dimension")) out.add("dimension: " + optString(obj, "dimension", ""));
+            else if (obj.has("structure")) out.add("structure: " + optString(obj, "structure", ""));
             else if (obj.has("xp")) out.add("xp: " + optString(obj, "xp", "points") + " " + parseIntFlexible(obj, "count", 1));
             else if (obj.has("levelup_level")) out.add("levelup: levels " + parseIntFlexible(obj, "levelup_level", 1));
             else if (obj.has("field")) {
@@ -2569,6 +2592,32 @@ public final class QuestEditorScreen extends Screen {
                 out.add(line.toString());
             }
         }
+        if (obj.has("advancements") && obj.get("advancements").isJsonArray()) {
+            for (JsonElement e : obj.getAsJsonArray("advancements")) {
+                if (e.isJsonPrimitive()) {
+                    String advancement = e.getAsString();
+                    if (!advancement.isBlank()) out.add("advancement: " + advancement);
+                    continue;
+                }
+                if (!e.isJsonObject()) continue;
+                String advancement = optString(e.getAsJsonObject(), "advancement", "");
+                if (!advancement.isBlank()) out.add("advancement: " + advancement);
+            }
+        }
+        if (obj.has("toasts") && obj.get("toasts").isJsonArray()) {
+            for (JsonElement e : obj.getAsJsonArray("toasts")) {
+                if (!e.isJsonObject()) continue;
+                JsonObject toast = e.getAsJsonObject();
+                String title = optString(toast, "title", "");
+                String description = optString(toast, "description", "");
+                String icon = optString(toast, "icon", "");
+                String escapedTitle = title.replace("\\", "\\\\").replace("\"", "\\\"");
+                String escapedDescription = description.replace("\\", "\\\\").replace("\"", "\\\"");
+                StringBuilder line = new StringBuilder("toast: \"").append(escapedTitle).append("\" \"").append(escapedDescription).append("\"");
+                if (!icon.isBlank()) line.append(" ").append(icon);
+                out.add(line.toString());
+            }
+        }
         String exp = optString(obj, "exp", "");
         if (!exp.isBlank()) {
             int count = parseIntFlexible(obj, "count", 0);
@@ -2599,6 +2648,9 @@ public final class QuestEditorScreen extends Screen {
         if (type.isBlank() || remainder.isBlank()) return null;
 
         if (type.equals("command")) {
+            return new ParsedEntry(type, remainder, 1);
+        }
+        if (type.equals("toast")) {
             return new ParsedEntry(type, remainder, 1);
         }
         if (type.equals("field") || type.equals("input")) {
@@ -2661,6 +2713,40 @@ public final class QuestEditorScreen extends Screen {
         }
         if (count < 1) count = 1;
         return new ParsedEntry(type, id.trim(), count);
+    }
+
+    private ToastEditorReward parseToastReward(String raw) {
+        if (raw == null) return null;
+        List<String> quoted = parseQuotedSegments(raw);
+        if (quoted.size() < 2) return null;
+        String title = quoted.get(0).trim();
+        String description = quoted.get(1).trim();
+        if (title.isBlank() && description.isBlank()) return null;
+        int secondQuoteIndex = raw.indexOf('"');
+        if (secondQuoteIndex < 0) return new ToastEditorReward(title, description, "");
+        int quoteCount = 0;
+        boolean escaping = false;
+        int endIndex = -1;
+        for (int i = 0; i < raw.length(); i++) {
+            char ch = raw.charAt(i);
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaping = true;
+                continue;
+            }
+            if (ch == '"') {
+                quoteCount++;
+                if (quoteCount == 4) {
+                    endIndex = i;
+                    break;
+                }
+            }
+        }
+        String icon = endIndex >= 0 && endIndex + 1 < raw.length() ? raw.substring(endIndex + 1).trim() : "";
+        return new ToastEditorReward(title, description, icon);
     }
 
     private List<String> parseQuotedSegments(String text) {
@@ -3244,7 +3330,7 @@ public final class QuestEditorScreen extends Screen {
                         box.setValue(displayNameForEntrySelection(kind, box, normalizedAcceptedIds));
                     } else {
                         selectedItemComponentsByBox.remove(box);
-                        box.setValue(line);
+                        box.setValue(entryRowDisplayValue(kind, normalizedType, parsed, line));
                     }
                 } else {
                     box.setValue(line);
@@ -3298,6 +3384,25 @@ public final class QuestEditorScreen extends Screen {
         }
         syncEntryRemoveButtons(kind);
         if (kind == EntryRowKind.DEPENDENCY) syncDependencyEntryLockButtons();
+    }
+
+    private String entryRowDisplayValue(EntryRowKind kind, String type, ParsedEntry parsed, String rawLine) {
+        String normalizedType = normalizeRowType(kind, type);
+        if (!usesCompactEntryBody(kind, normalizedType)) return safe(rawLine);
+        if (parsed == null) return entryBodyWithoutType(rawLine);
+        if ("check".equals(normalizedType)) {
+            String value = safe(parsed.id).trim();
+            return value.isBlank() ? "Understand" : value;
+        }
+        return safe(parsed.id).trim();
+    }
+
+    private boolean usesCompactEntryBody(EntryRowKind kind, String type) {
+        if (kind != EntryRowKind.COMPLETION) return false;
+        return "observe".equals(type)
+                || "check".equals(type)
+                || "biome".equals(type)
+                || "dimension".equals(type);
     }
 
     private void syncEntryRemoveButtons(EntryRowKind kind) {
@@ -3666,7 +3771,7 @@ public final class QuestEditorScreen extends Screen {
         if ("kill".equals(type) || "entity".equals(type)) return mobDisplayNameForMobId(normalizedItemId).getString();
         if ("effect".equals(type)) return effectDisplayName(normalizedItemId);
         if ("achieve".equals(type) || "advancement".equals(type)) return normalizedItemId;
-        if ("observe".equals(type) || "stat".equals(type) || "biome".equals(type) || "dimension".equals(type)) return normalizedItemId;
+        if ("observe".equals(type) || "biome".equals(type) || "dimension".equals(type)) return normalizedItemId;
         return displayNameForItem(normalizedItemId);
     }
 
@@ -3690,6 +3795,8 @@ public final class QuestEditorScreen extends Screen {
                 case "levelup" -> "levels 5";
                 case "command" -> "say hello";
                 case "loot" -> "minecraft:chests/simple_dungeon";
+                case "advancement" -> "minecraft:story/mine_stone";
+                case "toast" -> "\"Toast title\" \"Toast description\" minecraft:paper";
                 default -> "";
             };
         }
@@ -3699,11 +3806,11 @@ public final class QuestEditorScreen extends Screen {
             case "kill" -> "minecraft:zombie 10";
             case "achieve" -> "minecraft:story/mine_stone";
             case "effect" -> "minecraft:speed";
-            case "stat" -> "mine_block:minecraft:stone 64";
             case "observe" -> "minecraft:oak_log";
             case "check" -> "Understand";
             case "biome" -> "minecraft:plains";
             case "dimension" -> "minecraft:overworld";
+            case "structure" -> "minecraft:village_plains";
             case "xp" -> "points 100";
             case "levelup" -> "levels 10";
             case "field" -> "\"expected text\" \"hint text\"";
@@ -5476,26 +5583,27 @@ public final class QuestEditorScreen extends Screen {
         if (!ctx.hasTypeSeparator) {
             return isCompletionEntryField(field)
                     ? (LevelUpCompat.isAvailable()
-                        ? List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "levelup", "field")
-                        : List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "field"))
+                        ? List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "levelup", "field")
+                        : List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "field"))
                     : (LevelUpCompat.isAvailable()
-                        ? List.of("item", "xp", "levelup", "command", "loot")
-                        : List.of("item", "xp", "command", "loot"));
+                        ? List.of("item", "xp", "levelup", "command", "loot", "advancement", "toast")
+                        : List.of("item", "xp", "command", "loot", "advancement", "toast"));
         }
         return switch (ctx.type) {
             case "collect", "submit", "item" -> itemSuggestions();
             case "kill", "entity" -> entitySuggestions();
             case "effect" -> effectSuggestions();
             case "achieve", "advancement" -> advancementSuggestions();
-            case "stat" -> statSuggestions();
             case "observe" -> observeSuggestions();
             case "check" -> List.of("understand");
             case "biome" -> biomeSuggestions();
             case "dimension" -> dimensionSuggestions();
+            case "structure" -> List.of("minecraft:village_plains", "minecraft:ancient_city", "minecraft:stronghold");
             case "loot", "loottable" -> lootTableSuggestions();
             case "xp", "exp" -> List.of("points", "levels");
             case "levelup" -> LevelUpCompat.isAvailable() ? List.of("xp", "levels") : List.of();
             case "field", "input" -> List.of("\"expected text\" \"input hint text\"");
+            case "toast" -> List.of("\"Toast title\" \"Toast description\" minecraft:paper");
             case "icon" -> itemSuggestions();
             default -> List.of();
         };
@@ -6363,7 +6471,6 @@ public final class QuestEditorScreen extends Screen {
         lootTableIdCache.clear();
         biomeIdCache.clear();
         dimensionIdCache.clear();
-        statIdCache.clear();
         observeIdCache.clear();
 
         Set<String> questPackDependencySuggestions = new LinkedHashSet<>();
@@ -6948,7 +7055,7 @@ public final class QuestEditorScreen extends Screen {
     private boolean rowHasCount(EntryRowKind kind, String type) {
         String normalized = normalizeRowType(kind, type);
         return switch (normalized) {
-            case "collect", "submit", "kill", "stat", "xp", "levelup", "item" -> true;
+            case "collect", "submit", "kill", "xp", "levelup", "item" -> true;
             default -> false;
         };
     }
@@ -7163,13 +7270,13 @@ public final class QuestEditorScreen extends Screen {
     private List<String> entryTypeOptions(EntryRowKind kind) {
         if (kind == EntryRowKind.COMPLETION) {
             return LevelUpCompat.isAvailable()
-                    ? List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "levelup", "field")
-                    : List.of("collect", "submit", "kill", "achieve", "effect", "stat", "observe", "check", "biome", "dimension", "xp", "field");
+                    ? List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "levelup", "field")
+                    : List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "field");
         }
         if (kind == EntryRowKind.REWARD) {
             return LevelUpCompat.isAvailable()
-                    ? List.of("item", "xp", "levelup", "command", "loot")
-                    : List.of("item", "xp", "command", "loot");
+                    ? List.of("item", "xp", "levelup", "command", "loot", "advancement", "toast")
+                    : List.of("item", "xp", "command", "loot", "advancement", "toast");
         }
         return List.of();
     }
@@ -7179,6 +7286,8 @@ public final class QuestEditorScreen extends Screen {
         if (row < 0 || row >= rows.size()) return;
         ScaledMultiLineEditBox box = rows.get(row);
         String normalized = normalizeRowType(kind, type);
+        String current = safe(box.getValue());
+        ParsedEntry parsed = rowParsedBody(kind, box, current);
         entryTypeByBox.put(box, normalized);
         if (pickerModeForType(kind, normalized) == PickerMode.NONE) {
             selectedItemIdByBox.remove(box);
@@ -7186,6 +7295,13 @@ public final class QuestEditorScreen extends Screen {
             selectedItemComponentsByBox.remove(box);
         }
         entryCountByBox.put(box, 1);
+        if (usesCompactEntryBody(kind, normalized)) {
+            String display = entryRowDisplayValue(kind, normalized, parsed, current);
+            if (!current.equals(display)) {
+                box.setValue(display);
+                box.setCursorPosition(Math.min(box.getCursorPosition(), display.length()));
+            }
+        }
         entryRowsDirty = true;
         syncEntryBackingValues();
     }
@@ -8104,28 +8220,6 @@ public final class QuestEditorScreen extends Screen {
     private List<String> dimensionSuggestions() {
         ensureDimensionIdCache();
         return dimensionIdCache;
-    }
-
-    private void ensureStatIdCache() {
-        if (!statIdCache.isEmpty()) return;
-        for (ResourceLocation rl : BuiltInRegistries.CUSTOM_STAT.keySet()) {
-            if (rl != null) statIdCache.add(rl.toString());
-        }
-        for (ResourceLocation rl : BuiltInRegistries.BLOCK.keySet()) {
-            if (rl != null && !"minecraft:air".equals(rl.toString())) statIdCache.add("mine_block:" + rl);
-        }
-        for (ResourceLocation rl : BuiltInRegistries.ITEM.keySet()) {
-            if (rl != null && !"minecraft:air".equals(rl.toString())) statIdCache.add("use_item:" + rl);
-        }
-        for (ResourceLocation rl : BuiltInRegistries.ENTITY_TYPE.keySet()) {
-            if (rl != null) statIdCache.add("kill_entity:" + rl);
-        }
-        statIdCache.sort(String::compareTo);
-    }
-
-    private List<String> statSuggestions() {
-        ensureStatIdCache();
-        return statIdCache;
     }
 
     private void ensureAdvancementIdCache() {
@@ -9716,6 +9810,18 @@ public final class QuestEditorScreen extends Screen {
             this.acceptedIds = List.copyOf(normalized);
             this.count = count;
             this.hint = hint == null ? "" : hint;
+        }
+    }
+
+    private static final class ToastEditorReward {
+        final String title;
+        final String description;
+        final String icon;
+
+        ToastEditorReward(String title, String description, String icon) {
+            this.title = title == null ? "" : title;
+            this.description = description == null ? "" : description;
+            this.icon = icon == null ? "" : icon;
         }
     }
 

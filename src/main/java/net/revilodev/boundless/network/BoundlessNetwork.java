@@ -94,6 +94,7 @@ public final class BoundlessNetwork {
         r.playToClient(SyncKills.TYPE, SyncKills.CODEC, BoundlessNetwork::handleSyncKills);
         r.playToClient(SyncClear.TYPE, SyncClear.CODEC, BoundlessNetwork::handleSyncClear);
         r.playToClient(Toast.TYPE, Toast.CODEC, BoundlessNetwork::handleToast);
+        r.playToClient(RewardToast.TYPE, RewardToast.CODEC, BoundlessNetwork::handleRewardToast);
         r.playToClient(OpenQuestBook.TYPE, OpenQuestBook.CODEC, BoundlessNetwork::handleOpenQuestBook);
         r.playToClient(SyncConfig.TYPE, SyncConfig.CODEC, BoundlessNetwork::handleSyncConfig);
         r.playToClient(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC, BoundlessNetwork::handleSyncQuestsChunk);
@@ -203,6 +204,8 @@ public final class BoundlessNetwork {
             double questIconScale,
             boolean enableQuestSearchBox,
             boolean enableDescriptionColors,
+            String questWidgetTextColor,
+            String descriptionTextColor,
             boolean enableDescriptionReadMore,
             boolean enableDescriptionTextWrapping,
             String descriptionTextAlignment,
@@ -228,6 +231,8 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
                     buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeUtf(p.questWidgetTextColor == null ? "" : p.questWidgetTextColor);
+                    buf.writeUtf(p.descriptionTextColor == null ? "" : p.descriptionTextColor);
                     buf.writeBoolean(p.enableDescriptionReadMore);
                     buf.writeBoolean(p.enableDescriptionTextWrapping);
                     buf.writeUtf(p.descriptionTextAlignment == null ? "" : p.descriptionTextAlignment);
@@ -251,6 +256,8 @@ public final class BoundlessNetwork {
                         buf.readDouble(),
                         buf.readBoolean(),
                         buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readUtf(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
@@ -405,21 +412,10 @@ public final class BoundlessNetwork {
         );
     }
 
-    public record StatEntry(String statId, int count) {
-        public static final StreamCodec<FriendlyByteBuf, StatEntry> CODEC = StreamCodec.of(
-                (buf, e) -> {
-                    buf.writeUtf(e.statId);
-                    buf.writeVarInt(e.count);
-                },
-                buf -> new StatEntry(buf.readUtf(), buf.readVarInt())
-        );
-    }
-
     public record SyncObjectiveProgress(
             List<ObjectiveItemEntry> items,
             List<ObjectiveFlagEntry> flags,
-            List<ObjectiveInputEntry> inputs,
-            List<StatEntry> stats) implements CustomPacketPayload {
+            List<ObjectiveInputEntry> inputs) implements CustomPacketPayload {
         public static final Type<SyncObjectiveProgress> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_objective_progress"));
         public static final StreamCodec<FriendlyByteBuf, SyncObjectiveProgress> CODEC = StreamCodec.of(
@@ -430,8 +426,6 @@ public final class BoundlessNetwork {
                     for (ObjectiveFlagEntry entry : p.flags) ObjectiveFlagEntry.CODEC.encode(buf, entry);
                     buf.writeVarInt(p.inputs.size());
                     for (ObjectiveInputEntry entry : p.inputs) ObjectiveInputEntry.CODEC.encode(buf, entry);
-                    buf.writeVarInt(p.stats.size());
-                    for (StatEntry entry : p.stats) StatEntry.CODEC.encode(buf, entry);
                 },
                 buf -> {
                     int itemCount = buf.readVarInt();
@@ -443,10 +437,7 @@ public final class BoundlessNetwork {
                     int inputCount = buf.readVarInt();
                     List<ObjectiveInputEntry> inputs = new ArrayList<>(inputCount);
                     for (int i = 0; i < inputCount; i++) inputs.add(ObjectiveInputEntry.CODEC.decode(buf));
-                    int statCount = buf.readVarInt();
-                    List<StatEntry> stats = new ArrayList<>(statCount);
-                    for (int i = 0; i < statCount; i++) stats.add(StatEntry.CODEC.decode(buf));
-                    return new SyncObjectiveProgress(items, flags, inputs, stats);
+                    return new SyncObjectiveProgress(items, flags, inputs);
                 }
         );
         @Override public Type<SyncObjectiveProgress> type() { return TYPE; }
@@ -500,6 +491,20 @@ public final class BoundlessNetwork {
         @Override public Type<Toast> type() { return TYPE; }
     }
 
+    public record RewardToast(String title, String description, String icon) implements CustomPacketPayload {
+        public static final Type<RewardToast> TYPE =
+                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "reward_toast"));
+        public static final StreamCodec<FriendlyByteBuf, RewardToast> CODEC = StreamCodec.of(
+                (buf, p) -> {
+                    buf.writeUtf(p.title == null ? "" : p.title);
+                    buf.writeUtf(p.description == null ? "" : p.description);
+                    buf.writeUtf(p.icon == null ? "" : p.icon);
+                },
+                buf -> new RewardToast(buf.readUtf(), buf.readUtf(), buf.readUtf())
+        );
+        @Override public Type<RewardToast> type() { return TYPE; }
+    }
+
     public record OpenQuestBook() implements CustomPacketPayload {
         public static final Type<OpenQuestBook> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "open_quest_book"));
@@ -525,6 +530,8 @@ public final class BoundlessNetwork {
             double questIconScale,
             boolean enableQuestSearchBox,
             boolean enableDescriptionColors,
+            String questWidgetTextColor,
+            String descriptionTextColor,
             boolean enableDescriptionReadMore,
             boolean enableDescriptionTextWrapping,
             String descriptionTextAlignment,
@@ -554,6 +561,8 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
                     buf.writeBoolean(p.enableDescriptionColors);
+                    buf.writeUtf(p.questWidgetTextColor == null ? "" : p.questWidgetTextColor);
+                    buf.writeUtf(p.descriptionTextColor == null ? "" : p.descriptionTextColor);
                     buf.writeBoolean(p.enableDescriptionReadMore);
                     buf.writeBoolean(p.enableDescriptionTextWrapping);
                     buf.writeUtf(p.descriptionTextAlignment == null ? "" : p.descriptionTextAlignment);
@@ -581,6 +590,8 @@ public final class BoundlessNetwork {
                         buf.readDouble(),
                         buf.readBoolean(),
                         buf.readBoolean(),
+                        buf.readUtf(),
+                        buf.readUtf(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
@@ -672,25 +683,8 @@ public final class BoundlessNetwork {
         List<ObjectiveInputEntry> objectiveInputs = new ArrayList<>();
         objectiveState.inputSnapshotFor(player.getUUID())
                 .forEach((key, value) -> objectiveInputs.add(new ObjectiveInputEntry(key, value == null ? "" : value)));
-        List<StatEntry> statEntries = collectStatEntries(player);
-        if (objectiveItems.isEmpty() && objectiveFlags.isEmpty() && objectiveInputs.isEmpty() && statEntries.isEmpty()) return;
-        PacketDistributor.sendToPlayer(player, new SyncObjectiveProgress(objectiveItems, objectiveFlags, objectiveInputs, statEntries));
-    }
-
-    private static List<StatEntry> collectStatEntries(ServerPlayer player) {
-        List<StatEntry> entries = new ArrayList<>();
-        if (player == null) return entries;
-        Set<String> seen = ConcurrentHashMap.newKeySet();
-        for (QuestData.Quest quest : QuestData.allServer(player.server)) {
-            if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
-            for (QuestData.Target target : quest.completion.targets) {
-                if (target == null || !target.isStat()) continue;
-                String statId = QuestTracker.normalizeStatId(target.id);
-                if (statId.isBlank() || !seen.add(statId)) continue;
-                entries.add(new StatEntry(statId, Math.max(0, QuestTracker.getStatCount(player, statId))));
-            }
-        }
-        return entries;
+        if (objectiveItems.isEmpty() && objectiveFlags.isEmpty() && objectiveInputs.isEmpty()) return;
+        PacketDistributor.sendToPlayer(player, new SyncObjectiveProgress(objectiveItems, objectiveFlags, objectiveInputs));
     }
 
     private static void sendConfig(ServerPlayer p) {
@@ -711,6 +705,8 @@ public final class BoundlessNetwork {
                 Config.questIconScale(),
                 Config.enableQuestSearchBox(),
                 Config.enableDescriptionColors(),
+                String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor()),
+                String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor()),
                 Config.enableDescriptionReadMore(),
                 Config.enableDescriptionTextWrapping(),
                 Config.descriptionTextAlignment(),
@@ -897,6 +893,24 @@ public final class BoundlessNetwork {
                 }
                 ro.add("lootTables", lootTables);
 
+                JsonArray advancements = new JsonArray();
+                for (QuestData.AdvancementReward ar : q.rewards.advancements) {
+                    JsonObject ao = new JsonObject();
+                    ao.addProperty("advancement", ar.advancement);
+                    advancements.add(ao);
+                }
+                ro.add("advancements", advancements);
+
+                JsonArray toasts = new JsonArray();
+                for (QuestData.ToastReward tr : q.rewards.toasts) {
+                    JsonObject to = new JsonObject();
+                    to.addProperty("title", tr.title);
+                    to.addProperty("description", tr.description);
+                    to.addProperty("icon", tr.icon);
+                    toasts.add(to);
+                }
+                ro.add("toasts", toasts);
+
                 ro.addProperty("expType", q.rewards.expType);
                 ro.addProperty("expAmount", q.rewards.expAmount);
 
@@ -975,6 +989,10 @@ public final class BoundlessNetwork {
 
     public static void sendToast(ServerPlayer p, String questId) {
         PacketDistributor.sendToPlayer(p, new Toast(questId));
+    }
+
+    public static void sendRewardToast(ServerPlayer p, String title, String description, String icon) {
+        PacketDistributor.sendToPlayer(p, new RewardToast(title, description, icon));
     }
 
     public static void sendOpenQuestBook(ServerPlayer p) {
@@ -1119,6 +1137,8 @@ public final class BoundlessNetwork {
             Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
             Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
             Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
+            Config.QUEST_WIDGET_TEXT_COLOR.set(p.questWidgetTextColor());
+            Config.DESCRIPTION_TEXT_COLOR.set(p.descriptionTextColor());
             Config.ENABLE_DESCRIPTION_READ_MORE.set(p.enableDescriptionReadMore());
             Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(p.enableDescriptionTextWrapping());
             Config.DESCRIPTION_TEXT_ALIGNMENT.set(p.descriptionTextAlignment());
@@ -1309,9 +1329,6 @@ public final class BoundlessNetwork {
             for (ObjectiveInputEntry entry : p.inputs()) {
                 QuestTracker.clientSetInputProgress(entry.key(), entry.value());
             }
-            for (StatEntry entry : p.stats()) {
-                QuestTracker.clientSetStat(entry.statId(), entry.count());
-            }
         });
     }
 
@@ -1335,6 +1352,12 @@ public final class BoundlessNetwork {
                 QuestData.byId(p.questId()).ifPresent(q ->
                         QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
                 )
+        );
+    }
+
+    private static void handleRewardToast(RewardToast p, IPayloadContext ctx) {
+        ctx.enqueueWork(() ->
+                QuestUnlockedToast.showCustom(p.title(), p.description(), p.icon())
         );
     }
 
@@ -1365,6 +1388,8 @@ public final class BoundlessNetwork {
                 p.questIconScale(),
                 p.enableQuestSearchBox(),
                 p.enableDescriptionColors(),
+                p.questWidgetTextColor(),
+                p.descriptionTextColor(),
                 p.enableDescriptionReadMore(),
                 p.enableDescriptionTextWrapping(),
                 p.descriptionTextAlignment(),

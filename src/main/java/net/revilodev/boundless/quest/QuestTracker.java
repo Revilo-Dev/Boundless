@@ -17,7 +17,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.effect.MobEffect;
@@ -65,7 +64,6 @@ public final class QuestTracker {
     private static final Map<String, Map<String, Status>> WORLD_STATES = new HashMap<>();
     private static final Map<String, Integer> CLIENT_KILLS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_ADV_DONE = new HashMap<>();
-    private static final Map<String, Integer> CLIENT_STATS = new HashMap<>();
     private static final Map<String, Integer> CLIENT_ITEM_PROGRESS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_EFFECT_PROGRESS = new HashMap<>();
     private static final Map<String, String> CLIENT_INPUT_PROGRESS = new HashMap<>();
@@ -78,7 +76,6 @@ public final class QuestTracker {
     private static final Map<UUID, Integer> SERVER_QUEST_SCAN_CURSOR = new HashMap<>();
     private static final int SERVER_QUEST_SCAN_BATCH = 32;
 
-    private static boolean SERVER_TOASTS_DISABLED = false;
     private static String ACTIVE_KEY = null;
     private static volatile boolean CLIENT_IN_MULTIPLAYER = false;
 
@@ -495,7 +492,6 @@ public final class QuestTracker {
         }
 
         if (t.isAdvancement()) return hasAdvancement(player, t.id);
-        if (t.isStat()) return getStatCount(player, t.id) >= t.count;
         if (t.isObserve()) {
             String key = flagProgressKey(q, t);
             return trackProgress
@@ -513,6 +509,12 @@ public final class QuestTracker {
             return trackProgress
                     ? getPermanentFlagProgress(player, key, isInDimension(player, t.id))
                     : peekPermanentFlagProgress(player, key, isInDimension(player, t.id));
+        }
+        if (t.isStructure()) {
+            String key = flagProgressKey(q, t);
+            return trackProgress
+                    ? getPermanentFlagProgress(player, key, isInStructure(player, t.id))
+                    : peekPermanentFlagProgress(player, key, isInStructure(player, t.id));
         }
         if (t.isCheck()) {
             String key = flagProgressKey(q, t);
@@ -608,38 +610,6 @@ public final class QuestTracker {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    public static int getStatCount(Player player, String statId) {
-        if (player == null || statId == null || statId.isBlank()) return 0;
-        String normalizedStatId = normalizeStatId(statId);
-        if (normalizedStatId.isBlank()) return 0;
-        try {
-            if (player.level().isClientSide && CLIENT_STATS.containsKey(normalizedStatId)) {
-                return CLIENT_STATS.getOrDefault(normalizedStatId, 0);
-            }
-            if (player instanceof ServerPlayer sp) {
-                return resolveStatValue(sp.getStats(), normalizedStatId);
-            }
-            if (player.level().isClientSide) {
-                try {
-                    Class<?> mcClass = Class.forName("net.minecraft.client.Minecraft");
-                    Object mc = mcClass.getMethod("getInstance").invoke(null);
-                    Object srvObj = mcClass.getMethod("getSingleplayerServer").invoke(mc);
-                    if (srvObj instanceof net.minecraft.server.MinecraftServer srv) {
-                        ServerPlayer sp = srv.getPlayerList().getPlayer(player.getUUID());
-                        if (sp != null) return resolveStatValue(sp.getStats(), normalizedStatId);
-                    }
-                    Object connection = mcClass.getMethod("getConnection").invoke(mc);
-                    if (connection != null) {
-                        Object statsCounter = connection.getClass().getMethod("getStats").invoke(connection);
-                        if (statsCounter != null) return resolveStatValue(statsCounter, normalizedStatId);
-                    }
-                } catch (Throwable ignored) {}
-                return CLIENT_STATS.getOrDefault(normalizedStatId, 0);
-            }
-        } catch (Exception ignored) {}
-        return 0;
-    }
-
     public static boolean markFlagProgress(ServerPlayer player, String key) {
         if (player == null || key == null || key.isBlank()) return false;
         return !QuestObjectiveState.get(player.serverLevel()).getFlagDone(player.getUUID(), key)
@@ -647,15 +617,19 @@ public final class QuestTracker {
     }
 
     public static boolean refreshPersistentContextTargets(ServerPlayer player) {
-        return refreshPersistentContextTargets(player, true, true, true);
+        return refreshPersistentContextTargets(player, true, true, true, true);
     }
 
     public static boolean refreshPersistentContextTargets(ServerPlayer player, boolean observe, boolean biome, boolean dimension) {
-        if (player == null) return false;
-        return refreshPersistentContextTargets(player, new ArrayList<>(QuestData.allServer(player.server)), 0, Integer.MAX_VALUE, observe, biome, dimension);
+        return refreshPersistentContextTargets(player, observe, biome, dimension, true);
     }
 
-    private static boolean refreshPersistentContextTargets(ServerPlayer player, List<QuestData.Quest> quests, int start, int limit, boolean observe, boolean biome, boolean dimension) {
+    public static boolean refreshPersistentContextTargets(ServerPlayer player, boolean observe, boolean biome, boolean dimension, boolean structure) {
+        if (player == null) return false;
+        return refreshPersistentContextTargets(player, new ArrayList<>(QuestData.allServer(player.server)), 0, Integer.MAX_VALUE, observe, biome, dimension, structure);
+    }
+
+    private static boolean refreshPersistentContextTargets(ServerPlayer player, List<QuestData.Quest> quests, int start, int limit, boolean observe, boolean biome, boolean dimension, boolean structure) {
         if (player == null) return false;
         if (quests == null || quests.isEmpty() || limit <= 0) return false;
 
@@ -676,7 +650,8 @@ public final class QuestTracker {
 
                 boolean matches = (observe && target.isObserve() && isObservingTarget(player, target.id))
                         || (biome && target.isBiome() && isInBiome(player, target.id))
-                        || (dimension && target.isDimension() && isInDimension(player, target.id));
+                        || (dimension && target.isDimension() && isInDimension(player, target.id))
+                        || (structure && target.isStructure() && isInStructure(player, target.id));
                 if (!matches) continue;
 
                 changed |= markFlagProgress(player, flagProgressKey(quest, target));
@@ -686,55 +661,46 @@ public final class QuestTracker {
         return changed;
     }
 
-    private static int resolveStatValue(Object statsSource, String statId) {
-        if (statsSource == null || statId == null || statId.isBlank()) return 0;
-        String normalized = normalizeStatId(statId);
-        if (normalized.isBlank()) return 0;
-        int split = normalized.indexOf(':');
-        boolean typed = split > 0
-                && ("custom".equals(normalized.substring(0, split))
-                || "mine_block".equals(normalized.substring(0, split))
-                || "use_item".equals(normalized.substring(0, split))
-                || "kill_entity".equals(normalized.substring(0, split)));
-        String type = typed ? normalized.substring(0, split) : "custom";
-        String name = typed ? normalized.substring(split + 1) : normalized;
-        ResourceLocation rl = ResourceLocation.tryParse(name);
-        if (rl == null) return 0;
-        Object stat = switch (type) {
-            case "custom" -> Stats.CUSTOM.get(rl);
-            case "mine_block" -> {
-                var block = BuiltInRegistries.BLOCK.getOptional(rl).orElse(null);
-                yield block == null ? null : Stats.BLOCK_MINED.get(block);
-            }
-            case "use_item" -> {
-                var item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
-                yield item == null ? null : Stats.ITEM_USED.get(item);
-            }
-            case "kill_entity" -> {
-                var et = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
-                yield et == null ? null : Stats.ENTITY_KILLED.get(et);
-            }
-            default -> null;
-        };
-        if (stat == null) return 0;
+    private static boolean isInStructure(Player player, String structureId) {
+        if (player == null || structureId == null || structureId.isBlank()) return false;
+        ResourceLocation target = tryParseCached(structureId);
+        if (target == null) return false;
+        ServerPlayer serverPlayer = player instanceof ServerPlayer sp ? sp : resolveIntegratedServerPlayer(player);
+        if (serverPlayer == null) return false;
         try {
-            Object value = statsSource.getClass().getMethod("getValue", net.minecraft.stats.Stat.class).invoke(statsSource, stat);
-            return value instanceof Integer i ? i : 0;
-        } catch (Throwable ignored) {
-            return 0;
-        }
+            Object structureManager = serverPlayer.serverLevel().structureManager();
+            Class<?> blockPosClass = serverPlayer.blockPosition().getClass();
+            Object result = structureManager.getClass()
+                    .getMethod("getAllStructuresAt", blockPosClass)
+                    .invoke(structureManager, serverPlayer.blockPosition());
+            if (result instanceof Map<?, ?> map) {
+                for (Object key : map.keySet()) {
+                    if (structureKeyMatches(key, target)) return true;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
-    public static String normalizeStatId(String statId) {
-        String normalized = statId == null ? "" : statId.trim();
-        if (normalized.isBlank()) return "";
-        if (normalized.startsWith("custom:")) {
-            String candidate = normalized.substring("custom:".length()).trim();
-            if (ResourceLocation.tryParse(candidate) != null) {
-                return candidate;
+    private static boolean structureKeyMatches(Object key, ResourceLocation target) {
+        if (key == null || target == null) return false;
+        try {
+            Object unwrap = key;
+            if (String.valueOf(key.getClass().getName()).contains("Holder")) {
+                try {
+                    Object holderKey = key.getClass().getMethod("unwrapKey").invoke(key);
+                    String text = String.valueOf(holderKey);
+                    if (text.contains(target.toString())) return true;
+                } catch (Throwable ignored) {}
             }
+            try {
+                Object location = unwrap.getClass().getMethod("location").invoke(unwrap);
+                if (target.equals(location)) return true;
+            } catch (Throwable ignored) {}
+            return String.valueOf(key).contains(target.toString());
+        } catch (Throwable ignored) {
+            return false;
         }
-        return normalized;
     }
 
     public static int getCountInInventory(String id, Player player) {
@@ -1161,6 +1127,34 @@ public final class QuestTracker {
         }
     }
 
+    private static void giveAdvancementRewards(ServerPlayer player, QuestData.Rewards rewards) {
+        if (player == null || rewards == null || !rewards.hasAdvancements()) return;
+        for (QuestData.AdvancementReward reward : rewards.advancements) {
+            if (reward == null || reward.advancement == null || reward.advancement.isBlank()) continue;
+            try {
+                ResourceLocation rl = ResourceLocation.tryParse(reward.advancement);
+                if (rl == null) continue;
+                AdvancementHolder advancement = player.server.getAdvancements().get(rl);
+                if (advancement == null) continue;
+                AdvancementProgress progress = player.getAdvancements().getOrStartProgress(advancement);
+                for (String criterion : progress.getRemainingCriteria()) {
+                    player.getAdvancements().award(advancement, criterion);
+                }
+            } catch (Throwable t) {
+                BoundlessMod.LOGGER.error("Failed to grant advancement reward {} to player {}",
+                        reward.advancement, player.getGameProfile().getName(), t);
+            }
+        }
+    }
+
+    private static void giveToastRewards(ServerPlayer player, QuestData.Rewards rewards) {
+        if (player == null || rewards == null || !rewards.hasToasts()) return;
+        for (QuestData.ToastReward reward : rewards.toasts) {
+            if (reward == null) continue;
+            BoundlessNetwork.sendRewardToast(player, reward.title, reward.description, reward.icon);
+        }
+    }
+
     private static ItemStack createRewardStack(ServerPlayer player, QuestItemSpec spec, Item item, int count) {
         if (player != null && spec != null && !spec.components.isBlank()) {
             try {
@@ -1234,7 +1228,9 @@ public final class QuestTracker {
         giveItemRewards(player, q);
         runCommandRewards(player, q);
         giveLootRewards(player, q.rewards);
+        giveAdvancementRewards(player, q.rewards);
         giveExpReward(player, q.rewards);
+        giveToastRewards(player, q.rewards);
         return true;
     }
 
@@ -1347,18 +1343,9 @@ public final class QuestTracker {
         CLIENT_KILLS.put(entityId, Math.max(0, count));
     }
 
-    public static void clientSetStat(String statId, int count) {
-        String normalizedStatId = normalizeStatId(statId);
-        if (normalizedStatId.isBlank()) return;
-        int sanitized = Math.max(0, count);
-        if (sanitized <= 0) CLIENT_STATS.remove(normalizedStatId);
-        else CLIENT_STATS.put(normalizedStatId, sanitized);
-    }
-
     public static void clientClearAll() {
         CLIENT_KILLS.clear();
         CLIENT_ADV_DONE.clear();
-        CLIENT_STATS.clear();
         CLIENT_ITEM_PROGRESS.clear();
         CLIENT_EFFECT_PROGRESS.clear();
         CLIENT_INPUT_PROGRESS.clear();
@@ -1393,7 +1380,7 @@ public final class QuestTracker {
 
             if (ready && cur == Status.INCOMPLETE) {
                 clientSetStatus(q.id, Status.COMPLETED);
-                if (!QuestTracker.serverToastsDisabled()) sendToastLocal(q.id);
+                sendToastLocal(q.id);
                 continue;
             }
 
@@ -1432,7 +1419,7 @@ public final class QuestTracker {
 
         int start = Math.floorMod(SERVER_QUEST_SCAN_CURSOR.getOrDefault(sp.getUUID(), 0), total);
         int batch = Math.min(total, SERVER_QUEST_SCAN_BATCH);
-        refreshPersistentContextTargets(sp, quests, start, batch, true, true, true);
+        refreshPersistentContextTargets(sp, quests, start, batch, true, true, true, true);
         for (int processed = 0; processed < batch; processed++) {
             QuestData.Quest q = quests.get((start + processed) % total);
             if (q == null) continue;
@@ -1466,14 +1453,6 @@ public final class QuestTracker {
         if (sp.tickCount % 20 == 0) {
             BoundlessNetwork.sendObjectiveProgress(sp);
         }
-    }
-
-    public static boolean serverToastsDisabled() {
-        return SERVER_TOASTS_DISABLED;
-    }
-
-    public static void setServerToastsDisabled(boolean v) {
-        SERVER_TOASTS_DISABLED = v;
     }
 
     @OnlyIn(Dist.CLIENT)

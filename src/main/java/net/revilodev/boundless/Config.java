@@ -59,13 +59,6 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_CATEGORIES =
             BUILDER.comment("If true, disables category tabs and category-based filtering.")
                     .define("disableCategories", false);
-    public static final ModConfigSpec.ConfigValue<String> QUEST_PACK_DISPLAY_TYPE =
-            BUILDER.comment("Quest pack presentation type: default_list, quest_tree_coming_soon.")
-                    .define("questPackDisplayType", "default_list", o -> {
-                        if (!(o instanceof String s)) return false;
-                        s = s.trim().toLowerCase();
-                        return s.equals("default_list") || s.equals("quest_tree_coming_soon");
-                    });
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_BUILTIN_QUEST_PACK =
             BUILDER.comment("If false, disables the built-in Boundless quest pack.")
                     .define("enableBuiltinQuestPack", true);
@@ -84,6 +77,12 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
             BUILDER.comment("If true, allows colored quest descriptions to render with Boundless color tokens.")
                     .define("enableDescriptionColors", true);
+    public static final ModConfigSpec.ConfigValue<String> QUEST_WIDGET_TEXT_COLOR =
+            BUILDER.comment("Hex color used for quest widget titles. Example: FFFFFF")
+                    .define("questWidgetTextColor", "FFFFFF", Config::isHexColor);
+    public static final ModConfigSpec.ConfigValue<String> DESCRIPTION_TEXT_COLOR =
+            BUILDER.comment("Hex color used for quest description text when no inline color token overrides it. Example: CFCFCF")
+                    .define("descriptionTextColor", "CFCFCF", Config::isHexColor);
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_READ_MORE =
             BUILDER.comment("If true, long quest descriptions collapse behind a read-more toggle.")
                     .define("enableDescriptionReadMore", true);
@@ -196,6 +195,8 @@ public final class Config {
             double questIconScale,
             boolean enableQuestSearchBox,
             boolean enableDescriptionColors,
+            String questWidgetTextColor,
+            String descriptionTextColor,
             boolean enableDescriptionReadMore,
             boolean enableDescriptionTextWrapping,
             String descriptionTextAlignment,
@@ -221,6 +222,8 @@ public final class Config {
         QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
+        QUEST_WIDGET_TEXT_COLOR.set(normalizeHexColor(questWidgetTextColor, "FFFFFF"));
+        DESCRIPTION_TEXT_COLOR.set(normalizeHexColor(descriptionTextColor, "CFCFCF"));
         ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
         ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
         DESCRIPTION_TEXT_ALIGNMENT.set(descriptionTextAlignment);
@@ -308,13 +311,6 @@ public final class Config {
         return DISABLE_CATEGORIES.get();
     }
 
-    public static String questPackDisplayType() {
-        String s = QUEST_PACK_DISPLAY_TYPE.get();
-        if (s == null) return "default_list";
-        s = s.trim().toLowerCase();
-        return (s.equals("default_list") || s.equals("quest_tree_coming_soon")) ? s : "default_list";
-    }
-
     public static boolean hideQuestWidgetIcons() {
         return HIDE_QUEST_WIDGET_ICONS.get();
     }
@@ -341,6 +337,14 @@ public final class Config {
 
     public static boolean enableDescriptionColors() {
         return ENABLE_DESCRIPTION_COLORS.get();
+    }
+
+    public static int questWidgetTextColor() {
+        return parseHexColor(QUEST_WIDGET_TEXT_COLOR.get(), 0xFFFFFF);
+    }
+
+    public static int descriptionTextColor() {
+        return parseHexColor(DESCRIPTION_TEXT_COLOR.get(), 0xCFCFCF);
     }
 
     public static boolean enableDescriptionReadMore() {
@@ -386,7 +390,7 @@ public final class Config {
     @SubscribeEvent
     public static void onLoad(ModConfigEvent.Loading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, widgetTextColor=#{}, descriptionTextColor=#{}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -401,6 +405,8 @@ public final class Config {
                     questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
+                    normalizeHexColor(QUEST_WIDGET_TEXT_COLOR.get(), "FFFFFF"),
+                    normalizeHexColor(DESCRIPTION_TEXT_COLOR.get(), "CFCFCF"),
                     enableDescriptionReadMore(),
                     enableDescriptionTextWrapping(),
                     descriptionTextAlignment(),
@@ -415,7 +421,7 @@ public final class Config {
     @SubscribeEvent
     public static void onReload(ModConfigEvent.Reloading e) {
         if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
+            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, widgetTextColor=#{}, descriptionTextColor=#{}, descReadMore={}, descWrap={}, descAlign={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
                     disabledCategories(),
                     pinnedQuestHudPosition(),
                     hideQuestBookInInventory(),
@@ -430,6 +436,8 @@ public final class Config {
                     questIconScale(),
                     enableQuestSearchBox(),
                     enableDescriptionColors(),
+                    normalizeHexColor(QUEST_WIDGET_TEXT_COLOR.get(), "FFFFFF"),
+                    normalizeHexColor(DESCRIPTION_TEXT_COLOR.get(), "CFCFCF"),
                     enableDescriptionReadMore(),
                     enableDescriptionTextWrapping(),
                     descriptionTextAlignment(),
@@ -439,5 +447,27 @@ public final class Config {
                     enableQuestScrolls(),
                     disableQuestBook(),
                     spawnWithQuestBook());
+    }
+
+    private static boolean isHexColor(Object raw) {
+        if (!(raw instanceof String s)) return false;
+        String value = s.trim();
+        if (value.startsWith("#")) value = value.substring(1);
+        return value.matches("(?i)[0-9a-f]{6}");
+    }
+
+    private static String normalizeHexColor(String raw, String fallback) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.startsWith("#")) value = value.substring(1);
+        value = value.toUpperCase(java.util.Locale.ROOT);
+        return value.matches("[0-9A-F]{6}") ? value : fallback;
+    }
+
+    private static int parseHexColor(String raw, int fallback) {
+        try {
+            return Integer.parseInt(normalizeHexColor(raw, String.format(java.util.Locale.ROOT, "%06X", fallback)), 16);
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 }
