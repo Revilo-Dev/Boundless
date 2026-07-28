@@ -387,6 +387,7 @@ public final class QuestEditorScreen extends Screen {
     private final List<String> lootTableIdCache = new ArrayList<>();
     private final List<String> biomeIdCache = new ArrayList<>();
     private final List<String> dimensionIdCache = new ArrayList<>();
+    private final List<String> structureIdCache = new ArrayList<>();
     private final List<String> observeIdCache = new ArrayList<>();
     private final Set<String> categoryIdCache = new HashSet<>();
     private final Set<String> subCategoryIdCache = new HashSet<>();
@@ -2203,7 +2204,7 @@ public final class QuestEditorScreen extends Screen {
                 obj.addProperty("dimension", normalizedId);
             }
             case "structure" -> {
-                String normalizedId = normalizeNamespacedId(id, false);
+                String normalizedId = normalizeNamespacedId(id, true);
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
                 obj.addProperty("structure", normalizedId);
             }
@@ -5598,7 +5599,7 @@ public final class QuestEditorScreen extends Screen {
             case "check" -> List.of("understand");
             case "biome" -> biomeSuggestions();
             case "dimension" -> dimensionSuggestions();
-            case "structure" -> List.of("minecraft:village_plains", "minecraft:ancient_city", "minecraft:stronghold");
+            case "structure" -> structureSuggestions();
             case "loot", "loottable" -> lootTableSuggestions();
             case "xp", "exp" -> List.of("points", "levels");
             case "levelup" -> LevelUpCompat.isAvailable() ? List.of("xp", "levels") : List.of();
@@ -6471,6 +6472,7 @@ public final class QuestEditorScreen extends Screen {
         lootTableIdCache.clear();
         biomeIdCache.clear();
         dimensionIdCache.clear();
+        structureIdCache.clear();
         observeIdCache.clear();
 
         Set<String> questPackDependencySuggestions = new LinkedHashSet<>();
@@ -8220,6 +8222,21 @@ public final class QuestEditorScreen extends Screen {
     private List<String> dimensionSuggestions() {
         ensureDimensionIdCache();
         return dimensionIdCache;
+    }
+
+    private void ensureStructureIdCache() {
+        if (!structureIdCache.isEmpty()) return;
+        if (minecraft != null && minecraft.level != null) {
+            var structureLookup = minecraft.level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+            structureLookup.listElementIds().forEach(key -> structureIdCache.add(key.location().toString()));
+            structureLookup.listTagIds().forEach(tag -> structureIdCache.add("#" + tag.location()));
+        }
+        structureIdCache.sort(String::compareTo);
+    }
+
+    private List<String> structureSuggestions() {
+        ensureStructureIdCache();
+        return structureIdCache;
     }
 
     private void ensureAdvancementIdCache() {

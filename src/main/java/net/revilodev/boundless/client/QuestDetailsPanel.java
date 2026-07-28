@@ -174,7 +174,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
             }
         }
-        if (target.isBiome() || target.isDimension() || target.isStructure()) {
+        if (target.isStructure()) {
+            ResourceLocation rl = safeParse(target.id);
+            if (rl != null) return rl.toString();
+        }
+        if (target.isBiome() || target.isDimension()) {
             ResourceLocation rl = safeParse(target.id);
             if (rl != null) return rl.getPath();
         }

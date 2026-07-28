@@ -26,6 +26,7 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
@@ -663,44 +664,27 @@ public final class QuestTracker {
 
     private static boolean isInStructure(Player player, String structureId) {
         if (player == null || structureId == null || structureId.isBlank()) return false;
-        ResourceLocation target = tryParseCached(structureId);
-        if (target == null) return false;
         ServerPlayer serverPlayer = player instanceof ServerPlayer sp ? sp : resolveIntegratedServerPlayer(player);
         if (serverPlayer == null) return false;
         try {
-            Object structureManager = serverPlayer.serverLevel().structureManager();
-            Class<?> blockPosClass = serverPlayer.blockPosition().getClass();
-            Object result = structureManager.getClass()
-                    .getMethod("getAllStructuresAt", blockPosClass)
-                    .invoke(structureManager, serverPlayer.blockPosition());
-            if (result instanceof Map<?, ?> map) {
-                for (Object key : map.keySet()) {
-                    if (structureKeyMatches(key, target)) return true;
-                }
+            var registry = serverPlayer.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+            var structureManager = serverPlayer.serverLevel().structureManager();
+            var blockPos = serverPlayer.blockPosition();
+            String trimmed = structureId.trim();
+            if (trimmed.startsWith("#")) {
+                ResourceLocation tagId = tryParseCached(trimmed.substring(1));
+                if (tagId == null) return false;
+                var structureTag = net.minecraft.tags.TagKey.create(Registries.STRUCTURE, tagId);
+                return structureManager.getStructureWithPieceAt(blockPos, structureTag).isValid();
             }
+
+            ResourceLocation target = tryParseCached(trimmed);
+            if (target == null) return false;
+            Optional<Holder.Reference<Structure>> structureHolder = registry.get(ResourceKey.create(Registries.STRUCTURE, target));
+            return structureHolder.isPresent()
+                    && structureManager.getStructureWithPieceAt(blockPos, structureHolder.get().value()).isValid();
         } catch (Throwable ignored) {}
         return false;
-    }
-
-    private static boolean structureKeyMatches(Object key, ResourceLocation target) {
-        if (key == null || target == null) return false;
-        try {
-            Object unwrap = key;
-            if (String.valueOf(key.getClass().getName()).contains("Holder")) {
-                try {
-                    Object holderKey = key.getClass().getMethod("unwrapKey").invoke(key);
-                    String text = String.valueOf(holderKey);
-                    if (text.contains(target.toString())) return true;
-                } catch (Throwable ignored) {}
-            }
-            try {
-                Object location = unwrap.getClass().getMethod("location").invoke(unwrap);
-                if (target.equals(location)) return true;
-            } catch (Throwable ignored) {}
-            return String.valueOf(key).contains(target.toString());
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     public static int getCountInInventory(String id, Player player) {
