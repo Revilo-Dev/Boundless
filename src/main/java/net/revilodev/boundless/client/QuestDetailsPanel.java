@@ -34,6 +34,7 @@ import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestTracker;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -61,6 +62,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private static final ResourceLocation TEX_SCROLL =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
+    private static final Map<ResourceLocation, List<Item>> TAG_ITEM_CACHE = new HashMap<>();
 
     private final Minecraft mc = Minecraft.getInstance();
     private QuestData.Quest quest;
@@ -77,6 +79,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private boolean descExpanded = false;
     private boolean hideBackButton = false;
+    private LayoutCache layoutCache = LayoutCache.empty();
 
     private final List<DepClickRegion> depRegions = new ArrayList<>();
     private final List<ItemClickRegion> itemRegions = new ArrayList<>();
@@ -186,18 +189,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
             return label.isBlank() ? "Understand" : label;
         }
         return "Understand";
-    }
-
-    private List<QuestData.Category> unlockedCategoriesForQuest() {
-        List<QuestData.Category> unlocked = new ArrayList<>();
-        if (quest == null || quest.id == null || quest.id.isBlank()) return unlocked;
-        for (QuestData.Category category : QuestData.categoriesOrdered()) {
-            if (category == null || category.id == null || category.id.isBlank()) continue;
-            if ("all".equalsIgnoreCase(category.id)) continue;
-            if (!quest.id.equals(category.dependency)) continue;
-            unlocked.add(category);
-        }
-        return unlocked;
     }
 
     private static final class DepClickRegion {
@@ -361,6 +352,52 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    private record LayoutCacheKey(
+            int questIdentity,
+            int panelWidth,
+            boolean descExpanded,
+            int textScaleBits,
+            boolean enableDescriptionReadMore,
+            int descriptionTextColor,
+            boolean enableDescriptionColors,
+            boolean enableDescriptionTextWrapping,
+            String descriptionTextAlignment
+    ) {}
+
+    private static final class LayoutCache {
+        private static final LayoutCache EMPTY = new LayoutCache(null, "", List.of(), 0, List.of(), 0, 0);
+
+        final LayoutCacheKey key;
+        final String shownDescription;
+        final List<DescriptionLine> descriptionLines;
+        final int descriptionHeight;
+        final List<QuestData.Category> unlockedCategories;
+        final int lootCommandCount;
+        final int measuredContentHeight;
+
+        private LayoutCache(
+                LayoutCacheKey key,
+                String shownDescription,
+                List<DescriptionLine> descriptionLines,
+                int descriptionHeight,
+                List<QuestData.Category> unlockedCategories,
+                int lootCommandCount,
+                int measuredContentHeight
+        ) {
+            this.key = key;
+            this.shownDescription = shownDescription;
+            this.descriptionLines = descriptionLines;
+            this.descriptionHeight = descriptionHeight;
+            this.unlockedCategories = unlockedCategories;
+            this.lootCommandCount = lootCommandCount;
+            this.measuredContentHeight = measuredContentHeight;
+        }
+
+        private static LayoutCache empty() {
+            return EMPTY;
+        }
+    }
+
     public AbstractButton backButton() { return back; }
     public AbstractButton completeButton() { return complete; }
     public AbstractButton rejectButton() { return reject; }
@@ -394,6 +431,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         this.descExpanded = false;
         this.reject.resetConfirmState();
         inputBoxes.clear();
+        invalidateLayoutCache();
         if (q != null) PinnedQuestHud.setCurrentQuestId(q.id);
     }
 
@@ -421,7 +459,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
         int contentBottom = complete.getY() - CONTENT_BOTTOM_MARGIN;
         int viewportH = Math.max(0, contentBottom - contentTop);
 
-        measuredContentHeight = measureContentHeight(w);
+        LayoutCache cache = getLayoutCache(w);
+        measuredContentHeight = cache.measuredContentHeight;
         int maxScroll = Math.max(0, measuredContentHeight + BOTTOM_PADDING - viewportH);
         scrollY = Mth.clamp(scrollY, 0f, maxScroll);
 
@@ -466,19 +505,12 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         int[] curY = {contentTop + 3 - Mth.floor(scrollY)};
 
-        if (!quest.description.isBlank()) {
+        if (!cache.shownDescription.isBlank()) {
             String full = quest.description;
             boolean needsMore = Config.enableDescriptionReadMore() && full.length() > DESC_CHAR_LIMIT;
 
-            String shown = full;
-            if (needsMore && !descExpanded) {
-                int cut = full.lastIndexOf(" ", DESC_CHAR_LIMIT);
-                if (cut < 0) cut = DESC_CHAR_LIMIT;
-                shown = full.substring(0, cut) + "...";
-            }
-
-            int wrapHeight = drawFormattedDescription(gg, shown, x + 4, curY[0], w - 8, Config.descriptionTextColor());
-            addDescriptionItemRegions(shown, x + 4, curY[0], w - 8);
+            int wrapHeight = drawFormattedDescription(gg, cache.descriptionLines, x + 4, curY[0], w - 8);
+            addDescriptionItemRegions(cache.descriptionLines, x + 4, curY[0], w - 8);
 
             if (needsMore) {
                 int toggleY = curY[0] + wrapHeight + 2;
@@ -540,7 +572,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             curY[0] += 2;
         }
 
-        List<QuestData.Category> unlockedCategories = unlockedCategoriesForQuest();
+        List<QuestData.Category> unlockedCategories = cache.unlockedCategories;
         if (!unlockedCategories.isEmpty()) {
             Component unlocksLabel = Component.literal("Unlocks Categories");
             drawScaledWordWrap(gg, unlocksLabel, x + 4, curY[0], w - 8, 0x55CCFF);
@@ -849,7 +881,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             curY[0] += 2;
         }
 
-        int lootCommandCount = commandLootRewardCount();
+        int lootCommandCount = cache.lootCommandCount;
         boolean hasItemRewards = quest.rewards != null && quest.rewards.items != null && !quest.rewards.items.isEmpty();
         boolean hasCommandRewards = quest.rewards != null && quest.rewards.hasCommands() && quest.rewards.commands.size() > lootCommandCount;
         boolean hasFunctionRewards = quest.rewards != null && quest.rewards.hasFunctions();
@@ -1093,22 +1125,43 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     private int measureContentHeight(int panelWidth) {
         if (quest == null) return 0;
+        LayoutCache cache = getLayoutCache(panelWidth);
+        return cache.measuredContentHeight;
+    }
+
+    private LayoutCache getLayoutCache(int panelWidth) {
+        if (quest == null) return LayoutCache.empty();
+        LayoutCacheKey key = new LayoutCacheKey(
+                System.identityHashCode(quest),
+                panelWidth,
+                descExpanded,
+                Float.floatToIntBits(textScale()),
+                Config.enableDescriptionReadMore(),
+                Config.descriptionTextColor(),
+                Config.enableDescriptionColors(),
+                Config.enableDescriptionTextWrapping(),
+                Config.descriptionTextAlignment()
+        );
+        if (key.equals(layoutCache.key)) {
+            return layoutCache;
+        }
+
+        String shownDescription = shownDescriptionText();
+        List<DescriptionLine> descriptionLines = shownDescription.isBlank()
+                ? List.of()
+                : Collections.unmodifiableList(buildDescriptionLines(shownDescription, panelWidth - 8, Config.descriptionTextColor(), Config.enableDescriptionColors()));
+        int descriptionHeight = descriptionLines.isEmpty()
+                ? 0
+                : Math.max(1, Math.round(descriptionLines.size() * mc.font.lineHeight * textScale()));
+        List<QuestData.Category> unlockedCategories = Collections.unmodifiableList(computeUnlockedCategoriesForQuest());
+        int lootCommandCount = computeCommandLootRewardCount();
 
         int w = panelWidth;
         int y = 0;
 
-        if (!quest.description.isBlank()) {
-            String full = quest.description;
-            boolean needsMore = Config.enableDescriptionReadMore() && full.length() > DESC_CHAR_LIMIT;
-
-            String shown = full;
-            if (needsMore && !descExpanded) {
-                int cut = full.lastIndexOf(" ", DESC_CHAR_LIMIT);
-                if (cut < 0) cut = DESC_CHAR_LIMIT;
-                shown = full.substring(0, cut) + "...";
-            }
-
-            int wrapH = formattedDescriptionHeight(shown, w - 8, Config.descriptionTextColor());
+        if (!shownDescription.isBlank()) {
+            boolean needsMore = Config.enableDescriptionReadMore() && quest.description.length() > DESC_CHAR_LIMIT;
+            int wrapH = descriptionHeight;
             if (needsMore) y += wrapH + scaledLineHeight() + 6;
             else y += wrapH + 8;
         }
@@ -1118,7 +1171,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
             y += quest.dependencies.size() * scaledRowHeight() + 2;
         }
 
-        List<QuestData.Category> unlockedCategories = unlockedCategoriesForQuest();
         if (!unlockedCategories.isEmpty()) {
             y += scaledWrappedHeight(Component.literal("Unlocks Categories"), w - 8) + 2;
             y += unlockedCategories.size() * scaledRowHeight() + 2;
@@ -1163,7 +1215,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
             y += 2;
         }
 
-        int lootCommandCount = commandLootRewardCount();
         boolean hasItemRewards = quest.rewards != null && quest.rewards.items != null && !quest.rewards.items.isEmpty();
         boolean hasCommandRewards = quest.rewards != null && quest.rewards.hasCommands() && quest.rewards.commands.size() > lootCommandCount;
         boolean hasFunctionRewards = quest.rewards != null && quest.rewards.hasFunctions();
@@ -1219,7 +1270,34 @@ public final class QuestDetailsPanel extends AbstractWidget {
             y += 2;
         }
 
-        return y;
+        layoutCache = new LayoutCache(key, shownDescription, descriptionLines, descriptionHeight, unlockedCategories, lootCommandCount, y);
+        return layoutCache;
+    }
+
+    private void invalidateLayoutCache() {
+        layoutCache = LayoutCache.empty();
+    }
+
+    private String shownDescriptionText() {
+        if (quest == null || quest.description.isBlank()) return "";
+        String full = quest.description;
+        boolean needsMore = Config.enableDescriptionReadMore() && full.length() > DESC_CHAR_LIMIT;
+        if (!needsMore || descExpanded) return full;
+        int cut = full.lastIndexOf(" ", DESC_CHAR_LIMIT);
+        if (cut < 0) cut = DESC_CHAR_LIMIT;
+        return full.substring(0, cut) + "...";
+    }
+
+    private List<QuestData.Category> computeUnlockedCategoriesForQuest() {
+        List<QuestData.Category> unlocked = new ArrayList<>();
+        if (quest == null || quest.id == null || quest.id.isBlank()) return unlocked;
+        for (QuestData.Category category : QuestData.categoriesOrdered()) {
+            if (category == null || category.id == null || category.id.isBlank()) continue;
+            if ("all".equalsIgnoreCase(category.id)) continue;
+            if (!quest.id.equals(category.dependency)) continue;
+            unlocked.add(category);
+        }
+        return unlocked;
     }
 
     private int wrappedHeight(Component component, int maxWidth) {
@@ -1285,9 +1363,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
         gg.pose().popPose();
     }
 
-    private int drawFormattedDescription(GuiGraphics gg, String raw, int x, int y, int physicalWidth, int defaultColor) {
+    private int drawFormattedDescription(GuiGraphics gg, List<DescriptionLine> lines, int x, int y, int physicalWidth) {
         if (physicalWidth <= 0) return 0;
-        List<DescriptionLine> lines = buildDescriptionLines(raw, physicalWidth, defaultColor, Config.enableDescriptionColors());
         if (lines.isEmpty()) return scaledLineHeight();
 
         float scale = textScale();
@@ -1327,11 +1404,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
         gg.pose().popPose();
         return Math.max(1, Math.round(lines.size() * mc.font.lineHeight * scale));
-    }
-
-    private int formattedDescriptionHeight(String raw, int physicalWidth, int defaultColor) {
-        if (physicalWidth <= 0) return 0;
-        return Math.max(1, Math.round(buildDescriptionLines(raw, physicalWidth, defaultColor, Config.enableDescriptionColors()).size() * mc.font.lineHeight * textScale()));
     }
 
     private List<DescriptionLine> buildDescriptionLines(String raw, int physicalWidth, int defaultColor, boolean allowFormatting) {
@@ -1522,11 +1594,10 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return exists;
     }
 
-    private void addDescriptionItemRegions(String text, int x, int y, int maxWidth) {
-        if (text == null || text.isBlank() || maxWidth <= 0) return;
+    private void addDescriptionItemRegions(List<DescriptionLine> lines, int x, int y, int maxWidth) {
+        if (lines == null || lines.isEmpty() || maxWidth <= 0) return;
         float scale = textScale();
         int wrapWidth = scaledWrapWidth(maxWidth);
-        List<DescriptionLine> lines = buildDescriptionLines(text, maxWidth, Config.descriptionTextColor(), false);
         int lineY = y;
         for (DescriptionLine line : lines) {
             String plain = line.plainText();
@@ -1678,7 +1749,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return trimmed.substring(prefix.length()).trim();
     }
 
-    private int commandLootRewardCount() {
+    private int computeCommandLootRewardCount() {
         if (quest == null || quest.rewards == null || quest.rewards.commands == null) return 0;
         int total = 0;
         for (QuestData.CommandReward cr : quest.rewards.commands) {
@@ -1728,6 +1799,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private List<Item> resolveTagItems(ResourceLocation tagId) {
+        List<Item> cached = TAG_ITEM_CACHE.get(tagId);
+        if (cached != null) return cached;
+
         List<Item> out = new ArrayList<>();
         var itemTag = net.minecraft.tags.TagKey.create(Registries.ITEM, tagId);
         for (Item it : BuiltInRegistries.ITEM) {
@@ -1741,7 +1815,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
             }
         }
-        return out;
+        List<Item> resolved = out.isEmpty() ? List.of() : List.copyOf(out);
+        TAG_ITEM_CACHE.put(tagId, resolved);
+        return resolved;
     }
 
     private EditBox createInputBox() {
@@ -1834,6 +1910,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             if (r.contains(mouseX, mouseY)) {
                 if ("__desc_toggle__".equals(r.questId)) {
                     descExpanded = !descExpanded;
+                    invalidateLayoutCache();
                     return true;
                 }
 
