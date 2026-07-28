@@ -1783,10 +1783,10 @@ public final class QuestData {
                                 if (!te.isJsonObject()) continue;
                                 JsonObject toast = te.getAsJsonObject();
                                 String title = optString(toast, "title");
-                                String description = optString(toast, "description");
-                                String icon = optString(toast, "icon");
-                                if ((title != null && !title.isBlank()) || (description != null && !description.isBlank()) || (icon != null && !icon.isBlank())) {
-                                    toasts.add(new ToastReward(title, description, icon));
+                                String toastDescription = optString(toast, "description");
+                                String toastIcon = optString(toast, "icon");
+                                if ((title != null && !title.isBlank()) || (toastDescription != null && !toastDescription.isBlank()) || (toastIcon != null && !toastIcon.isBlank())) {
+                                    toasts.add(new ToastReward(title, toastDescription, toastIcon));
                                 }
                             }
                         }
