@@ -147,10 +147,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
             }
         }
-        if (target.isStructure()) {
-            ResourceLocation rl = safeParse(target.id);
-            if (rl != null) return rl.toString();
-        }
         if (target.isBiome() || target.isDimension()) {
             ResourceLocation rl = safeParse(target.id);
             if (rl != null) return rl.getPath();
@@ -774,20 +770,14 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     String advName = rl.toString();
 
                     Advancement holder = null;
-
-                    if (mc.getConnection() != null) {
-                        holder = mc.getConnection().getAdvancements().get(rl);
-                    }
-
-                    if (holder == null && mc.hasSingleplayerServer()) {
+                    if (mc.hasSingleplayerServer()) {
                         var server = mc.getSingleplayerServer();
-                        if (server != null) holder = server.getAdvancements().get(rl);
+                        if (server != null) holder = server.getAdvancements().getAdvancement(rl);
                     }
 
                     if (holder != null) {
-                        var displayOpt = holder.getDisplay();
-                        if (displayOpt.isPresent()) {
-                            DisplayInfo di = displayOpt.get();
+                        DisplayInfo di = holder.getDisplay();
+                        if (di != null) {
                             advName = di.getTitle().getString();
                             icon = di.getIcon();
                         }
@@ -836,18 +826,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     renderScaledItem(gg, new ItemStack(Items.ENDER_PEARL), x + 4, curY[0]);
                     String dimensionName = objectiveDisplayName(t);
                     drawScaledString(gg, dimensionName, x + 24, curY[0] + 4, color);
-                    if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
-                        hoveredTooltips.add(Component.literal(t.id));
-                    }
-                    curY[0] += scaledRowHeight();
-                } else if (t.isStructure()) {
-                    drawScaledString(gg, Component.literal("Structure:"), x + 4, curY[0], 0xFFD166);
-                    curY[0] += scaledLineHeight() + 2;
-                    boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
-                    int color = done ? 0x55FF55 : 0xFF5555;
-                    renderScaledItem(gg, new ItemStack(Items.MAP), x + 4, curY[0]);
-                    String structureName = objectiveDisplayName(t);
-                    drawScaledString(gg, structureName, x + 24, curY[0] + 4, color);
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
                         hoveredTooltips.add(Component.literal(t.id));
                     }
@@ -1168,7 +1146,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         printedKillHeader = true;
                     }
                 } else if (target.isEffect() || target.isAdvancement()
-                        || target.isObserve() || target.isBiome() || target.isDimension() || target.isStructure()) {
+                        || target.isObserve() || target.isBiome() || target.isDimension()) {
                     y += scaledLineHeight() + 2;
                 }
 

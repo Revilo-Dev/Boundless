@@ -386,7 +386,6 @@ public final class QuestEditorScreen extends Screen {
     private final List<String> lootTableIdCache = new ArrayList<>();
     private final List<String> biomeIdCache = new ArrayList<>();
     private final List<String> dimensionIdCache = new ArrayList<>();
-    private final List<String> structureIdCache = new ArrayList<>();
     private final List<String> observeIdCache = new ArrayList<>();
     private final Set<String> categoryIdCache = new HashSet<>();
     private final Set<String> subCategoryIdCache = new HashSet<>();
@@ -2202,11 +2201,6 @@ public final class QuestEditorScreen extends Screen {
                 if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
                 obj.addProperty("dimension", normalizedId);
             }
-            case "structure" -> {
-                String normalizedId = normalizeNamespacedId(id, true);
-                if (normalizedId.isBlank()) return failCompletion(line, raiseErrors);
-                obj.addProperty("structure", normalizedId);
-            }
             case "xp" -> {
                 String mode = safe(id).trim().toLowerCase(Locale.ROOT);
                 if (!mode.equals("points") && !mode.equals("levels")) return failCompletion(line, raiseErrors);
@@ -2484,7 +2478,6 @@ public final class QuestEditorScreen extends Screen {
                     case "check" -> out.add("check: " + (id.isBlank() ? "Understand" : id));
                     case "biome" -> out.add("biome: " + id);
                     case "dimension" -> out.add("dimension: " + id);
-                    case "structure" -> out.add("structure: " + id);
                     case "xp" -> out.add("xp: " + id + " " + count);
                     case "levelup_level" -> out.add("levelup: levels " + count);
                     case "field" -> {
@@ -2516,7 +2509,6 @@ public final class QuestEditorScreen extends Screen {
             }
             else if (obj.has("biome")) out.add("biome: " + optString(obj, "biome", ""));
             else if (obj.has("dimension")) out.add("dimension: " + optString(obj, "dimension", ""));
-            else if (obj.has("structure")) out.add("structure: " + optString(obj, "structure", ""));
             else if (obj.has("xp")) out.add("xp: " + optString(obj, "xp", "points") + " " + parseIntFlexible(obj, "count", 1));
             else if (obj.has("levelup_level")) out.add("levelup: levels " + parseIntFlexible(obj, "levelup_level", 1));
             else if (obj.has("field")) {
@@ -3810,7 +3802,6 @@ public final class QuestEditorScreen extends Screen {
             case "check" -> "Understand";
             case "biome" -> "minecraft:plains";
             case "dimension" -> "minecraft:overworld";
-            case "structure" -> "minecraft:village_plains";
             case "xp" -> "points 100";
             case "levelup" -> "levels 10";
             case "field" -> "\"expected text\" \"hint text\"";
@@ -5594,9 +5585,9 @@ public final class QuestEditorScreen extends Screen {
         if (ctx == null) return List.of();
         if (!ctx.hasTypeSeparator) {
             return isCompletionEntryField(field)
-                    ? (LevelUpCompat.isAvailable()
-                        ? List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "levelup", "field")
-                        : List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "field"))
+                ? (LevelUpCompat.isAvailable()
+                        ? List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "xp", "levelup", "field")
+                        : List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "xp", "field"))
                     : (LevelUpCompat.isAvailable()
                         ? List.of("item", "xp", "levelup", "command", "loot", "advancement", "toast")
                         : List.of("item", "xp", "command", "loot", "advancement", "toast"));
@@ -5610,7 +5601,6 @@ public final class QuestEditorScreen extends Screen {
             case "check" -> List.of("understand");
             case "biome" -> biomeSuggestions();
             case "dimension" -> dimensionSuggestions();
-            case "structure" -> structureSuggestions();
             case "loot", "loottable" -> lootTableSuggestions();
             case "xp", "exp" -> List.of("points", "levels");
             case "levelup" -> LevelUpCompat.isAvailable() ? List.of("xp", "levels") : List.of();
@@ -6483,7 +6473,6 @@ public final class QuestEditorScreen extends Screen {
         lootTableIdCache.clear();
         biomeIdCache.clear();
         dimensionIdCache.clear();
-        structureIdCache.clear();
         observeIdCache.clear();
 
         Set<String> questPackDependencySuggestions = new LinkedHashSet<>();
@@ -7283,8 +7272,8 @@ public final class QuestEditorScreen extends Screen {
     private List<String> entryTypeOptions(EntryRowKind kind) {
         if (kind == EntryRowKind.COMPLETION) {
             return LevelUpCompat.isAvailable()
-                    ? List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "levelup", "field")
-                    : List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "structure", "xp", "field");
+                    ? List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "xp", "levelup", "field")
+                    : List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "xp", "field");
         }
         if (kind == EntryRowKind.REWARD) {
             return LevelUpCompat.isAvailable()
@@ -7610,8 +7599,13 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void renderVanillaFooterButton(GuiGraphics gg, int x, int y, int width, int height, String text, boolean enabled, boolean selected) {
-        ResourceLocation sprite = enabled ? VANILLA_BUTTON_SPRITE : ResourceLocation.withDefaultNamespace("widget/button_disabled");
-        gg.blitSprite(sprite, x, y, width, height);
+        int fill = enabled ? 0xFF6B6B6B : 0xFF3E3E3E;
+        int border = enabled ? 0xFFFFFFFF : 0xFFA0A0A0;
+        gg.fill(x, y, x + width, y + height, fill);
+        gg.fill(x, y, x + width, y + 1, border);
+        gg.fill(x, y + height - 1, x + width, y + height, border);
+        gg.fill(x, y, x + 1, y + height, border);
+        gg.fill(x + width - 1, y, x + width, y + height, border);
         if (selected) {
             gg.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0x6637A24A);
         }
@@ -7774,12 +7768,12 @@ public final class QuestEditorScreen extends Screen {
             if (!matching.isEmpty()) {
                 int index = (int) ((Util.getMillis() / 900L) % matching.size());
                 ItemStack stack = new ItemStack(matching.get(index));
-                stack.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(tagId));
+                stack.setHoverName(Component.literal(tagId));
                 return stack;
             }
         }
         ItemStack fallback = new ItemStack(net.minecraft.world.item.Items.PAPER);
-        fallback.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(tagId));
+        fallback.setHoverName(Component.literal(tagId));
         return fallback;
     }
 
@@ -8233,21 +8227,6 @@ public final class QuestEditorScreen extends Screen {
     private List<String> dimensionSuggestions() {
         ensureDimensionIdCache();
         return dimensionIdCache;
-    }
-
-    private void ensureStructureIdCache() {
-        if (!structureIdCache.isEmpty()) return;
-        if (minecraft != null && minecraft.level != null) {
-            var structureLookup = minecraft.level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
-            structureLookup.listElementIds().forEach(key -> structureIdCache.add(key.location().toString()));
-            structureLookup.listTagIds().forEach(tag -> structureIdCache.add("#" + tag.location()));
-        }
-        structureIdCache.sort(String::compareTo);
-    }
-
-    private List<String> structureSuggestions() {
-        ensureStructureIdCache();
-        return structureIdCache;
     }
 
     private void ensureAdvancementIdCache() {

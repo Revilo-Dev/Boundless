@@ -3,20 +3,19 @@ package net.revilodev.boundless.quest;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.arguments.item.ItemInput;
-import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.core.Holder;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.effect.MobEffect;
@@ -26,6 +25,7 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
@@ -35,9 +35,9 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.revilodev.boundless.BoundlessMod;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -64,6 +64,7 @@ public final class QuestTracker {
     private static final Map<String, Map<String, Status>> WORLD_STATES = new HashMap<>();
     private static final Map<String, Integer> CLIENT_KILLS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_ADV_DONE = new HashMap<>();
+    private static final Map<String, Integer> CLIENT_STATS = new HashMap<>();
     private static final Map<String, Integer> CLIENT_ITEM_PROGRESS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_EFFECT_PROGRESS = new HashMap<>();
     private static final Map<String, String> CLIENT_INPUT_PROGRESS = new HashMap<>();
@@ -72,7 +73,7 @@ public final class QuestTracker {
     private static final Map<String, Boolean> CLIENT_SCROLL_CREATED = new HashMap<>();
     private static final Map<String, ResourceLocation> RL_CACHE = new HashMap<>();
     private static final Map<String, Optional<Item>> ITEM_BY_ID_CACHE = new HashMap<>();
-    private static final Map<String, Holder<MobEffect>> EFFECT_BY_ID_CACHE = new HashMap<>();
+    private static final Map<String, MobEffect> EFFECT_BY_ID_CACHE = new HashMap<>();
     private static final Map<UUID, Integer> SERVER_QUEST_SCAN_CURSOR = new HashMap<>();
     private static final int SERVER_QUEST_SCAN_BATCH = 32;
 
@@ -606,8 +607,47 @@ public final class QuestTracker {
         return "levels".equals(mode) ? "levels" : "points";
     }
 
+    public static String normalizeStatId(String statId) {
+        return statId == null ? "" : statId.trim().toLowerCase(Locale.ROOT);
+    }
+
     private static String safeNormalizeFieldInput(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    public static int getStatCount(Player player, String statId) {
+        String normalized = normalizeStatId(statId);
+        if (player == null || normalized.isBlank()) return 0;
+        try {
+            if (player instanceof ServerPlayer sp) {
+                int first = normalized.indexOf(':');
+                int second = normalized.indexOf(':', first + 1);
+                boolean typed = second > first;
+                String type = typed ? normalized.substring(0, first) : "custom";
+                String name = typed ? normalized.substring(first + 1) : normalized;
+                ResourceLocation rl = ResourceLocation.tryParse(name);
+                if (rl == null) return 0;
+                return switch (type) {
+                    case "custom" -> sp.getStats().getValue(Stats.CUSTOM.get(rl));
+                    case "mine_block" -> {
+                        var block = BuiltInRegistries.BLOCK.getOptional(rl).orElse(null);
+                        yield block == null ? 0 : sp.getStats().getValue(Stats.BLOCK_MINED.get(block));
+                    }
+                    case "use_item" -> {
+                        var item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
+                        yield item == null ? 0 : sp.getStats().getValue(Stats.ITEM_USED.get(item));
+                    }
+                    case "kill_entity" -> {
+                        var entityType = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+                        yield entityType == null ? 0 : sp.getStats().getValue(Stats.ENTITY_KILLED.get(entityType));
+                    }
+                    default -> 0;
+                };
+            }
+            if (player.level().isClientSide) return CLIENT_STATS.getOrDefault(normalized, 0);
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 
     public static boolean markFlagProgress(ServerPlayer player, String key) {
@@ -663,44 +703,27 @@ public final class QuestTracker {
 
     private static boolean isInStructure(Player player, String structureId) {
         if (player == null || structureId == null || structureId.isBlank()) return false;
-        ResourceLocation target = tryParseCached(structureId);
-        if (target == null) return false;
         ServerPlayer serverPlayer = player instanceof ServerPlayer sp ? sp : resolveIntegratedServerPlayer(player);
         if (serverPlayer == null) return false;
         try {
-            Object structureManager = serverPlayer.serverLevel().structureManager();
-            Class<?> blockPosClass = serverPlayer.blockPosition().getClass();
-            Object result = structureManager.getClass()
-                    .getMethod("getAllStructuresAt", blockPosClass)
-                    .invoke(structureManager, serverPlayer.blockPosition());
-            if (result instanceof Map<?, ?> map) {
-                for (Object key : map.keySet()) {
-                    if (structureKeyMatches(key, target)) return true;
-                }
+            var registry = serverPlayer.server.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+            var structureManager = serverPlayer.serverLevel().structureManager();
+            var blockPos = serverPlayer.blockPosition();
+            String trimmed = structureId.trim();
+            if (trimmed.startsWith("#")) {
+                ResourceLocation tagId = tryParseCached(trimmed.substring(1));
+                if (tagId == null) return false;
+                var structureTag = net.minecraft.tags.TagKey.create(Registries.STRUCTURE, tagId);
+                return structureManager.getStructureWithPieceAt(blockPos, structureTag).isValid();
             }
+
+            ResourceLocation target = tryParseCached(trimmed);
+            if (target == null) return false;
+            Optional<Holder.Reference<Structure>> structureHolder = registry.get(ResourceKey.create(Registries.STRUCTURE, target));
+            return structureHolder.isPresent()
+                    && structureManager.getStructureWithPieceAt(blockPos, structureHolder.get().value()).isValid();
         } catch (Throwable ignored) {}
         return false;
-    }
-
-    private static boolean structureKeyMatches(Object key, ResourceLocation target) {
-        if (key == null || target == null) return false;
-        try {
-            Object unwrap = key;
-            if (String.valueOf(key.getClass().getName()).contains("Holder")) {
-                try {
-                    Object holderKey = key.getClass().getMethod("unwrapKey").invoke(key);
-                    String text = String.valueOf(holderKey);
-                    if (text.contains(target.toString())) return true;
-                } catch (Throwable ignored) {}
-            }
-            try {
-                Object location = unwrap.getClass().getMethod("location").invoke(unwrap);
-                if (target.equals(location)) return true;
-            } catch (Throwable ignored) {}
-            return String.valueOf(key).contains(target.toString());
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     public static int getCountInInventory(String id, Player player) {
@@ -713,7 +736,7 @@ public final class QuestTracker {
 
         Item direct = resolveItemById(key);
         int found = 0;
-        var registries = player.registryAccess();
+        var registries = player.level().registryAccess();
         var inventory = player.getInventory();
         int containerSize = inventory.getContainerSize();
 
@@ -879,10 +902,10 @@ public final class QuestTracker {
 
     public static boolean hasEffect(Player player, String effectId) {
         if (player == null || effectId == null || effectId.isBlank()) return false;
-        Holder<MobEffect> holder = EFFECT_BY_ID_CACHE.get(effectId);
+        MobEffect holder = EFFECT_BY_ID_CACHE.get(effectId);
         if (!EFFECT_BY_ID_CACHE.containsKey(effectId)) {
             ResourceLocation rl = tryParseCached(effectId);
-            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
+            holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getOptional(rl).orElse(null);
             EFFECT_BY_ID_CACHE.put(effectId, holder);
         }
         return holder != null && player.hasEffect(holder);
@@ -917,7 +940,7 @@ public final class QuestTracker {
     }
 
     private static boolean hasAdvancementServer(ServerPlayer sp, ResourceLocation rl) {
-        AdvancementHolder holder = sp.server.getAdvancements().get(rl);
+        Advancement holder = sp.server.getAdvancements().getAdvancement(rl);
         if (holder == null) return false;
 
         AdvancementProgress prog = sp.getAdvancements().getOrStartProgress(holder);
@@ -1062,8 +1085,7 @@ public final class QuestTracker {
             if (rl == null) continue;
             LootTable table;
             try {
-                table = player.server.reloadableRegistries()
-                        .getLootTable(ResourceKey.create(Registries.LOOT_TABLE, rl));
+                table = player.server.getLootData().getLootTable(rl);
             } catch (Throwable ignored) {
                 table = null;
             }
@@ -1073,7 +1095,7 @@ public final class QuestTracker {
                     .withParameter(LootContextParams.ORIGIN, player.position())
                     .withParameter(LootContextParams.THIS_ENTITY, player)
                     .create(LootContextParamSets.GIFT);
-            ObjectArrayList<ItemStack> generated = table.getRandomItems(params, player.getRandom());
+            ObjectArrayList<ItemStack> generated = table.getRandomItems(params, player.getRandom().nextLong());
             for (ItemStack stack : generated) {
                 if (stack == null || stack.isEmpty()) continue;
                 try {
@@ -1134,7 +1156,7 @@ public final class QuestTracker {
             try {
                 ResourceLocation rl = ResourceLocation.tryParse(reward.advancement);
                 if (rl == null) continue;
-                AdvancementHolder advancement = player.server.getAdvancements().get(rl);
+                Advancement advancement = player.server.getAdvancements().getAdvancement(rl);
                 if (advancement == null) continue;
                 AdvancementProgress progress = player.getAdvancements().getOrStartProgress(advancement);
                 for (String criterion : progress.getRemainingCriteria()) {
@@ -1158,8 +1180,11 @@ public final class QuestTracker {
     private static ItemStack createRewardStack(ServerPlayer player, QuestItemSpec spec, Item item, int count) {
         if (player != null && spec != null && !spec.components.isBlank()) {
             try {
-                ItemParser.ItemResult parsed = new ItemParser(player.registryAccess()).parse(new StringReader(spec.commandSyntax()));
-                return new ItemInput(parsed.item(), parsed.components()).createItemStack(count, false);
+                ItemStack stack = new ItemStack(item, count);
+                if (spec.components.startsWith("{") && spec.components.endsWith("}")) {
+                    stack.setTag(TagParser.parseTag(spec.components));
+                }
+                return stack;
             } catch (CommandSyntaxException e) {
                 BoundlessMod.LOGGER.warn("Could not parse item reward components '{}'; granting base item", spec.serialized(), e);
             } catch (Throwable t) {
@@ -1343,9 +1368,18 @@ public final class QuestTracker {
         CLIENT_KILLS.put(entityId, Math.max(0, count));
     }
 
+    public static void clientSetStat(String statId, int count) {
+        String normalized = normalizeStatId(statId);
+        if (normalized.isBlank()) return;
+        int sanitized = Math.max(0, count);
+        if (sanitized <= 0) CLIENT_STATS.remove(normalized);
+        else CLIENT_STATS.put(normalized, sanitized);
+    }
+
     public static void clientClearAll() {
         CLIENT_KILLS.clear();
         CLIENT_ADV_DONE.clear();
+        CLIENT_STATS.clear();
         CLIENT_ITEM_PROGRESS.clear();
         CLIENT_EFFECT_PROGRESS.clear();
         CLIENT_INPUT_PROGRESS.clear();
@@ -1398,9 +1432,7 @@ public final class QuestTracker {
             for (QuestData.Target target : quest.completion.targets) {
                 if (target == null || !target.isObserve() || target.id == null || target.id.isBlank()) continue;
                 if (!isObservingTarget(player, target.id)) continue;
-                net.neoforged.neoforge.network.PacketDistributor.sendToServer(
-                        new net.revilodev.boundless.network.BoundlessNetwork.ReportObserve(quest.id, target.id)
-                );
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.ReportObserve(quest.id, target.id));
             }
         }
     }
