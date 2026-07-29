@@ -26,7 +26,6 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
@@ -52,6 +51,7 @@ import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.function.BooleanSupplier;
 
 import static net.revilodev.boundless.network.BoundlessNetwork.sendToastLocal;
 
@@ -167,6 +167,27 @@ public final class QuestTracker {
                     .updateFlagDone(integrated.getUUID(), key, hasNow);
         }
         return getPermanentFlagProgress(key, hasNow);
+    }
+
+    private static boolean getPermanentFlagProgress(Player player, String key, BooleanSupplier detector) {
+        if (key == null || key.isBlank()) return false;
+        if (player instanceof ServerPlayer sp) {
+            QuestObjectiveState state = QuestObjectiveState.get(sp.serverLevel());
+            if (state.getFlagDone(sp.getUUID(), key)) return true;
+            return state.updateFlagDone(sp.getUUID(), key, detector.getAsBoolean());
+        }
+        if (player != null && player.level().isClientSide && isClientMultiplayer()) {
+            if (CLIENT_EFFECT_PROGRESS.getOrDefault(key, false)) return true;
+            return detector.getAsBoolean();
+        }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            QuestObjectiveState state = QuestObjectiveState.get(integrated.serverLevel());
+            if (state.getFlagDone(integrated.getUUID(), key)) return true;
+            return state.updateFlagDone(integrated.getUUID(), key, detector.getAsBoolean());
+        }
+        if (CLIENT_EFFECT_PROGRESS.getOrDefault(key, false)) return true;
+        return getPermanentFlagProgress(key, detector.getAsBoolean());
     }
 
     public static void setFieldInputProgress(Player player, String key, String value) {
@@ -467,6 +488,25 @@ public final class QuestTracker {
         return CLIENT_EFFECT_PROGRESS.getOrDefault(key, false) || hasNow;
     }
 
+    private static boolean peekPermanentFlagProgress(Player player, String key, BooleanSupplier detector) {
+        if (key == null || key.isBlank()) return false;
+        if (player instanceof ServerPlayer sp) {
+            if (QuestObjectiveState.get(sp.serverLevel()).getFlagDone(sp.getUUID(), key)) return true;
+            return detector.getAsBoolean();
+        }
+        if (player != null && player.level().isClientSide && isClientMultiplayer()) {
+            if (CLIENT_EFFECT_PROGRESS.getOrDefault(key, false)) return true;
+            return detector.getAsBoolean();
+        }
+        ServerPlayer integrated = resolveIntegratedServerPlayer(player);
+        if (integrated != null) {
+            if (QuestObjectiveState.get(integrated.serverLevel()).getFlagDone(integrated.getUUID(), key)) return true;
+            return detector.getAsBoolean();
+        }
+        if (CLIENT_EFFECT_PROGRESS.getOrDefault(key, false)) return true;
+        return detector.getAsBoolean();
+    }
+
     private static boolean evaluateTarget(QuestData.Quest q, QuestData.Target t, Player player, boolean trackProgress) {
         if (t == null || player == null) return true;
 
@@ -488,40 +528,34 @@ public final class QuestTracker {
         if (t.isEffect()) {
             String key = flagProgressKey(q, t);
             return trackProgress
-                    ? getPermanentFlagProgress(player, key, hasEffect(player, t.id))
-                    : peekPermanentFlagProgress(player, key, hasEffect(player, t.id));
+                    ? getPermanentFlagProgress(player, key, () -> hasEffect(player, t.id))
+                    : peekPermanentFlagProgress(player, key, () -> hasEffect(player, t.id));
         }
 
         if (t.isAdvancement()) return hasAdvancement(player, t.id);
         if (t.isObserve()) {
             String key = flagProgressKey(q, t);
             return trackProgress
-                    ? getPermanentFlagProgress(player, key, isObservingTarget(player, t.id))
-                    : peekPermanentFlagProgress(player, key, isObservingTarget(player, t.id));
+                    ? getPermanentFlagProgress(player, key, () -> isObservingTarget(player, t.id))
+                    : peekPermanentFlagProgress(player, key, () -> isObservingTarget(player, t.id));
         }
         if (t.isBiome()) {
             String key = flagProgressKey(q, t);
             return trackProgress
-                    ? getPermanentFlagProgress(player, key, isInBiome(player, t.id))
-                    : peekPermanentFlagProgress(player, key, isInBiome(player, t.id));
+                    ? getPermanentFlagProgress(player, key, () -> isInBiome(player, t.id))
+                    : peekPermanentFlagProgress(player, key, () -> isInBiome(player, t.id));
         }
         if (t.isDimension()) {
             String key = flagProgressKey(q, t);
             return trackProgress
-                    ? getPermanentFlagProgress(player, key, isInDimension(player, t.id))
-                    : peekPermanentFlagProgress(player, key, isInDimension(player, t.id));
-        }
-        if (t.isStructure()) {
-            String key = flagProgressKey(q, t);
-            return trackProgress
-                    ? getPermanentFlagProgress(player, key, isInStructure(player, t.id))
-                    : peekPermanentFlagProgress(player, key, isInStructure(player, t.id));
+                    ? getPermanentFlagProgress(player, key, () -> isInDimension(player, t.id))
+                    : peekPermanentFlagProgress(player, key, () -> isInDimension(player, t.id));
         }
         if (t.isCheck()) {
             String key = flagProgressKey(q, t);
             return trackProgress
-                    ? getPermanentFlagProgress(player, key, false)
-                    : peekPermanentFlagProgress(player, key, false);
+                    ? getPermanentFlagProgress(player, key, () -> false)
+                    : peekPermanentFlagProgress(player, key, () -> false);
         }
         if (t.isXp()) return getXpAmount(player, t.id) >= t.count;
         if (t.isLevelUpLevel()) return LevelUpCompat.meetsLevelRequirement(player, t.count);
@@ -618,19 +652,15 @@ public final class QuestTracker {
     }
 
     public static boolean refreshPersistentContextTargets(ServerPlayer player) {
-        return refreshPersistentContextTargets(player, true, true, true, true);
+        return refreshPersistentContextTargets(player, true, true, true);
     }
 
     public static boolean refreshPersistentContextTargets(ServerPlayer player, boolean observe, boolean biome, boolean dimension) {
-        return refreshPersistentContextTargets(player, observe, biome, dimension, true);
-    }
-
-    public static boolean refreshPersistentContextTargets(ServerPlayer player, boolean observe, boolean biome, boolean dimension, boolean structure) {
         if (player == null) return false;
-        return refreshPersistentContextTargets(player, new ArrayList<>(QuestData.allServer(player.server)), 0, Integer.MAX_VALUE, observe, biome, dimension, structure);
+        return refreshPersistentContextTargets(player, new ArrayList<>(QuestData.allServer(player.server)), 0, Integer.MAX_VALUE, observe, biome, dimension);
     }
 
-    private static boolean refreshPersistentContextTargets(ServerPlayer player, List<QuestData.Quest> quests, int start, int limit, boolean observe, boolean biome, boolean dimension, boolean structure) {
+    private static boolean refreshPersistentContextTargets(ServerPlayer player, List<QuestData.Quest> quests, int start, int limit, boolean observe, boolean biome, boolean dimension) {
         if (player == null) return false;
         if (quests == null || quests.isEmpty() || limit <= 0) return false;
 
@@ -651,8 +681,7 @@ public final class QuestTracker {
 
                 boolean matches = (observe && target.isObserve() && isObservingTarget(player, target.id))
                         || (biome && target.isBiome() && isInBiome(player, target.id))
-                        || (dimension && target.isDimension() && isInDimension(player, target.id))
-                        || (structure && target.isStructure() && isInStructure(player, target.id));
+                        || (dimension && target.isDimension() && isInDimension(player, target.id));
                 if (!matches) continue;
 
                 changed |= markFlagProgress(player, flagProgressKey(quest, target));
@@ -660,31 +689,6 @@ public final class QuestTracker {
         }
 
         return changed;
-    }
-
-    private static boolean isInStructure(Player player, String structureId) {
-        if (player == null || structureId == null || structureId.isBlank()) return false;
-        ServerPlayer serverPlayer = player instanceof ServerPlayer sp ? sp : resolveIntegratedServerPlayer(player);
-        if (serverPlayer == null) return false;
-        try {
-            var registry = serverPlayer.registryAccess().lookupOrThrow(Registries.STRUCTURE);
-            var structureManager = serverPlayer.serverLevel().structureManager();
-            var blockPos = serverPlayer.blockPosition();
-            String trimmed = structureId.trim();
-            if (trimmed.startsWith("#")) {
-                ResourceLocation tagId = tryParseCached(trimmed.substring(1));
-                if (tagId == null) return false;
-                var structureTag = net.minecraft.tags.TagKey.create(Registries.STRUCTURE, tagId);
-                return structureManager.getStructureWithPieceAt(blockPos, structureTag).isValid();
-            }
-
-            ResourceLocation target = tryParseCached(trimmed);
-            if (target == null) return false;
-            Optional<Holder.Reference<Structure>> structureHolder = registry.get(ResourceKey.create(Registries.STRUCTURE, target));
-            return structureHolder.isPresent()
-                    && structureManager.getStructureWithPieceAt(blockPos, structureHolder.get().value()).isValid();
-        } catch (Throwable ignored) {}
-        return false;
     }
 
     public static int getCountInInventory(String id, Player player) {
@@ -1403,7 +1407,7 @@ public final class QuestTracker {
 
         int start = Math.floorMod(SERVER_QUEST_SCAN_CURSOR.getOrDefault(sp.getUUID(), 0), total);
         int batch = Math.min(total, SERVER_QUEST_SCAN_BATCH);
-        refreshPersistentContextTargets(sp, quests, start, batch, true, true, true, true);
+        refreshPersistentContextTargets(sp, quests, start, batch, true, true, true);
         for (int processed = 0; processed < batch; processed++) {
             QuestData.Quest q = quests.get((start + processed) % total);
             if (q == null) continue;

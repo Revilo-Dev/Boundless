@@ -43,7 +43,7 @@ final class MultiObjectiveModelTest {
                 false,
                 false,
                 false,
-                new QuestData.Rewards(List.of(), List.of(), List.of(), List.of(), "", 0),
+                new QuestData.Rewards(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), "", 0),
                 "collection",
                 new QuestData.Completion(List.of()),
                 "misc",

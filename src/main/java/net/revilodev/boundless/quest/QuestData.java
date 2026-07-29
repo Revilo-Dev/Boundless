@@ -288,7 +288,6 @@ public final class QuestData {
         public boolean isCheck() { return "check".equals(kind); }
         public boolean isBiome() { return "biome".equals(kind); }
         public boolean isDimension() { return "dimension".equals(kind); }
-        public boolean isStructure() { return "structure".equals(kind); }
         public boolean hasMultipleAcceptedIds() { return acceptedIds.size() > 1; }
         public List<String> acceptedIdsOrLegacy() { return acceptedIds.isEmpty() && !id.isBlank() ? List.of(id) : acceptedIds; }
     }
@@ -1354,10 +1353,6 @@ public final class QuestData {
                 out.add(new Target("dimension", optString(obj, "dimension"), 1));
                 return new Completion(out);
             }
-            if (obj.has("structure")) {
-                out.add(new Target("structure", optString(obj, "structure"), 1));
-                return new Completion(out);
-            }
             if (obj.has("xp")) {
                 out.add(new Target("xp", optString(obj, "xp"),
                         obj.has("count") && obj.get("count").isJsonPrimitive() && obj.getAsJsonPrimitive("count").isNumber()
@@ -1431,11 +1426,6 @@ public final class QuestData {
 
         if (o.has("dimension")) {
             out.add(new Target("dimension", o.get("dimension").getAsString(), 1));
-            return;
-        }
-
-        if (o.has("structure")) {
-            out.add(new Target("structure", o.get("structure").getAsString(), 1));
             return;
         }
 
@@ -1532,12 +1522,6 @@ public final class QuestData {
         if (o.has("dimension")) {
             String dimension = optString(o, "dimension");
             if (dimension != null && !dimension.isBlank()) out.add(new Target("dimension", dimension, 1));
-            return;
-        }
-
-        if (o.has("structure")) {
-            String structure = optString(o, "structure");
-            if (structure != null && !structure.isBlank()) out.add(new Target("structure", structure, 1));
             return;
         }
 

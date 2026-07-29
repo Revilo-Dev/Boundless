@@ -479,11 +479,6 @@ public final class PinnedQuestHud {
                 return new TargetView(new ItemStack(Items.ENDER_PEARL), done ? "1/1" : "0/1", done);
             }
 
-            if (t.isStructure()) {
-                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
-                return new TargetView(new ItemStack(Items.MAP), done ? "1/1" : "0/1", done);
-            }
-
             if (t.isLevelUpLevel()) {
                 int need = Math.max(1, t.count);
                 int have = Math.min(LevelUpCompat.getLevel(player), need);

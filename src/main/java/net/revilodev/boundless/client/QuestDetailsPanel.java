@@ -174,10 +174,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 }
             }
         }
-        if (target.isStructure()) {
-            ResourceLocation rl = safeParse(target.id);
-            if (rl != null) return rl.toString();
-        }
         if (target.isBiome() || target.isDimension()) {
             ResourceLocation rl = safeParse(target.id);
             if (rl != null) return rl.getPath();
@@ -867,18 +863,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         hoveredTooltips.add(Component.literal(t.id));
                     }
                     curY[0] += scaledRowHeight();
-                } else if (t.isStructure()) {
-                    drawScaledString(gg, Component.literal("Structure:"), x + 4, curY[0], 0xFFD166);
-                    curY[0] += scaledLineHeight() + 2;
-                    boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
-                    int color = done ? 0x55FF55 : 0xFF5555;
-                    renderScaledItem(gg, new ItemStack(Items.MAP), x + 4, curY[0]);
-                    String structureName = objectiveDisplayName(t);
-                    drawScaledString(gg, structureName, x + 24, curY[0] + 4, color);
-                    if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
-                        hoveredTooltips.add(Component.literal(t.id));
-                    }
-                    curY[0] += scaledRowHeight();
                 }
             }
 
@@ -1202,7 +1186,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                         printedKillHeader = true;
                     }
                 } else if (target.isEffect() || target.isAdvancement()
-                        || target.isObserve() || target.isBiome() || target.isDimension() || target.isStructure()) {
+                        || target.isObserve() || target.isBiome() || target.isDimension()) {
                     y += scaledLineHeight() + 2;
                 }
 
