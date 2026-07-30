@@ -66,7 +66,8 @@ configurations {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${forge_version}"
-    compileOnly fg.deobf("mezz.jei:jei-1.20.1-forge:15.20.0.132")
+    compileOnly fg.deobf("mezz.jei:jei-1.20.1-common-api:15.20.0.132")
+    compileOnly fg.deobf("mezz.jei:jei-1.20.1-forge-api:15.20.0.132")
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
