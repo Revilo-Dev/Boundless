@@ -1,74 +1,82 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
-    id 'net.neoforged.gradle.userdev' version '7.0.192'
+    id 'net.minecraftforge.gradle' version '6.0.54'
 }
 
 tasks.named('wrapper', Wrapper).configure {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-version = mod_version          // pulled from gradle.properties
-group = mod_group_id           // pulled from gradle.properties
+version = mod_version
+group = mod_group_id
 
 base {
     archivesName = mod_id
 }
 
-// Mojang ships Java 21 for 1.21.1, so we target Java 21
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 repositories {
+    maven { url = 'https://maven.minecraftforge.net' }
     maven { url = 'https://maven.blamejared.com' }
+    mavenCentral()
 }
 
-runs {
-    configureEach {
-        systemProperty 'forge.logging.markers', 'REGISTRIES'
-        systemProperty 'forge.logging.console.level', 'debug'
-        modSource project.sourceSets.main
-    }
+minecraft {
+    mappings channel: 'official', version: minecraft_version
 
-    client {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-    }
+    runs {
+        configureEach {
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
 
-    server {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-        argument '--nogui'
-    }
+        client {
+            workingDirectory project.file('run')
+        }
 
-    gameTestServer {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-    }
+        server {
+            workingDirectory project.file('run')
+            arg '--nogui'
+        }
 
-    data {
-        arguments.addAll '--mod', project.mod_id, '--all',
-                '--output', file('src/generated/resources/').absolutePath,
-                '--existing', file('src/main/resources/').absolutePath
+        gameTestServer {
+            workingDirectory project.file('run')
+        }
+
+        data {
+            args '--mod', project.mod_id, '--all',
+                    '--output', file('src/generated/resources/').absolutePath,
+                    '--existing', file('src/main/resources/').absolutePath
+        }
     }
 }
 
-// Include data-generated resources in the main resource set
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
-// Optional runtime configuration
 configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
 dependencies {
-    implementation "net.neoforged:neoforge:${neo_version}"
-    compileOnly "mezz.jei:jei-1.21.1-neoforge-api:19.+"
-    localRuntime "mezz.jei:jei-1.21.1-neoforge:19.+"
+    minecraft "net.minecraftforge:forge:${forge_version}"
+    compileOnly fg.deobf("mezz.jei:jei-1.20.1-forge:15.20.0.132")
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
 }
 
-// Replace properties inside neoforge.mods.toml with gradle.properties values
 tasks.withType(ProcessResources).configureEach {
     def replaceProperties = [
             minecraft_version      : minecraft_version,
             minecraft_version_range: minecraft_version_range,
-            neo_version            : neo_version,
+            forge_version          : forge_version,
             loader_version_range   : loader_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
@@ -80,12 +88,11 @@ tasks.withType(ProcessResources).configureEach {
     ]
     inputs.properties replaceProperties
 
-    filesMatching('META-INF/neoforge.mods.toml') {
+    filesMatching(['META-INF/mods.toml']) {
         expand replaceProperties
     }
 }
 
-// Publishing setup (local maven repo under ./repo)
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
@@ -99,15 +106,16 @@ publishing {
     }
 }
 
-// Compile settings
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-// IntelliJ IDEA sources + javadoc download
-idea {
-    module {
-        downloadSources = true
-        downloadJavadoc = true
-    }
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+tasks.register('ideBeforeRun') {
+    group = 'forgegradle runs'
+    description = 'Generates IntelliJ run configurations before running from IDE.'
+    dependsOn 'genIntellijRuns'
 }
