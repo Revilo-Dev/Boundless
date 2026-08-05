@@ -12,6 +12,7 @@ import net.revilodev.boundless.Config;
 
 @OnlyIn(Dist.CLIENT)
 public final class QuestFilterBar extends AbstractWidget {
+    // compact filter button sizes
     private static final int BTN_W = 20;
     private static final int BTN_H = 20;
     private static final int BTN_GAP = 2;
@@ -66,6 +67,7 @@ public final class QuestFilterBar extends AbstractWidget {
     private static final ResourceLocation BTN_LOCKED_DISABLED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_disabled.png");
 
+    // shared filter state
     private static boolean showCompleted = false;
     private static boolean showRejected = false;
     private static boolean showLocked = true;
@@ -115,6 +117,7 @@ public final class QuestFilterBar extends AbstractWidget {
         return BAR_H;
     }
 
+    // render filter tabs or buttons
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         if (Config.hideFilters()) return;
@@ -196,6 +199,7 @@ public final class QuestFilterBar extends AbstractWidget {
         }
     }
 
+    // handle filter clicks
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (!visible || !active) return false;

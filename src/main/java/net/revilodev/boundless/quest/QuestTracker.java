@@ -60,6 +60,7 @@ public final class QuestTracker {
 
     public enum Status { INCOMPLETE, COMPLETED, REDEEMED, REJECTED }
 
+    // client and server runtime caches
     private static final Gson GSON = new GsonBuilder().setLenient().create();
 
     private static final Map<String, Map<String, Status>> WORLD_STATES = new HashMap<>();
@@ -71,19 +72,60 @@ public final class QuestTracker {
     private static final Map<String, Integer> CLIENT_CLAIM_COUNTS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_SCROLL_REDEEMED = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_SCROLL_CREATED = new HashMap<>();
+    private static final Set<String> CLIENT_REPORTED_OBSERVE = new HashSet<>();
     private static final Map<String, ResourceLocation> RL_CACHE = new HashMap<>();
     private static final Map<String, Optional<Item>> ITEM_BY_ID_CACHE = new HashMap<>();
     private static final Map<String, Holder<MobEffect>> EFFECT_BY_ID_CACHE = new HashMap<>();
     private static final Map<UUID, Integer> SERVER_QUEST_SCAN_CURSOR = new HashMap<>();
+    private static final Map<UUID, Integer> SERVER_DIRTY_MASKS = new HashMap<>();
+    private static final Map<UUID, ServerStateSnapshot> SERVER_STATE_SNAPSHOTS = new HashMap<>();
     private static final int SERVER_QUEST_SCAN_BATCH = 32;
+    private static final int DIRTY_INVENTORY = 1;
+    private static final int DIRTY_EFFECTS = 1 << 1;
+    private static final int DIRTY_XP = 1 << 2;
+    private static final int DIRTY_CONTEXT = 1 << 3;
+    private static final int DIRTY_ALL = DIRTY_INVENTORY | DIRTY_EFFECTS | DIRTY_XP | DIRTY_CONTEXT;
+    private static final ThreadLocal<EvaluationCache> EVALUATION_CACHE = new ThreadLocal<>();
 
+    // current local world key
     private static String ACTIVE_KEY = null;
     private static volatile boolean CLIENT_IN_MULTIPLAYER = false;
 
     private QuestTracker() {}
 
+    private record ServerStateSnapshot(long inventoryHash, long effectHash, int xpPoints, String biomeId, String dimensionId) {}
+
+    private static final class EvaluationCache {
+        private final UUID playerId;
+        private final Map<String, Integer> acceptedItemCounts = new HashMap<>();
+        private final Map<String, Integer> acceptedKillCounts = new HashMap<>();
+        private final Map<String, Boolean> effectResults = new HashMap<>();
+        private final Map<String, Boolean> advancementResults = new HashMap<>();
+        private String biomeId;
+        private String dimensionId;
+        private Integer xpPoints;
+
+        private EvaluationCache(UUID playerId) {
+            this.playerId = playerId;
+        }
+    }
+
     public static void setClientMultiplayer(boolean v) {
         CLIENT_IN_MULTIPLAYER = v;
+    }
+
+    // force the next server quest evaluation
+    public static void markServerStateDirty(ServerPlayer player) {
+        if (player == null) return;
+        SERVER_DIRTY_MASKS.merge(player.getUUID(), DIRTY_ALL, (a, b) -> a | b);
+    }
+
+    public static void clearServerRuntimeState(ServerPlayer player) {
+        if (player == null) return;
+        UUID playerId = player.getUUID();
+        SERVER_QUEST_SCAN_CURSOR.remove(playerId);
+        SERVER_DIRTY_MASKS.remove(playerId);
+        SERVER_STATE_SNAPSHOTS.remove(playerId);
     }
 
     private static boolean isClientMultiplayer() {
@@ -507,6 +549,11 @@ public final class QuestTracker {
         return detector.getAsBoolean();
     }
 
+    private static boolean shouldUseServerObserveDetection(Player player) {
+        if (!(player instanceof ServerPlayer sp)) return true;
+        return !sp.server.isDedicatedServer();
+    }
+
     private static boolean evaluateTarget(QuestData.Quest q, QuestData.Target t, Player player, boolean trackProgress) {
         if (t == null || player == null) return true;
 
@@ -535,9 +582,12 @@ public final class QuestTracker {
         if (t.isAdvancement()) return hasAdvancement(player, t.id);
         if (t.isObserve()) {
             String key = flagProgressKey(q, t);
+            BooleanSupplier detector = shouldUseServerObserveDetection(player)
+                    ? () -> isObservingTarget(player, t.id)
+                    : () -> false;
             return trackProgress
-                    ? getPermanentFlagProgress(player, key, () -> isObservingTarget(player, t.id))
-                    : peekPermanentFlagProgress(player, key, () -> isObservingTarget(player, t.id));
+                    ? getPermanentFlagProgress(player, key, detector)
+                    : peekPermanentFlagProgress(player, key, detector);
         }
         if (t.isBiome()) {
             String key = flagProgressKey(q, t);
@@ -665,6 +715,7 @@ public final class QuestTracker {
         if (quests == null || quests.isEmpty() || limit <= 0) return false;
 
         boolean changed = false;
+        boolean allowObserveChecks = observe && shouldUseServerObserveDetection(player);
         int total = quests.size();
         int batch = Math.min(total, Math.max(0, limit));
         for (int processed = 0; processed < batch; processed++) {
@@ -679,7 +730,7 @@ public final class QuestTracker {
             for (QuestData.Target target : quest.completion.targets) {
                 if (target == null) continue;
 
-                boolean matches = (observe && target.isObserve() && isObservingTarget(player, target.id))
+                boolean matches = (allowObserveChecks && target.isObserve() && isObservingTarget(player, target.id))
                         || (biome && target.isBiome() && isInBiome(player, target.id))
                         || (dimension && target.isDimension() && isInDimension(player, target.id));
                 if (!matches) continue;
@@ -732,11 +783,18 @@ public final class QuestTracker {
 
     public static int getAcceptedItemCountInInventory(QuestData.Target target, Player player) {
         if (target == null) return 0;
+        EvaluationCache cache = evaluationCacheFor(player);
+        String cacheKey = acceptedIdsCacheKey(target.acceptedIdsOrLegacy());
+        if (cache != null && cache.acceptedItemCounts.containsKey(cacheKey)) {
+            return cache.acceptedItemCounts.get(cacheKey);
+        }
         int total = 0;
         for (String acceptedId : target.acceptedIdsOrLegacy()) {
             total += getCountInInventory(acceptedId, player);
         }
-        return Math.max(0, total);
+        total = Math.max(0, total);
+        if (cache != null) cache.acceptedItemCounts.put(cacheKey, total);
+        return total;
     }
 
     public static int getKillCount(Player player, String entityId) {
@@ -749,28 +807,34 @@ public final class QuestTracker {
 
     public static int getAcceptedKillCount(QuestData.Target target, Player player) {
         if (target == null) return 0;
+        EvaluationCache cache = evaluationCacheFor(player);
+        String cacheKey = acceptedIdsCacheKey(target.acceptedIdsOrLegacy());
+        if (cache != null && cache.acceptedKillCounts.containsKey(cacheKey)) {
+            return cache.acceptedKillCounts.get(cacheKey);
+        }
         int total = 0;
         for (String acceptedId : target.acceptedIdsOrLegacy()) {
             total += getKillCount(player, acceptedId);
         }
-        return Math.max(0, total);
+        total = Math.max(0, total);
+        if (cache != null) cache.acceptedKillCounts.put(cacheKey, total);
+        return total;
     }
 
     public static boolean isInBiome(Player player, String biomeId) {
         if (player == null || biomeId == null || biomeId.isBlank()) return false;
         ResourceLocation rl = tryParseCached(biomeId);
         if (rl == null) return false;
-        return player.level().getBiome(player.blockPosition())
-                .unwrapKey()
-                .map(key -> rl.equals(key.location()))
-                .orElse(false);
+        String current = currentBiomeId(player);
+        return current != null && rl.toString().equals(current);
     }
 
     public static boolean isInDimension(Player player, String dimensionId) {
         if (player == null || dimensionId == null || dimensionId.isBlank()) return false;
         ResourceLocation rl = tryParseCached(dimensionId);
         if (rl == null) return false;
-        return rl.equals(player.level().dimension().location());
+        String current = currentDimensionId(player);
+        return current != null && rl.toString().equals(current);
     }
 
     public static boolean isObservingTarget(Player player, String targetId) {
@@ -867,23 +931,37 @@ public final class QuestTracker {
 
     public static boolean hasEffect(Player player, String effectId) {
         if (player == null || effectId == null || effectId.isBlank()) return false;
+        EvaluationCache cache = evaluationCacheFor(player);
+        if (cache != null && cache.effectResults.containsKey(effectId)) {
+            return cache.effectResults.get(effectId);
+        }
         Holder<MobEffect> holder = EFFECT_BY_ID_CACHE.get(effectId);
         if (!EFFECT_BY_ID_CACHE.containsKey(effectId)) {
             ResourceLocation rl = tryParseCached(effectId);
             holder = rl == null ? null : BuiltInRegistries.MOB_EFFECT.getHolder(rl).orElse(null);
             EFFECT_BY_ID_CACHE.put(effectId, holder);
         }
-        return holder != null && player.hasEffect(holder);
+        boolean result = holder != null && player.hasEffect(holder);
+        if (cache != null) cache.effectResults.put(effectId, result);
+        return result;
     }
 
     public static boolean hasAdvancement(Player player, String advId) {
         if (player == null || advId == null || advId.isBlank()) return false;
+        EvaluationCache cache = evaluationCacheFor(player);
+        if (cache != null && cache.advancementResults.containsKey(advId)) {
+            return cache.advancementResults.get(advId);
+        }
 
         final ResourceLocation rl;
         rl = tryParseCached(advId);
         if (rl == null) return false;
 
-        if (player instanceof ServerPlayer sp) return hasAdvancementServer(sp, rl);
+        if (player instanceof ServerPlayer sp) {
+            boolean result = hasAdvancementServer(sp, rl);
+            if (cache != null) cache.advancementResults.put(advId, result);
+            return result;
+        }
 
         if (FMLEnvironment.dist == Dist.CLIENT && player.level().isClientSide) {
             try {
@@ -893,12 +971,18 @@ public final class QuestTracker {
 
                 if (srvObj instanceof net.minecraft.server.MinecraftServer srv) {
                     ServerPlayer sp = srv.getPlayerList().getPlayer(player.getUUID());
-                    if (sp != null) return hasAdvancementServer(sp, rl);
+                    if (sp != null) {
+                        boolean result = hasAdvancementServer(sp, rl);
+                        if (cache != null) cache.advancementResults.put(advId, result);
+                        return result;
+                    }
                 }
 
             } catch (Throwable ignored) {}
 
-            return CLIENT_ADV_DONE.getOrDefault(progressCacheKey(player, rl.toString()), false);
+            boolean result = CLIENT_ADV_DONE.getOrDefault(progressCacheKey(player, rl.toString()), false);
+            if (cache != null) cache.advancementResults.put(advId, result);
+            return result;
         }
 
         return false;
@@ -953,9 +1037,13 @@ public final class QuestTracker {
 
     public static int currentExperiencePoints(Player player) {
         if (player == null) return 0;
+        EvaluationCache cache = evaluationCacheFor(player);
+        if (cache != null && cache.xpPoints != null) return cache.xpPoints;
         int level = Math.max(0, player.experienceLevel);
         int intoLevel = (int) Math.floor(Math.max(0.0F, player.experienceProgress) * xpNeededForNextLevel(level));
-        return Math.max(0, experienceForLevel(level) + intoLevel);
+        int total = Math.max(0, experienceForLevel(level) + intoLevel);
+        if (cache != null) cache.xpPoints = total;
+        return total;
     }
 
     public static ExperienceSnapshot consumeExperience(ExperienceSnapshot snapshot, String xpType, int amount) {
@@ -1257,7 +1345,7 @@ public final class QuestTracker {
         if (player instanceof ServerPlayer sp) {
             QuestProgressState.get(sp.serverLevel()).clear(sp.getUUID());
             QuestObjectiveState.get(sp.serverLevel()).clearPlayer(sp.getUUID());
-            SERVER_QUEST_SCAN_CURSOR.remove(sp.getUUID());
+            clearServerRuntimeState(sp);
             BoundlessNetwork.syncPlayer(sp);
             CLIENT_EFFECT_PROGRESS.clear();
             if (FMLEnvironment.dist == Dist.CLIENT) clientClearAll();
@@ -1286,6 +1374,7 @@ public final class QuestTracker {
         CLIENT_ITEM_PROGRESS.entrySet().removeIf(e -> e.getKey() != null && e.getKey().startsWith(questId + ":"));
         CLIENT_EFFECT_PROGRESS.entrySet().removeIf(e -> e.getKey() != null && e.getKey().startsWith(questId + ":"));
         CLIENT_INPUT_PROGRESS.entrySet().removeIf(e -> e.getKey() != null && e.getKey().startsWith(questId + ":"));
+        CLIENT_REPORTED_OBSERVE.removeIf(key -> key != null && key.startsWith(questId + ":observe:"));
     }
 
     public static void clientSetItemProgress(String key, int count) {
@@ -1298,7 +1387,10 @@ public final class QuestTracker {
     public static void clientSetFlagProgress(String key, boolean done) {
         if (key == null || key.isBlank()) return;
         if (done) CLIENT_EFFECT_PROGRESS.put(key, true);
-        else CLIENT_EFFECT_PROGRESS.remove(key);
+        else {
+            CLIENT_EFFECT_PROGRESS.remove(key);
+            CLIENT_REPORTED_OBSERVE.remove(key);
+        }
     }
 
     public static void clientSetInputProgress(String key, String value) {
@@ -1340,6 +1432,7 @@ public final class QuestTracker {
         CLIENT_CLAIM_COUNTS.clear();
         CLIENT_SCROLL_REDEEMED.clear();
         CLIENT_SCROLL_CREATED.clear();
+        CLIENT_REPORTED_OBSERVE.clear();
         if (FMLEnvironment.dist == Dist.CLIENT) {
             try { ensureClientStateLoaded(null); } catch (Throwable ignored) {}
             activeStateMap().clear();
@@ -1385,62 +1478,172 @@ public final class QuestTracker {
             if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
             for (QuestData.Target target : quest.completion.targets) {
                 if (target == null || !target.isObserve() || target.id == null || target.id.isBlank()) continue;
+                String key = flagProgressKey(quest, target);
+                if (CLIENT_EFFECT_PROGRESS.getOrDefault(key, false) || CLIENT_REPORTED_OBSERVE.contains(key)) continue;
                 if (!isObservingTarget(player, target.id)) continue;
                 net.neoforged.neoforge.network.PacketDistributor.sendToServer(
                         new net.revilodev.boundless.network.BoundlessNetwork.ReportObserve(quest.id, target.id)
                 );
+                CLIENT_REPORTED_OBSERVE.add(key);
             }
         }
     }
 
     public static void serverTickPlayer(ServerPlayer sp) {
         if (sp == null) return;
+        int dirtyMask = consumeServerDirtyMask(sp);
+        if (dirtyMask == 0) return;
         List<QuestData.Quest> quests = new ArrayList<>(QuestData.allServer(sp.server));
         int total = quests.size();
         if (total <= 0) {
             SERVER_QUEST_SCAN_CURSOR.remove(sp.getUUID());
-            if (sp.tickCount % 20 == 0) {
-                BoundlessNetwork.sendObjectiveProgress(sp);
-            }
             return;
         }
 
-        int start = Math.floorMod(SERVER_QUEST_SCAN_CURSOR.getOrDefault(sp.getUUID(), 0), total);
-        int batch = Math.min(total, SERVER_QUEST_SCAN_BATCH);
-        refreshPersistentContextTargets(sp, quests, start, batch, true, true, true);
-        for (int processed = 0; processed < batch; processed++) {
-            QuestData.Quest q = quests.get((start + processed) % total);
-            if (q == null) continue;
-            if (Config.disabledCategories().contains(q.category)) continue;
+        EvaluationCache cache = new EvaluationCache(sp.getUUID());
+        EVALUATION_CACHE.set(cache);
+        try {
+            refreshPersistentContextTargets(sp, quests, 0, total, true, true, true);
+            for (QuestData.Quest q : quests) {
+                if (q == null || !questNeedsEvaluationForMask(q, dirtyMask)) continue;
+                if (Config.disabledCategories().contains(q.category)) continue;
 
-            Status cur = getServerStatus(sp, q.id);
-            if (cur == Status.REDEEMED || cur == Status.REJECTED) continue;
+                Status cur = getServerStatus(sp, q.id);
+                if (cur == Status.REDEEMED || cur == Status.REJECTED) continue;
 
-            boolean ready = updateProgressAndCheckReady(q, sp);
-            boolean hasItemTargets = hasItemOrSubmitTargets(q);
+                boolean ready = updateProgressAndCheckReady(q, sp);
+                boolean hasItemTargets = hasItemOrSubmitTargets(q);
 
-            if (ready && cur == Status.INCOMPLETE) {
-                if (shouldAutoClaim(q)) {
-                    BoundlessNetwork.claimQuest(sp, q);
-                } else {
-                    setServerStatus(sp, q.id, Status.COMPLETED);
-                    BoundlessNetwork.sendStatus(sp, q.id, Status.COMPLETED.name());
+                if (ready && cur == Status.INCOMPLETE) {
+                    if (shouldAutoClaim(q)) {
+                        BoundlessNetwork.claimQuest(sp, q);
+                    } else {
+                        setServerStatus(sp, q.id, Status.COMPLETED);
+                        BoundlessNetwork.sendStatus(sp, q.id, Status.COMPLETED.name());
+                    }
+                    continue;
                 }
-                continue;
+
+                if (hasItemTargets && cur == Status.COMPLETED) continue;
+
+                if (!ready && cur == Status.COMPLETED) {
+                    setServerStatus(sp, q.id, Status.INCOMPLETE);
+                    BoundlessNetwork.sendStatus(sp, q.id, Status.INCOMPLETE.name());
+                }
             }
-
-            if (hasItemTargets && cur == Status.COMPLETED) continue;
-
-            if (!ready && cur == Status.COMPLETED) {
-                setServerStatus(sp, q.id, Status.INCOMPLETE);
-                BoundlessNetwork.sendStatus(sp, q.id, Status.INCOMPLETE.name());
-            }
+        } finally {
+            EVALUATION_CACHE.remove();
         }
-        SERVER_QUEST_SCAN_CURSOR.put(sp.getUUID(), (start + batch) % total);
+        BoundlessNetwork.sendObjectiveProgress(sp);
+    }
 
-        if (sp.tickCount % 20 == 0) {
-            BoundlessNetwork.sendObjectiveProgress(sp);
+    private static int consumeServerDirtyMask(ServerPlayer sp) {
+        int detected = detectServerDirtyMask(sp);
+        int pending = SERVER_DIRTY_MASKS.getOrDefault(sp.getUUID(), 0);
+        SERVER_DIRTY_MASKS.remove(sp.getUUID());
+        return detected | pending;
+    }
+
+    private static int detectServerDirtyMask(ServerPlayer sp) {
+        ServerStateSnapshot current = captureServerState(sp);
+        ServerStateSnapshot previous = SERVER_STATE_SNAPSHOTS.put(sp.getUUID(), current);
+        if (previous == null) return DIRTY_ALL;
+        int mask = 0;
+        if (previous.inventoryHash != current.inventoryHash) mask |= DIRTY_INVENTORY;
+        if (previous.effectHash != current.effectHash) mask |= DIRTY_EFFECTS;
+        if (previous.xpPoints != current.xpPoints) mask |= DIRTY_XP;
+        if (!Objects.equals(previous.biomeId, current.biomeId) || !Objects.equals(previous.dimensionId, current.dimensionId)) {
+            mask |= DIRTY_CONTEXT;
         }
+        return mask;
+    }
+
+    private static ServerStateSnapshot captureServerState(ServerPlayer sp) {
+        return new ServerStateSnapshot(
+                inventoryHash(sp),
+                effectHash(sp),
+                currentExperiencePoints(sp),
+                currentBiomeId(sp),
+                currentDimensionId(sp)
+        );
+    }
+
+    private static long inventoryHash(Player player) {
+        if (player == null) return 0L;
+        long hash = 1L;
+        var inventory = player.getInventory();
+        int size = inventory.getContainerSize();
+        for (int i = 0; i < size; i++) {
+            ItemStack stack = inventory.getItem(i);
+            hash = 31L * hash + stack.getCount();
+            if (stack.isEmpty()) continue;
+            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            hash = 31L * hash + (itemId == null ? 0 : itemId.hashCode());
+            hash = 31L * hash + stack.getComponentsPatch().hashCode();
+        }
+        return hash;
+    }
+
+    private static long effectHash(Player player) {
+        if (player == null) return 0L;
+        long hash = 1L;
+        for (var effect : player.getActiveEffects()) {
+            if (effect == null) continue;
+            ResourceLocation effectId = BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect().value());
+            hash = 31L * hash + (effectId == null ? 0 : effectId.hashCode());
+            hash = 31L * hash + effect.getAmplifier();
+        }
+        return hash;
+    }
+
+    private static String currentBiomeId(Player player) {
+        if (player == null) return null;
+        EvaluationCache cache = evaluationCacheFor(player);
+        if (cache != null && cache.biomeId != null) return cache.biomeId;
+        String biomeId = player.level().getBiome(player.blockPosition())
+                .unwrapKey()
+                .map(key -> key.location().toString())
+                .orElse("");
+        if (cache != null) cache.biomeId = biomeId;
+        return biomeId;
+    }
+
+    private static String currentDimensionId(Player player) {
+        if (player == null) return null;
+        EvaluationCache cache = evaluationCacheFor(player);
+        if (cache != null && cache.dimensionId != null) return cache.dimensionId;
+        String dimensionId = player.level().dimension().location().toString();
+        if (cache != null) cache.dimensionId = dimensionId;
+        return dimensionId;
+    }
+
+    private static EvaluationCache evaluationCacheFor(Player player) {
+        if (player == null) return null;
+        EvaluationCache cache = EVALUATION_CACHE.get();
+        if (cache == null || !player.getUUID().equals(cache.playerId)) return null;
+        return cache;
+    }
+
+    private static String acceptedIdsCacheKey(List<String> acceptedIds) {
+        if (acceptedIds == null || acceptedIds.isEmpty()) return "";
+        if (acceptedIds.size() == 1) return acceptedIds.get(0);
+        List<String> copy = new ArrayList<>(acceptedIds);
+        copy.sort(String::compareTo);
+        return String.join("|", copy);
+    }
+
+    private static boolean questNeedsEvaluationForMask(QuestData.Quest q, int dirtyMask) {
+        if (q == null) return false;
+        if ((dirtyMask & DIRTY_ALL) == DIRTY_ALL) return true;
+        if (q.completion == null || q.completion.targets == null) return false;
+        for (QuestData.Target target : q.completion.targets) {
+            if (target == null) continue;
+            if ((dirtyMask & DIRTY_INVENTORY) != 0 && (target.isItem() || target.isSubmit())) return true;
+            if ((dirtyMask & DIRTY_EFFECTS) != 0 && target.isEffect()) return true;
+            if ((dirtyMask & DIRTY_XP) != 0 && (target.isXp() || target.isLevelUpLevel())) return true;
+            if ((dirtyMask & DIRTY_CONTEXT) != 0 && (target.isBiome() || target.isDimension())) return true;
+        }
+        return false;
     }
 
     @OnlyIn(Dist.CLIENT)

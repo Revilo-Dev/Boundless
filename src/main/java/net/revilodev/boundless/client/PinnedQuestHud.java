@@ -45,14 +45,22 @@ import java.util.Map;
 
 @OnlyIn(Dist.CLIENT)
 public final class PinnedQuestHud {
-    private static final ResourceLocation TEX_BG =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pinned_quest_toast.png");
 
-    private static final Gson GSON = new GsonBuilder().setLenient().create();
+    // hud background texture
+    private static final ResourceLocation TEX_BG =
+            ResourceLocation.fromNamespaceAndPath(
+                    "boundless",
+                    "textures/gui/sprites/pinned_quest_toast.png"
+            );
+
+    // used for loading and saving pins
+    private static final Gson GSON =
+            new GsonBuilder().setLenient().create();
 
     private static final int TEX_W = 160;
     private static final int TEX_H = 32;
 
+    // only keep 3 pinned quests
     private static final int MAX_PINS = 3;
 
     private static final float TOAST_SCALE = 0.66f;
@@ -65,21 +73,30 @@ public final class PinnedQuestHud {
     private static final int TOP_EXTRA_DOWN = 12;
     private static final int LEFT_PAD = 6;
 
+    // pinned ids in display order
     private static final Deque<String> PINS = new ArrayDeque<>();
-    private static final Map<String, ItemStack> ITEM_ICON_CACHE = new HashMap<>();
-    private static boolean REGISTERED = false;
 
+    // stops icons being looked up every frame
+    private static final Map<String, ItemStack> ITEM_ICON_CACHE =
+            new HashMap<>();
+
+    private static boolean REGISTERED = false;
     private static boolean LOADED = false;
+
+    // different save key for each world or server
     private static String ACTIVE_KEY = null;
 
+    // quest currently open in the quest screen
     private static String CURRENT_QUEST_ID = null;
 
-    private PinnedQuestHud() {}
+    private PinnedQuestHud() {
+    }
 
     public static void init() {
         ensureRegistered();
     }
 
+    // update the quest used by the pin button
     public static void setCurrentQuestId(String questId) {
         ensureRegistered();
         CURRENT_QUEST_ID = questId;
@@ -94,23 +111,34 @@ public final class PinnedQuestHud {
         return id != null && isPinned(id);
     }
 
+    // pin or unpin the quest currently being viewed
     public static void toggleCurrentQuest() {
         String id = CURRENT_QUEST_ID;
-        if (id != null && !id.isBlank()) toggle(id);
+
+        if (id != null && !id.isBlank()) {
+            toggle(id);
+        }
     }
 
+    // pin or unpin a quest
     public static void toggle(String questId) {
         if (questId == null || questId.isBlank()) return;
         if (Config.disableQuestPinning()) return;
+
         ensureRegistered();
         ensureLoaded();
 
+        // remove it if it is already pinned
         if (PINS.remove(questId)) {
             save();
             return;
         }
 
-        while (PINS.size() >= MAX_PINS) PINS.pollFirst();
+        // remove the oldest pin when there are already 3
+        while (PINS.size() >= MAX_PINS) {
+            PINS.pollFirst();
+        }
+
         PINS.addLast(questId);
         save();
     }
@@ -118,28 +146,37 @@ public final class PinnedQuestHud {
     public static boolean isPinned(String questId) {
         if (questId == null || questId.isBlank()) return false;
         if (Config.disableQuestPinning()) return false;
+
         ensureRegistered();
         ensureLoaded();
+
         return PINS.contains(questId);
     }
 
+    // clear pins when leaving the world
     public static void resetPinsOnLeave() {
         ensureRegistered();
         resetPins(true);
     }
 
+    // only add listeners 1 time
     private static void ensureRegistered() {
         if (REGISTERED) return;
+
         REGISTERED = true;
+
         NeoForge.EVENT_BUS.addListener(PinnedQuestHud::onRenderGui);
         NeoForge.EVENT_BUS.addListener(PinnedQuestHud::onClientLogout);
     }
 
+    // load pins when the player changes world or server
     private static void ensureLoaded() {
         Minecraft mc = Minecraft.getInstance();
+
         if (mc == null) return;
 
         String key = computeClientKey(mc);
+
         if (!LOADED || ACTIVE_KEY == null || !ACTIVE_KEY.equals(key)) {
             LOADED = true;
             ACTIVE_KEY = key;
@@ -147,116 +184,199 @@ public final class PinnedQuestHud {
         }
     }
 
+    // make a save key for the current world or server
     private static String computeClientKey(Minecraft mc) {
         try {
             if (mc.getSingleplayerServer() != null) {
-                String name = mc.getSingleplayerServer().getWorldData().getLevelName();
-                if (name == null || name.isBlank()) name = "world";
+                String name =
+                        mc.getSingleplayerServer()
+                                .getWorldData()
+                                .getLevelName();
+
+                if (name == null || name.isBlank()) {
+                    name = "world";
+                }
+
                 return "sp_" + sanitize(name);
             }
+
             if (mc.getCurrentServer() != null) {
                 String ip = mc.getCurrentServer().ip;
-                if (ip == null || ip.isBlank()) ip = "multiplayer";
+
+                if (ip == null || ip.isBlank()) {
+                    ip = "multiplayer";
+                }
+
                 return "mp_" + sanitize(ip);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
+
         return "default";
     }
 
+    // replace characters that cant be used in file names
     private static String sanitize(String s) {
         if (s == null || s.isBlank()) return "default";
+
         StringBuilder out = new StringBuilder(s.length());
+
         for (int i = 0; i < s.length(); i++) {
             char ch = s.charAt(i);
+
             if ((ch >= 'a' && ch <= 'z')
                     || (ch >= 'A' && ch <= 'Z')
                     || (ch >= '0' && ch <= '9')
                     || ch == '.'
                     || ch == '_'
                     || ch == '-') {
+
                 out.append(ch);
             } else {
                 out.append('_');
             }
         }
+
         return out.isEmpty() ? "default" : out.toString();
     }
 
+    // get the json file used for the current world
     private static Path savePath() {
         Minecraft mc = Minecraft.getInstance();
-        File dir = new File(mc.gameDirectory, "config/boundless/pins");
-        String k = ACTIVE_KEY == null ? "default" : ACTIVE_KEY;
+
+        File dir =
+                new File(
+                        mc.gameDirectory,
+                        "config/boundless/pins"
+                );
+
+        String k =
+                ACTIVE_KEY == null
+                        ? "default"
+                        : ACTIVE_KEY;
+
         return new File(dir, k + ".json").toPath();
     }
 
+    // load saved pins from json
     private static void load() {
         PINS.clear();
+
         try {
             Path p = savePath();
+
             if (!Files.exists(p)) return;
-            try (BufferedReader r = new BufferedReader(new FileReader(p.toFile()))) {
-                JsonObject obj = GSON.fromJson(r, JsonObject.class);
+
+            try (BufferedReader r =
+                         new BufferedReader(
+                                 new FileReader(p.toFile())
+                         )) {
+
+                JsonObject obj =
+                        GSON.fromJson(r, JsonObject.class);
+
                 if (obj == null) return;
+
                 JsonElement arrEl = obj.get("pins");
+
                 if (arrEl != null && arrEl.isJsonArray()) {
                     JsonArray arr = arrEl.getAsJsonArray();
+
                     for (JsonElement el : arr) {
                         if (!el.isJsonPrimitive()) continue;
+
                         String id = el.getAsString();
-                        if (id != null && !id.isBlank()) PINS.addLast(id);
+
+                        if (id != null && !id.isBlank()) {
+                            PINS.addLast(id);
+                        }
                     }
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
+
         dedupeClamp();
         ITEM_ICON_CACHE.clear();
     }
 
+    // save all pinned ids
     private static void save() {
         try {
             Path p = savePath();
+
             Files.createDirectories(p.getParent());
 
             JsonObject obj = new JsonObject();
             JsonArray arr = new JsonArray();
-            for (String id : PINS) arr.add(id);
+
+            for (String id : PINS) {
+                arr.add(id);
+            }
+
             obj.add("pins", arr);
 
-            try (BufferedWriter w = new BufferedWriter(new FileWriter(p.toFile()))) {
+            try (BufferedWriter w =
+                         new BufferedWriter(
+                                 new FileWriter(p.toFile())
+                         )) {
+
                 GSON.toJson(obj, w);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
     }
 
+    // remove duplicate pins and keep the newest 3
     private static void dedupeClamp() {
-        LinkedHashSet<String> set = new LinkedHashSet<>(PINS);
+        LinkedHashSet<String> set =
+                new LinkedHashSet<>(PINS);
+
         PINS.clear();
-        for (String s : set) PINS.addLast(s);
-        while (PINS.size() > MAX_PINS) PINS.pollFirst();
+
+        for (String s : set) {
+            PINS.addLast(s);
+        }
+
+        while (PINS.size() > MAX_PINS) {
+            PINS.pollFirst();
+        }
     }
 
+    // clear the pins and cached icons
     private static void resetPins(boolean deleteFile) {
         try {
             if (deleteFile) {
                 try {
                     Files.deleteIfExists(savePath());
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) {
+                }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
+
         PINS.clear();
         ITEM_ICON_CACHE.clear();
+
         LOADED = false;
         ACTIVE_KEY = null;
     }
 
-    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut e) {
+    public static void onClientLogout(
+            ClientPlayerNetworkEvent.LoggingOut e
+    ) {
         resetPins(true);
     }
 
+    // draw pinned quests after the normal gui
     public static void onRenderGui(RenderGuiEvent.Post e) {
         if (Config.disableQuestPinning()) return;
+
         Minecraft mc = Minecraft.getInstance();
+
         if (mc == null || mc.player == null) return;
+
+        // do not show the hud while a screen is open
         if (mc.screen != null) return;
 
         ensureLoaded();
@@ -264,46 +384,93 @@ public final class PinnedQuestHud {
 
         Player player = mc.player;
 
+        // remove completed or rejected quests
         if (!PINS.isEmpty()) {
             boolean changed = false;
+
             Iterator<String> it = PINS.iterator();
+
             while (it.hasNext()) {
                 String qid = it.next();
-                QuestData.Quest q = QuestData.byId(qid).orElse(null);
+
+                QuestData.Quest q =
+                        QuestData.byId(qid).orElse(null);
+
                 if (q == null) continue;
-                QuestTracker.Status st = QuestTracker.getStatus(q, player);
-                if (st == QuestTracker.Status.REDEEMED || st == QuestTracker.Status.REJECTED) {
+
+                QuestTracker.Status st =
+                        QuestTracker.getStatus(q, player);
+
+                if (st == QuestTracker.Status.REDEEMED
+                        || st == QuestTracker.Status.REJECTED) {
+
                     it.remove();
                     changed = true;
                 }
             }
-            if (changed) save();
+
+            if (changed) {
+                save();
+            }
         }
 
         if (PINS.isEmpty()) return;
 
         GuiGraphics gg = e.getGuiGraphics();
-        int sw = mc.getWindow().getGuiScaledWidth();
-        int sh = mc.getWindow().getGuiScaledHeight();
 
-        int drawW = Mth.floor(TEX_W * TOAST_SCALE);
-        int drawH = Mth.floor(TEX_H * TOAST_SCALE);
-        int gap = Mth.floor(4 * TOAST_SCALE);
+        int sw =
+                mc.getWindow().getGuiScaledWidth();
 
-        String pos = Config.pinnedQuestHudPosition();
-        boolean top = pos != null && pos.startsWith("top");
-        boolean right = pos != null && pos.endsWith("right");
+        int sh =
+                mc.getWindow().getGuiScaledHeight();
 
-        int baseX = right ? (sw - drawW - CORNER_PAD) : CORNER_PAD;
-        int count = Math.min(MAX_PINS, PINS.size());
-        int topPad = CORNER_PAD + TOP_EXTRA_DOWN;
-        int baseY = top ? topPad : (sh - CORNER_PAD - (count * drawH) - ((count - 1) * gap) - 24);
+        int drawW =
+                Mth.floor(TEX_W * TOAST_SCALE);
+
+        int drawH =
+                Mth.floor(TEX_H * TOAST_SCALE);
+
+        int gap =
+                Mth.floor(4 * TOAST_SCALE);
+
+        String pos =
+                Config.pinnedQuestHudPosition();
+
+        boolean top =
+                pos != null && pos.startsWith("top");
+
+        boolean right =
+                pos != null && pos.endsWith("right");
+
+        // work out which corner to use
+        int baseX =
+                right
+                        ? sw - drawW - CORNER_PAD
+                        : CORNER_PAD;
+
+        int count =
+                Math.min(MAX_PINS, PINS.size());
+
+        int topPad =
+                CORNER_PAD + TOP_EXTRA_DOWN;
+
+        int baseY =
+                top
+                        ? topPad
+                        : sh
+                          - CORNER_PAD
+                          - count * drawH
+                          - (count - 1) * gap
+                          - 24;
 
         int idx = 0;
+
         for (String qid : PINS) {
             if (idx >= MAX_PINS) break;
 
-            QuestData.Quest q = QuestData.byId(qid).orElse(null);
+            QuestData.Quest q =
+                    QuestData.byId(qid).orElse(null);
+
             if (q == null) {
                 idx++;
                 continue;
@@ -314,12 +481,47 @@ public final class PinnedQuestHud {
 
             gg.pose().pushPose();
             gg.pose().translate(x, y, 0);
-            gg.pose().scale(TOAST_SCALE, TOAST_SCALE, 1f);
+            gg.pose().scale(
+                    TOAST_SCALE,
+                    TOAST_SCALE,
+                    1f
+            );
 
-            gg.blit(TEX_BG, 0, 0, 0, 0, TEX_W, TEX_H, TEX_W, TEX_H);
+            gg.blit(
+                    TEX_BG,
+                    0,
+                    0,
+                    0,
+                    0,
+                    TEX_W,
+                    TEX_H,
+                    TEX_W,
+                    TEX_H
+            );
 
-            gg.drawString(mc.font, mc.font.plainSubstrByWidth(q.name, TEX_W - LEFT_PAD - 2), LEFT_PAD, 6, TITLE_COLOR, false);
-            renderTargetsRow(gg, mc, q, player, LEFT_PAD, 18, TEX_W - 2);
+            // draw the quest name
+            gg.drawString(
+                    mc.font,
+                    mc.font.plainSubstrByWidth(
+                            q.name,
+                            TEX_W - LEFT_PAD - 2
+                    ),
+                    LEFT_PAD,
+                    6,
+                    TITLE_COLOR,
+                    false
+            );
+
+            // draw up to 3 quest targets
+            renderTargetsRow(
+                    gg,
+                    mc,
+                    q,
+                    player,
+                    LEFT_PAD,
+                    18,
+                    TEX_W - 2
+            );
 
             gg.pose().popPose();
 
@@ -327,32 +529,90 @@ public final class PinnedQuestHud {
         }
     }
 
-    private record TargetView(ItemStack icon, String text, boolean done) {}
+    // small object used while drawing a target
+    private record TargetView(
+            ItemStack icon,
+            String text,
+            boolean done
+    ) {
+    }
 
-    private static String cycledAcceptedId(QuestData.Target target) {
+    // cycle between accepted item or entity ids
+    private static String cycledAcceptedId(
+            QuestData.Target target
+    ) {
         if (target == null) return "";
-        List<String> accepted = target.acceptedIdsOrLegacy();
+
+        List<String> accepted =
+                target.acceptedIdsOrLegacy();
+
         if (accepted.isEmpty()) return "";
-        int index = accepted.size() == 1 ? 0 : (int) ((System.currentTimeMillis() / 1200L) % accepted.size());
+
+        int index =
+                accepted.size() == 1
+                        ? 0
+                        : (int) (
+                        (System.currentTimeMillis() / 1200L)
+                        % accepted.size()
+                );
+
         return accepted.get(index);
     }
 
-    private static void renderTargetsRow(GuiGraphics gg, Minecraft mc, QuestData.Quest q, Player player, int startX, int baseY, int maxX) {
-        if (q.completion == null || q.completion.targets == null || q.completion.targets.isEmpty()) return;
+    // draw the target icons and progress
+    private static void renderTargetsRow(
+            GuiGraphics gg,
+            Minecraft mc,
+            QuestData.Quest q,
+            Player player,
+            int startX,
+            int baseY,
+            int maxX
+    ) {
+        if (q.completion == null
+                || q.completion.targets == null
+                || q.completion.targets.isEmpty()) {
+            return;
+        }
 
         List<TargetView> all = new ArrayList<>();
+
         for (QuestData.Target t : q.completion.targets) {
-            TargetView tv = toTargetView(mc, q, player, t);
-            if (tv != null) all.add(tv);
+            TargetView tv =
+                    toTargetView(mc, q, player, t);
+
+            if (tv != null) {
+                all.add(tv);
+            }
         }
+
         if (all.isEmpty()) return;
 
-        List<TargetView> remaining = new ArrayList<>();
-        for (TargetView tv : all) if (!tv.done) remaining.add(tv);
+        // keep a list of unfinished targets
+        List<TargetView> remaining =
+                new ArrayList<>();
+
+        for (TargetView tv : all) {
+            if (!tv.done) {
+                remaining.add(tv);
+            }
+        }
 
         List<TargetView> pick = all;
-        boolean overflow = all.size() > 3 || wouldOverflow(mc, all, startX, maxX);
-        if (overflow && !remaining.isEmpty()) pick = remaining;
+
+        // show unfinished targets when everything does not fit
+        boolean overflow =
+                all.size() > 3
+                        || wouldOverflow(
+                        mc,
+                        all,
+                        startX,
+                        maxX
+                );
+
+        if (overflow && !remaining.isEmpty()) {
+            pick = remaining;
+        }
 
         int cx = startX;
         boolean first = true;
@@ -361,36 +621,80 @@ public final class PinnedQuestHud {
         for (TargetView tv : pick) {
             if (drawn >= 3) break;
 
-            int sepW = first ? 0 : mc.font.width(" | ");
-            int textW = mc.font.width(tv.text);
-            int iconSlot = tv.icon.isEmpty() ? 0 : (Mth.ceil(16 * ICON_SCALE) + 2);
-            int needed = sepW + iconSlot + textW;
+            int sepW =
+                    first
+                            ? 0
+                            : mc.font.width(" | ");
+
+            int textW =
+                    mc.font.width(tv.text);
+
+            int iconSlot =
+                    tv.icon.isEmpty()
+                            ? 0
+                            : Mth.ceil(16 * ICON_SCALE) + 2;
+
+            int needed =
+                    sepW + iconSlot + textW;
 
             if (cx + needed > maxX) break;
 
+            // add a divider between targets
             if (!first) {
-                gg.drawString(mc.font, " | ", cx, baseY, SUB_COLOR, false);
+                gg.drawString(
+                        mc.font,
+                        " | ",
+                        cx,
+                        baseY,
+                        SUB_COLOR,
+                        false
+                );
+
                 cx += sepW;
             }
 
+            // draw the target icon
             if (!tv.icon.isEmpty()) {
                 gg.pose().pushPose();
-                gg.pose().translate(cx, baseY - 3, 0);
-                gg.pose().scale(ICON_SCALE, ICON_SCALE, 1f);
+                gg.pose().translate(
+                        cx,
+                        baseY - 3,
+                        0
+                );
+                gg.pose().scale(
+                        ICON_SCALE,
+                        ICON_SCALE,
+                        1f
+                );
                 gg.renderItem(tv.icon, 0, 0);
                 gg.pose().popPose();
+
                 cx += iconSlot;
             }
 
-            gg.drawString(mc.font, tv.text, cx, baseY, SUB_COLOR, false);
-            cx += textW;
+            // draw progress like 2/5
+            gg.drawString(
+                    mc.font,
+                    tv.text,
+                    cx,
+                    baseY,
+                    SUB_COLOR,
+                    false
+            );
 
+            cx += textW;
             first = false;
             drawn++;
         }
     }
 
-    private static boolean wouldOverflow(Minecraft mc, List<TargetView> list, int startX, int maxX) {
+    // check if 3 targets will fit on the hud
+    private static boolean wouldOverflow(
+            Minecraft mc,
+            List<TargetView> list,
+            int startX,
+            int maxX
+    ) {
         int cx = startX;
         boolean first = true;
         int drawn = 0;
@@ -398,12 +702,25 @@ public final class PinnedQuestHud {
         for (TargetView tv : list) {
             if (drawn >= 3) break;
 
-            int sepW = first ? 0 : mc.font.width(" | ");
-            int textW = mc.font.width(tv.text);
-            int iconSlot = tv.icon.isEmpty() ? 0 : (Mth.ceil(16 * ICON_SCALE) + 2);
-            int needed = sepW + iconSlot + textW;
+            int sepW =
+                    first
+                            ? 0
+                            : mc.font.width(" | ");
 
-            if (cx + needed > maxX) return true;
+            int textW =
+                    mc.font.width(tv.text);
+
+            int iconSlot =
+                    tv.icon.isEmpty()
+                            ? 0
+                            : Mth.ceil(16 * ICON_SCALE) + 2;
+
+            int needed =
+                    sepW + iconSlot + textW;
+
+            if (cx + needed > maxX) {
+                return true;
+            }
 
             cx += needed;
             first = false;
@@ -413,111 +730,293 @@ public final class PinnedQuestHud {
         return false;
     }
 
-    private static TargetView toTargetView(Minecraft mc, QuestData.Quest q, Player player, QuestData.Target t) {
+    // turn a quest target into an icon and progress text
+    private static TargetView toTargetView(
+            Minecraft mc,
+            QuestData.Quest q,
+            Player player,
+            QuestData.Target t
+    ) {
         try {
             if (t.isItem()) {
                 int need = Math.max(1, t.count);
-                int found = QuestTracker.getAcceptedItemCountInInventory(t, player);
+
+                int found =
+                        QuestTracker.getAcceptedItemCountInInventory(
+                                t,
+                                player
+                        );
 
                 int perm = found;
+
                 try {
-                    perm = QuestTracker.getTrackedItemProgress(q, t, player);
-                } catch (Throwable ignored) {}
+                    perm =
+                            QuestTracker.getTrackedItemProgress(
+                                    q,
+                                    t,
+                                    player
+                            );
+                } catch (Throwable ignored) {
+                }
 
                 int shown = Math.min(perm, need);
                 boolean done = shown >= need;
+
                 String iconId = cycledAcceptedId(t);
-                if (iconId.isBlank()) iconId = t.id;
-                ItemStack icon = resolveItemIcon(iconId);
-                return new TargetView(icon, shown + "/" + need, done);
+
+                if (iconId.isBlank()) {
+                    iconId = t.id;
+                }
+
+                ItemStack icon =
+                        resolveItemIcon(iconId);
+
+                return new TargetView(
+                        icon,
+                        shown + "/" + need,
+                        done
+                );
             }
 
             if (t.isEntity()) {
                 int need = Math.max(1, t.count);
-                int have = Math.min(QuestTracker.getAcceptedKillCount(t, player), need);
+
+                int have =
+                        Math.min(
+                                QuestTracker.getAcceptedKillCount(
+                                        t,
+                                        player
+                                ),
+                                need
+                        );
+
                 boolean done = have >= need;
 
-                String entityId = cycledAcceptedId(t);
-                if (entityId.isBlank()) entityId = t.id;
-                ResourceLocation rl = ResourceLocation.tryParse(entityId);
-                ItemStack icon = new ItemStack(Items.DIAMOND_SWORD);
-                if (rl != null) {
-                    ResourceLocation eggRl = ResourceLocation.fromNamespaceAndPath(rl.getNamespace(), rl.getPath() + "_spawn_egg");
-                    Item egg = BuiltInRegistries.ITEM.getOptional(eggRl).orElse(null);
-                    if (egg != null) icon = new ItemStack(egg);
+                String entityId =
+                        cycledAcceptedId(t);
+
+                if (entityId.isBlank()) {
+                    entityId = t.id;
                 }
-                return new TargetView(icon, have + "/" + need, done);
+
+                ResourceLocation rl =
+                        ResourceLocation.tryParse(entityId);
+
+                // use a sword when no spawn egg exists
+                ItemStack icon =
+                        new ItemStack(Items.DIAMOND_SWORD);
+
+                if (rl != null) {
+                    ResourceLocation eggRl =
+                            ResourceLocation.fromNamespaceAndPath(
+                                    rl.getNamespace(),
+                                    rl.getPath() + "_spawn_egg"
+                            );
+
+                    Item egg =
+                            BuiltInRegistries.ITEM
+                                    .getOptional(eggRl)
+                                    .orElse(null);
+
+                    if (egg != null) {
+                        icon = new ItemStack(egg);
+                    }
+                }
+
+                return new TargetView(
+                        icon,
+                        have + "/" + need,
+                        done
+                );
             }
 
             if (t.isEffect()) {
-                boolean done = QuestTracker.hasEffect(player, t.id);
-                return new TargetView(new ItemStack(Items.POTION), done ? "1/1" : "0/1", done);
+                boolean done =
+                        QuestTracker.hasEffect(
+                                player,
+                                t.id
+                        );
+
+                return new TargetView(
+                        new ItemStack(Items.POTION),
+                        done ? "1/1" : "0/1",
+                        done
+                );
             }
 
             if (t.isAdvancement()) {
-                boolean done = QuestTracker.hasAdvancement(player, t.id);
-                return new TargetView(new ItemStack(Items.BOOK), done ? "1/1" : "0/1", done);
+                boolean done =
+                        QuestTracker.hasAdvancement(
+                                player,
+                                t.id
+                        );
+
+                return new TargetView(
+                        new ItemStack(Items.BOOK),
+                        done ? "1/1" : "0/1",
+                        done
+                );
             }
 
             if (t.isObserve()) {
-                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
-                return new TargetView(new ItemStack(Items.SPYGLASS), done ? "1/1" : "0/1", done);
+                boolean done =
+                        QuestTracker.isTargetSatisfied(
+                                q,
+                                t,
+                                player
+                        );
+
+                return new TargetView(
+                        new ItemStack(Items.SPYGLASS),
+                        done ? "1/1" : "0/1",
+                        done
+                );
             }
 
             if (t.isCheck()) {
-                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
-                return new TargetView(new ItemStack(Items.LIME_DYE), done ? "1/1" : "0/1", done);
+                boolean done =
+                        QuestTracker.isTargetSatisfied(
+                                q,
+                                t,
+                                player
+                        );
+
+                return new TargetView(
+                        new ItemStack(Items.LIME_DYE),
+                        done ? "1/1" : "0/1",
+                        done
+                );
             }
 
             if (t.isBiome()) {
-                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
-                return new TargetView(new ItemStack(Items.GRASS_BLOCK), done ? "1/1" : "0/1", done);
+                boolean done =
+                        QuestTracker.isTargetSatisfied(
+                                q,
+                                t,
+                                player
+                        );
+
+                return new TargetView(
+                        new ItemStack(Items.GRASS_BLOCK),
+                        done ? "1/1" : "0/1",
+                        done
+                );
             }
 
             if (t.isDimension()) {
-                boolean done = QuestTracker.isTargetSatisfied(q, t, player);
-                return new TargetView(new ItemStack(Items.ENDER_PEARL), done ? "1/1" : "0/1", done);
+                boolean done =
+                        QuestTracker.isTargetSatisfied(
+                                q,
+                                t,
+                                player
+                        );
+
+                return new TargetView(
+                        new ItemStack(Items.ENDER_PEARL),
+                        done ? "1/1" : "0/1",
+                        done
+                );
             }
 
             if (t.isLevelUpLevel()) {
                 int need = Math.max(1, t.count);
-                int have = Math.min(LevelUpCompat.getLevel(player), need);
+
+                int have =
+                        Math.min(
+                                LevelUpCompat.getLevel(player),
+                                need
+                        );
+
                 boolean done = have >= need;
-                return new TargetView(new ItemStack(Items.EXPERIENCE_BOTTLE), have + "/" + need, done);
+
+                return new TargetView(
+                        new ItemStack(
+                                Items.EXPERIENCE_BOTTLE
+                        ),
+                        have + "/" + need,
+                        done
+                );
             }
 
             if (t.isFieldInput()) {
-                String key = q.id + ":field:" + t.id;
-                String value = QuestTracker.getFieldInputProgress(player, key);
-                boolean done = value != null && value.trim().equalsIgnoreCase(t.id == null ? "" : t.id.trim());
-                return new TargetView(new ItemStack(Items.NAME_TAG), done ? "1/1" : "0/1", done);
+                String key =
+                        q.id + ":field:" + t.id;
+
+                String value =
+                        QuestTracker.getFieldInputProgress(
+                                player,
+                                key
+                        );
+
+                boolean done =
+                        value != null
+                                && value.trim()
+                                .equalsIgnoreCase(
+                                        t.id == null
+                                                ? ""
+                                                : t.id.trim()
+                                );
+
+                return new TargetView(
+                        new ItemStack(Items.NAME_TAG),
+                        done ? "1/1" : "0/1",
+                        done
+                );
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
+
         return null;
     }
 
+    // find an item icon from an item id or tag
     private static ItemStack resolveItemIcon(String rawId) {
-        ItemStack cached = ITEM_ICON_CACHE.get(rawId);
-        if (cached != null) return cached.copy();
+        ItemStack cached =
+                ITEM_ICON_CACHE.get(rawId);
+
+        if (cached != null) {
+            return cached.copy();
+        }
 
         ItemStack resolved = ItemStack.EMPTY;
-        try {
-            if (rawId == null || rawId.isBlank()) return ItemStack.EMPTY;
 
-            QuestItemSpec spec = QuestItemSpec.parse(rawId);
+        try {
+            if (rawId == null || rawId.isBlank()) {
+                return ItemStack.EMPTY;
+            }
+
+            QuestItemSpec spec =
+                    QuestItemSpec.parse(rawId);
+
             boolean isTagSyntax = spec.tag;
             String key = spec.id;
 
-            ResourceLocation rl = ResourceLocation.tryParse(key);
-            if (rl == null) return ItemStack.EMPTY;
+            ResourceLocation rl =
+                    ResourceLocation.tryParse(key);
 
-            Item direct = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
-            boolean treatAsTag = isTagSyntax || direct == null;
+            if (rl == null) {
+                return ItemStack.EMPTY;
+            }
 
+            Item direct =
+                    BuiltInRegistries.ITEM
+                            .getOptional(rl)
+                            .orElse(null);
+
+            boolean treatAsTag =
+                    isTagSyntax || direct == null;
+
+            // use the item directly when it exists
             if (!treatAsTag && direct != null) {
                 resolved = new ItemStack(direct);
             } else {
-                var itemTag = net.minecraft.tags.TagKey.create(Registries.ITEM, rl);
+                // try the item tag first
+                var itemTag =
+                        net.minecraft.tags.TagKey.create(
+                                Registries.ITEM,
+                                rl
+                        );
+
                 for (Item it : BuiltInRegistries.ITEM) {
                     if (it.builtInRegistryHolder().is(itemTag)) {
                         resolved = new ItemStack(it);
@@ -525,19 +1024,34 @@ public final class PinnedQuestHud {
                     }
                 }
 
+                // try the block tag if no item was found
                 if (resolved.isEmpty()) {
-                    var blockTag = net.minecraft.tags.TagKey.create(Registries.BLOCK, rl);
+                    var blockTag =
+                            net.minecraft.tags.TagKey.create(
+                                    Registries.BLOCK,
+                                    rl
+                            );
+
                     for (Item it : BuiltInRegistries.ITEM) {
-                        if (it instanceof BlockItem bi && bi.getBlock().builtInRegistryHolder().is(blockTag)) {
+                        if (it instanceof BlockItem bi
+                                && bi.getBlock()
+                                .builtInRegistryHolder()
+                                .is(blockTag)) {
+
                             resolved = new ItemStack(it);
                             break;
                         }
                     }
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+        }
 
-        ITEM_ICON_CACHE.put(rawId, resolved.copy());
+        ITEM_ICON_CACHE.put(
+                rawId,
+                resolved.copy()
+        );
+
         return resolved;
     }
 }

@@ -13,6 +13,7 @@ import java.lang.reflect.Method;
 import java.util.Locale;
 
 public final class QuestItemSpec {
+    // parsed item or tag target
     public final String raw;
     public final String id;
     public final String components;
@@ -25,6 +26,7 @@ public final class QuestItemSpec {
         this.tag = tag;
     }
 
+    // split id and components
     public static QuestItemSpec parse(String raw) {
         String value = raw == null ? "" : raw.trim();
         if (value.isBlank()) return new QuestItemSpec("", "", "", false);
@@ -64,6 +66,7 @@ public final class QuestItemSpec {
         return matches(stack, null);
     }
 
+    // compare a stack against the spec
     public boolean matches(ItemStack stack, HolderLookup.Provider registries) {
         if (stack == null || stack.isEmpty()) return false;
         ResourceLocation rl = idLocation();

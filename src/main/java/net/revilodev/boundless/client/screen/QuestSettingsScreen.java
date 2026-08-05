@@ -183,7 +183,7 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigTab configTab = ConfigTab.ALL;
 
     public QuestSettingsScreen(Screen parent) {
-        super(Component.literal("Quest Settings"));
+        super(tr("title"));
         this.parent = parent;
     }
 
@@ -253,104 +253,104 @@ public final class QuestSettingsScreen extends Screen {
         gameplayDisableQuestBookBaseY = gameplayHeaderBaseY + 10;
         gameplaySpawnWithBookBaseY = gameplayDisableQuestBookBaseY + rowGap;
 
-        uiPinnedRow = new ConfigRow(px, uiPinnedBaseY, pw, "Pinned GUI",
-                "Set where pinned quest toasts appear.",
+        uiPinnedRow = new ConfigRow(px, uiPinnedBaseY, pw, trs("row.pinned_gui"),
+                trs("row.pinned_gui.subtitle"),
                 () -> pinnedHudPos, this::cyclePinnedHudPosition);
-        uiHideInventoryRow = new ConfigRow(px, uiHideInventoryBaseY, pw, "Inventory Questbook",
-                "Hide the quest-book button in inventory.",
-                () -> hideQuestBookInInventory ? "On" : "Off",
+        uiHideInventoryRow = new ConfigRow(px, uiHideInventoryBaseY, pw, trs("row.inventory_questbook"),
+                trs("row.inventory_questbook.subtitle"),
+                () -> trs(hideQuestBookInInventory ? "state.on" : "state.off"),
                 () -> {
                     hideQuestBookInInventory = !hideQuestBookInInventory;
                     if (hideQuestBookInInventory) disableQuestBook = false;
                 });
-        uiInventoryButtonPositionRow = new ConfigRow(px, uiInventoryButtonPositionBaseY, pw, "Book GUI position",
-                "Choose where the inventory quest-book button appears.",
+        uiInventoryButtonPositionRow = new ConfigRow(px, uiInventoryButtonPositionBaseY, pw, trs("row.book_gui_position"),
+                trs("row.book_gui_position.subtitle"),
                 this::formatQuestBookInventoryButtonPosition,
                 this::cycleQuestBookInventoryButtonPosition);
-        uiCenterInventoryWithPanelRow = new ConfigRow(px, uiCenterInventoryWithPanelBaseY, pw, "Centre Quest UI",
-                "Center inventory and quest panel together when the panel is open.",
-                () -> centerInventoryWithQuestPanel ? "Enabled" : "Disabled",
+        uiCenterInventoryWithPanelRow = new ConfigRow(px, uiCenterInventoryWithPanelBaseY, pw, trs("row.centre_quest_ui"),
+                trs("row.centre_quest_ui.subtitle"),
+                () -> trs(centerInventoryWithQuestPanel ? "state.enabled" : "state.disabled"),
                 () -> centerInventoryWithQuestPanel = !centerInventoryWithQuestPanel);
-        uiHideHeaderRow = new ConfigRow(px, uiHideHeaderBaseY, pw, "Display Headers",
-                "Hide the category header above the quest list.",
-                () -> hideCategoryHeader ? "Disabled" : "Enabled",
+        uiHideHeaderRow = new ConfigRow(px, uiHideHeaderBaseY, pw, trs("row.display_headers"),
+                trs("row.display_headers.subtitle"),
+                () -> trs(hideCategoryHeader ? "state.disabled" : "state.enabled"),
                 () -> hideCategoryHeader = !hideCategoryHeader);
-        uiFilterDisplayRow = new ConfigRow(px, uiFilterDisplayBaseY, pw, "Display Filters",
-                "Choose whether filters appear as buttons, tabs, or stay hidden.",
+        uiFilterDisplayRow = new ConfigRow(px, uiFilterDisplayBaseY, pw, trs("row.display_filters"),
+                trs("row.display_filters.subtitle"),
                 this::formatFilterDisplayMode,
                 this::cycleFilterDisplayMode);
-        uiDisableCategoriesRow = new ConfigRow(px, uiDisableCategoriesBaseY, pw, "Categories",
-                "Disable category tabs and category-based filtering.",
-                () -> disableCategories ? "Disabled" : "Enabled",
+        uiDisableCategoriesRow = new ConfigRow(px, uiDisableCategoriesBaseY, pw, trs("row.categories"),
+                trs("row.categories.subtitle"),
+                () -> trs(disableCategories ? "state.disabled" : "state.enabled"),
                 () -> disableCategories = !disableCategories);
-        uiHideQuestWidgetIconsRow = new ConfigRow(px, uiHideQuestWidgetIconsBaseY, pw, "Disable Widget Icons",
-                "Hide icons in quest list widgets.",
-                () -> hideQuestWidgetIcons ? "On" : "Off",
+        uiHideQuestWidgetIconsRow = new ConfigRow(px, uiHideQuestWidgetIconsBaseY, pw, trs("row.disable_widget_icons"),
+                trs("row.disable_widget_icons.subtitle"),
+                () -> trs(hideQuestWidgetIcons ? "state.on" : "state.off"),
                 () -> hideQuestWidgetIcons = !hideQuestWidgetIcons);
-        uiQuestTextScaleRow = new ConfigRow(px, uiQuestTextScaleBaseY, pw, "Text Scale",
-                "Scale quest widget titles and detail description, task, and reward text.",
+        uiQuestTextScaleRow = new ConfigRow(px, uiQuestTextScaleBaseY, pw, trs("row.text_scale"),
+                trs("row.text_scale.subtitle"),
                 this::formatQuestTextScale,
                 this::cycleQuestTextScale);
-        uiQuestIconScaleRow = new ConfigRow(px, uiQuestIconScaleBaseY, pw, "Icon Scale",
-                "Scale quest widget icons and detail panel icons.",
+        uiQuestIconScaleRow = new ConfigRow(px, uiQuestIconScaleBaseY, pw, trs("row.icon_scale"),
+                trs("row.icon_scale.subtitle"),
                 this::formatQuestIconScale,
                 this::cycleQuestIconScale);
-        uiEnableSearchBoxRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Search Widget",
-                "Show a search box above the quest list.",
-                () -> enableQuestSearchBox ? "On" : "Off",
+        uiEnableSearchBoxRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.search_widget"),
+                trs("row.search_widget.subtitle"),
+                () -> trs(enableQuestSearchBox ? "state.on" : "state.off"),
                 () -> enableQuestSearchBox = !enableQuestSearchBox);
-        uiEnableDescriptionColorsRow = new ConfigRow(px, uiEnableDescriptionColorsBaseY, pw, "Text coloring",
-                "Allow formated text to color quest descriptions.",
-                () -> enableDescriptionColors ? "On" : "Off",
+        uiEnableDescriptionColorsRow = new ConfigRow(px, uiEnableDescriptionColorsBaseY, pw, trs("row.text_coloring"),
+                trs("row.text_coloring.subtitle"),
+                () -> trs(enableDescriptionColors ? "state.on" : "state.off"),
                 () -> enableDescriptionColors = !enableDescriptionColors);
-        uiQuestWidgetTextColorRow = new ConfigRow(px, uiQuestWidgetTextColorBaseY, pw, "Widget Text Color",
-                "Change the color of text for texturepacks.",
+        uiQuestWidgetTextColorRow = new ConfigRow(px, uiQuestWidgetTextColorBaseY, pw, trs("row.widget_text_color"),
+                trs("row.widget_text_color.subtitle"),
                 this::formatQuestWidgetTextColor,
                 this::cycleQuestWidgetTextColor);
-        uiDescriptionTextColorRow = new ConfigRow(px, uiDescriptionTextColorBaseY, pw, "Description Color",
-                "Change the default color of quest description text.",
+        uiDescriptionTextColorRow = new ConfigRow(px, uiDescriptionTextColorBaseY, pw, trs("row.description_color"),
+                trs("row.description_color.subtitle"),
                 this::formatDescriptionTextColor,
                 this::cycleDescriptionTextColor);
-        uiEnableDescriptionReadMoreRow = new ConfigRow(px, uiEnableDescriptionReadMoreBaseY, pw, "Read More",
-                "Collapse long quest descriptions behind a read-more toggle.",
-                () -> enableDescriptionReadMore ? "On" : "Off",
+        uiEnableDescriptionReadMoreRow = new ConfigRow(px, uiEnableDescriptionReadMoreBaseY, pw, trs("row.read_more"),
+                trs("row.read_more.subtitle"),
+                () -> trs(enableDescriptionReadMore ? "state.on" : "state.off"),
                 () -> enableDescriptionReadMore = !enableDescriptionReadMore);
-        uiEnableDescriptionWrappingRow = new ConfigRow(px, uiEnableDescriptionWrappingBaseY, pw, "Description Wrap",
-                "Wrap quest descriptions to the panel width.",
-                () -> enableDescriptionTextWrapping ? "On" : "Off",
+        uiEnableDescriptionWrappingRow = new ConfigRow(px, uiEnableDescriptionWrappingBaseY, pw, trs("row.description_wrap"),
+                trs("row.description_wrap.subtitle"),
+                () -> trs(enableDescriptionTextWrapping ? "state.on" : "state.off"),
                 () -> enableDescriptionTextWrapping = !enableDescriptionTextWrapping);
-        uiDescriptionAlignmentRow = new ConfigRow(px, uiDescriptionAlignmentBaseY, pw, "Description Align",
-                "Set quest description alignment.",
+        uiDescriptionAlignmentRow = new ConfigRow(px, uiDescriptionAlignmentBaseY, pw, trs("row.description_align"),
+                trs("row.description_align.subtitle"),
                 this::formatDescriptionTextAlignment,
                 this::cycleDescriptionTextAlignment);
-        uiEnableQuestToastsRow = new ConfigRow(px, uiEnableQuestToastsBaseY, pw, "Quest Toasts",
-                "Show toast popups when quests are unlocked.",
-                () -> enableQuestToasts ? "On" : "Off",
+        uiEnableQuestToastsRow = new ConfigRow(px, uiEnableQuestToastsBaseY, pw, trs("row.quest_toasts"),
+                trs("row.quest_toasts.subtitle"),
+                () -> trs(enableQuestToasts ? "state.on" : "state.off"),
                 () -> enableQuestToasts = !enableQuestToasts);
 
-        functionalityDisablePinningRow = new ConfigRow(px, functionalityDisablePinningBaseY, pw, "Quest pinning",
-                "Enable / Disable Quest pinning feature.",
-                () -> disableQuestPinning ? "Disabled" : "Enabled",
+        functionalityDisablePinningRow = new ConfigRow(px, functionalityDisablePinningBaseY, pw, trs("row.quest_pinning"),
+                trs("row.quest_pinning.subtitle"),
+                () -> trs(disableQuestPinning ? "state.disabled" : "state.enabled"),
                 () -> disableQuestPinning = !disableQuestPinning);
-        functionalityAutoClaimRow = new ConfigRow(px, functionalityAutoClaimBaseY, pw, "Auto Claim Rewards",
-                "Automatically claim rewards when a quest becomes complete.",
-                () -> autoClaimQuestRewards ? "On" : "Off",
+        functionalityAutoClaimRow = new ConfigRow(px, functionalityAutoClaimBaseY, pw, trs("row.auto_claim_rewards"),
+                trs("row.auto_claim_rewards.subtitle"),
+                () -> trs(autoClaimQuestRewards ? "state.on" : "state.off"),
                 () -> autoClaimQuestRewards = !autoClaimQuestRewards);
-        functionalityQuestScrollsRow = new ConfigRow(px, functionalityQuestScrollsBaseY, pw, "Quest scrolls",
-                "Multiplayer quest scrolls to Gift quests",
-                () -> enableQuestScrolls ? "On" : "Off",
+        functionalityQuestScrollsRow = new ConfigRow(px, functionalityQuestScrollsBaseY, pw, trs("row.quest_scrolls"),
+                trs("row.quest_scrolls.subtitle"),
+                () -> trs(enableQuestScrolls ? "state.on" : "state.off"),
                 () -> enableQuestScrolls = !enableQuestScrolls);
 
-        gameplayDisableQuestBookRow = new ConfigRow(px, gameplayDisableQuestBookBaseY, pw, "Quest book",
-                "Access to the questbook item and keybind",
-                () -> disableQuestBook ? "Disabled" : "Enabled",
+        gameplayDisableQuestBookRow = new ConfigRow(px, gameplayDisableQuestBookBaseY, pw, trs("row.quest_book"),
+                trs("row.quest_book.subtitle"),
+                () -> trs(disableQuestBook ? "state.disabled" : "state.enabled"),
                 () -> {
                     disableQuestBook = !disableQuestBook;
                     if (disableQuestBook) hideQuestBookInInventory = false;
                 });
-        gameplaySpawnWithBookRow = new ConfigRow(px, gameplaySpawnWithBookBaseY, pw, "Spawn With Quest Book",
-                "Give players a quest book on first join.",
-                () -> spawnWithQuestBook ? "On" : "Off",
+        gameplaySpawnWithBookRow = new ConfigRow(px, gameplaySpawnWithBookBaseY, pw, trs("row.spawn_with_quest_book"),
+                trs("row.spawn_with_quest_book.subtitle"),
+                () -> trs(spawnWithQuestBook ? "state.on" : "state.off"),
                 () -> spawnWithQuestBook = !spawnWithQuestBook);
 
         addConfigRow(uiHideQuestWidgetIconsRow, ConfigTab.STYLE);
@@ -379,10 +379,10 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(gameplayDisableQuestBookRow, ConfigTab.FEATURES);
         addConfigRow(gameplaySpawnWithBookRow, ConfigTab.FEATURES);
 
-        addConfigTabButton(ConfigTab.ALL, CONFIG_TAB_ALL_TEX, "All");
-        addConfigTabButton(ConfigTab.STYLE, CONFIG_TAB_STYLE_TEX, "Style");
-        addConfigTabButton(ConfigTab.UI, CONFIG_TAB_UI_TEX, "UI");
-        addConfigTabButton(ConfigTab.FEATURES, CONFIG_TAB_FEATURES_TEX, "Features");
+        addConfigTabButton(ConfigTab.ALL, CONFIG_TAB_ALL_TEX, trs("tab.all"));
+        addConfigTabButton(ConfigTab.STYLE, CONFIG_TAB_STYLE_TEX, trs("tab.style"));
+        addConfigTabButton(ConfigTab.UI, CONFIG_TAB_UI_TEX, trs("tab.ui"));
+        addConfigTabButton(ConfigTab.FEATURES, CONFIG_TAB_FEATURES_TEX, trs("tab.features"));
         applyConfigScrollLayout();
     }
 
@@ -401,7 +401,7 @@ public final class QuestSettingsScreen extends Screen {
     private void initNavButtons() {
         int btnY = py + ph - 20;
         backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
-        resetConfigButton = new HoldResetButton(px + 2, btnY, pw - 4, 20, () -> Component.literal(configTab == ConfigTab.ALL ? "Reset all configs" : "Reset to default"), this::resetCurrentConfigTab);
+        resetConfigButton = new HoldResetButton(px + 2, btnY, pw - 4, 20, () -> tr(configTab == ConfigTab.ALL ? "reset.all" : "reset.current"), this::resetCurrentConfigTab);
 
         addRenderableWidget(backButton);
         addRenderableWidget(resetConfigButton);
@@ -416,7 +416,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void initHeader() {
-        header = new CategoryHeaderWidget(leftX, topY, PANEL_W, () -> "Settings");
+        header = new CategoryHeaderWidget(leftX, topY, PANEL_W, () -> trs("header"));
         header.setPanelBounds(leftX, topY, PANEL_W);
         addRenderableWidget(header);
     }
@@ -548,9 +548,9 @@ public final class QuestSettingsScreen extends Screen {
 
     private String formatFilterDisplayMode() {
         return switch (filterDisplayMode == null ? "tabs" : filterDisplayMode) {
-            case "buttons" -> "As Buttons";
-            case "hidden" -> "Hidden";
-            default -> "As Tabs";
+            case "buttons" -> trs("filter.buttons");
+            case "hidden" -> trs("filter.hidden");
+            default -> trs("filter.tabs");
         };
     }
 
@@ -562,8 +562,8 @@ public final class QuestSettingsScreen extends Screen {
 
     private String formatQuestBookInventoryButtonPosition() {
         return "above_offhand_slot".equals(questBookInventoryButtonPosition)
-                ? "Above Offhand Slot"
-                : "Beside Recipe Book";
+                ? trs("book_position.above_offhand_slot")
+                : trs("book_position.beside_recipe_book");
     }
 
     private void cycleQuestTextScale() {
@@ -611,10 +611,10 @@ public final class QuestSettingsScreen extends Screen {
 
     private String formatDescriptionTextAlignment() {
         return switch (normalizeDescriptionTextAlignment(descriptionTextAlignment)) {
-            case "center" -> "Centre";
-            case "right" -> "Right";
-            case "adjust" -> "Adjust";
-            default -> "Left";
+            case "center" -> trs("align.center");
+            case "right" -> trs("align.right");
+            case "adjust" -> trs("align.adjust");
+            default -> trs("align.left");
         };
     }
 
@@ -730,11 +730,11 @@ public final class QuestSettingsScreen extends Screen {
 
     private List<QuestData.Quest> buildMenuQuests() {
         List<QuestData.Quest> out = new ArrayList<>();
-        out.add(buildMenuQuest(MENU_ID_CONFIG, "Config", MENU_CONFIG_TEX.toString()));
-        out.add(buildMenuQuest(MENU_ID_EDITOR, "Quest Editor", MENU_EDITOR_TEX.toString()));
+        out.add(buildMenuQuest(MENU_ID_CONFIG, trs("menu.config"), MENU_CONFIG_TEX.toString()));
+        out.add(buildMenuQuest(MENU_ID_EDITOR, trs("menu.editor"), MENU_EDITOR_TEX.toString()));
         out.add(buildMenuQuest("settings_spacer_1", "", "minecraft:air"));
         out.add(buildMenuQuest("settings_spacer_2", "", "minecraft:air"));
-        out.add(buildMenuQuest(MENU_ID_DISCORD, "Discord", MENU_DISCORD_TEX.toString()));
+        out.add(buildMenuQuest(MENU_ID_DISCORD, trs("menu.discord"), MENU_DISCORD_TEX.toString()));
         return out;
     }
 
@@ -873,7 +873,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void renderConfigPageHeader(GuiGraphics gg) {
-        String text = configTab.title;
+        String text = Component.translatable(configTab.title).getString();
         int textW = font.width(text);
         int headerW = Math.max(22, textW + 10);
         int x = leftX + 5;
@@ -1083,10 +1083,10 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private enum ConfigTab {
-        ALL("All"),
-        STYLE("Style"),
-        UI("UI"),
-        FEATURES("Features");
+        ALL("ui.boundless.settings.tab.all"),
+        STYLE("ui.boundless.settings.tab.style"),
+        UI("ui.boundless.settings.tab.ui"),
+        FEATURES("ui.boundless.settings.tab.features");
 
         final String title;
 
@@ -1277,7 +1277,7 @@ public final class QuestSettingsScreen extends Screen {
             gg.pose().popPose();
 
             if (hovered) {
-                gg.renderComponentTooltip(font, List.of(Component.literal("Hold to delete")), mouseX, mouseY);
+                gg.renderComponentTooltip(font, List.of(tr("tooltip.hold_reset")), mouseX, mouseY);
             }
         }
 
@@ -1338,5 +1338,13 @@ public final class QuestSettingsScreen extends Screen {
 
         @Override
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
+    }
+
+    private static Component tr(String key, Object... args) {
+        return Component.translatable("ui.boundless.settings." + key, args);
+    }
+
+    private static String trs(String key, Object... args) {
+        return tr(key, args).getString();
     }
 }

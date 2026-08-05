@@ -1,3 +1,4 @@
+
 package net.revilodev.boundless.client;
 
 import net.minecraft.client.Minecraft;
@@ -18,19 +19,31 @@ import java.util.function.Consumer;
 
 @OnlyIn(Dist.CLIENT)
 public final class CategoryTabsWidget extends AbstractWidget {
+
+    // tab textures
     private static final ResourceLocation TAB =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
+
     private static final ResourceLocation TAB_SELECTED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
+
+    // page button textures
     private static final ResourceLocation MOVE_DOWN =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_down.png");
+
     private static final ResourceLocation MOVE_UP =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_up.png");
+
     private static final ResourceLocation MOVE_DOWN_HIGHLIGHTED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_down-highlighted.png");
+
     private static final ResourceLocation MOVE_UP_HIGHLIGHTED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_up-highlighted.png");
+
+    // show 5 tabs on each page
     private static final int PAGE_SIZE = 5;
+
+    // page button sizes
     private static final int CONTROL_ICON_BASE = 16;
     private static final float CONTROL_ICON_SCALE = 1.0f;
     private static final int CONTROL_ICON = (int) (CONTROL_ICON_BASE * CONTROL_ICON_SCALE);
@@ -38,21 +51,28 @@ public final class CategoryTabsWidget extends AbstractWidget {
     private static final int CONTROL_X_SHIFT = -2;
 
     private final Minecraft mc = Minecraft.getInstance();
+
+    // called when a tab gets selected
     private final Consumer<String> onSelect;
+
     private final List<QuestData.Category> categories = new ArrayList<>();
+
     private String selected = "";
     private int pageIndex = 0;
 
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
+
     private int cellW = TAB_W;
     private int cellH = TAB_H;
     private int gap = 2;
 
-    // Tooltip state (rendered later, on top)
+    // tooltip gets drawn after the main widget
     private Component pendingTooltip;
     private int pendingTooltipX;
     private int pendingTooltipY;
+
+    // lines the tabs up on the right side
     private int tabRenderX() {
         return getX() + Math.max(0, width - cellW);
     }
@@ -62,6 +82,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
         this.onSelect = onSelect;
     }
 
+    // update the widget position and size
     public void setBounds(int x, int y, int w, int h) {
         this.setX(x);
         this.setY(y);
@@ -69,32 +90,47 @@ public final class CategoryTabsWidget extends AbstractWidget {
         this.height = h;
     }
 
+    // reload the category list
     public void setCategories(List<QuestData.Category> list) {
         categories.clear();
+
         for (QuestData.Category c : list) {
             if (c == null) continue;
+
+            // all is handled on its own
             if ("all".equalsIgnoreCase(c.id)) continue;
+
+            // skip categories disabled in the config
             if (Config.disabledCategories().contains(c.id)) continue;
+
             categories.add(c);
         }
 
         if (!categories.isEmpty()) {
             boolean hasSelected = false;
+
+            // check if the current category still exists
             for (QuestData.Category c : categories) {
                 if (c.id.equalsIgnoreCase(selected)) {
                     hasSelected = true;
                     break;
                 }
             }
-            if (!hasSelected) selected = categories.get(0).id;
+
+            // use the 1st category if the old one is gone
+            if (!hasSelected) {
+                selected = categories.get(0).id;
+            }
         } else {
             selected = "";
             pageIndex = 0;
             return;
         }
+
         clampPage();
     }
 
+    // change the selected category
     public void setSelected(String id) {
         this.selected = id == null ? "" : id;
         ensureSelectedVisible();
@@ -106,32 +142,37 @@ public final class CategoryTabsWidget extends AbstractWidget {
 
     public String getSelectedName() {
         if (selected == null || selected.isBlank()) return "";
+
         for (QuestData.Category c : categories) {
-            if (c.id.equalsIgnoreCase(selected)) return c.name;
+            if (c.id.equalsIgnoreCase(selected)) {
+                return c.name;
+            }
         }
+
         return "";
     }
 
+    // select the 1st category in the list
     public String selectFirstCategory() {
         if (categories.isEmpty()) {
             selected = "";
             pageIndex = 0;
             return "";
         }
+
         selected = categories.get(0).id;
         ensureSelectedVisible();
+
         return selected;
     }
 
-    /**
-     * Call this AFTER the screen finishes rendering (i.e., at the end of Screen#render),
-     * so it won't be clipped by any scissor/cutout used while rendering widgets.
-     */
+    // call this after the screen has finished rendering
+    // this keeps the tooltip above the rest of the gui
     public void renderHoverTooltipOnTop(GuiGraphics gg) {
         if (pendingTooltip == null) return;
 
         gg.pose().pushPose();
-        gg.pose().translate(0.0F, 0.0F, 500.0F); // above normal GUI layers
+        gg.pose().translate(0.0F, 0.0F, 500.0F);
         gg.renderTooltip(mc.font, pendingTooltip, pendingTooltipX, pendingTooltipY);
         gg.pose().popPose();
 
@@ -146,42 +187,69 @@ public final class CategoryTabsWidget extends AbstractWidget {
 
         int visibleCount = visibleTabCount();
         if (visibleCount <= 0) return;
+
         clampPage();
 
         int x = tabRenderX();
         int y = getY();
 
+        // work out which categories are on this page
         int start = pageIndex * PAGE_SIZE;
         int end = Math.min(categories.size(), start + visibleCount);
+
         for (int idx = start; idx < end; idx++) {
             QuestData.Category c = categories.get(idx);
+
             int i = idx - start;
             int top = y + i * (cellH + gap);
 
             boolean sel = !selected.isBlank() && c.id.equalsIgnoreCase(selected);
             ResourceLocation tex = sel ? TAB_SELECTED : TAB;
 
+            // selected tabs move 1 pixel to the left
             int renderX = x + 2 - (sel ? 1 : 0);
-            gg.blit(tex, renderX, top, 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
-            c.iconItem().ifPresent(it -> gg.renderItem(new ItemStack(it), renderX + 10, top + 5));
 
-            boolean hover = mouseX >= x && mouseX < x + cellW && mouseY >= top && mouseY < top + cellH;
+            gg.blit(tex, renderX, top, 0, 0, TAB_W, TAB_H, TAB_W, TAB_H);
+
+            // draw the category item inside the tab
+            c.iconItem().ifPresent(it ->
+                    gg.renderItem(new ItemStack(it), renderX + 10, top + 5)
+            );
+
+            boolean hover =
+                    mouseX >= x &&
+                            mouseX < x + cellW &&
+                            mouseY >= top &&
+                            mouseY < top + cellH;
+
+            // save the tooltip so it can be drawn later
             if (hover) {
                 pendingTooltip = Component.literal(c.name);
                 pendingTooltipX = mouseX;
                 pendingTooltipY = mouseY;
             }
         }
-        renderPageControls(gg, mouseX, mouseY, getX(), y + visibleCount * (cellH + gap));
+
+        // page buttons go under the last tab
+        renderPageControls(
+                gg,
+                mouseX,
+                mouseY,
+                getX(),
+                y + visibleCount * (cellH + gap)
+        );
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (!visible || !active) return false;
+
+        // only use left click
         if (button != 0) return false;
 
         int visibleCount = visibleTabCount();
         if (visibleCount <= 0) return false;
+
         clampPage();
 
         int x = tabRenderX();
@@ -189,24 +257,40 @@ public final class CategoryTabsWidget extends AbstractWidget {
 
         int start = pageIndex * PAGE_SIZE;
         int end = Math.min(categories.size(), start + visibleCount);
+
+        // check if a category tab was clicked
         for (int idx = start; idx < end; idx++) {
             int i = idx - start;
             int top = y + i * (cellH + gap);
-            if (mouseX >= x && mouseX < x + cellW && mouseY >= top && mouseY < top + cellH) {
+
+            if (mouseX >= x &&
+                    mouseX < x + cellW &&
+                    mouseY >= top &&
+                    mouseY < top + cellH) {
+
                 String id = categories.get(idx).id;
                 selected = id;
-                if (onSelect != null) onSelect.accept(id);
+
+                if (onSelect != null) {
+                    onSelect.accept(id);
+                }
+
                 return true;
             }
         }
 
+        // check the page buttons
         if (categories.size() > PAGE_SIZE) {
             int controlsY = y + visibleCount * (cellH + gap);
+
             if (isOverUp(mouseX, mouseY, getX(), controlsY) && pageIndex > 0) {
                 pageIndex--;
                 return true;
             }
-            if (isOverDown(mouseX, mouseY, getX(), controlsY) && pageIndex < maxPageIndex()) {
+
+            if (isOverDown(mouseX, mouseY, getX(), controlsY) &&
+                    pageIndex < maxPageIndex()) {
+
                 pageIndex++;
                 return true;
             }
@@ -216,104 +300,200 @@ public final class CategoryTabsWidget extends AbstractWidget {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(
+            double mouseX,
+            double mouseY,
+            double scrollX,
+            double scrollY
+    ) {
         return false;
     }
 
+    // always show up to 5 tabs
     private int visibleTabCount() {
         return PAGE_SIZE;
     }
 
+    // get the last valid page number
     private int maxPageIndex() {
         return Math.max(0, (categories.size() - 1) / PAGE_SIZE);
     }
 
+    // stop the page number going out of range
     private void clampPage() {
         pageIndex = Math.max(0, Math.min(pageIndex, maxPageIndex()));
     }
 
+    // move to the page that has the selected category
     private void ensureSelectedVisible() {
         if (selected == null || selected.isBlank() || categories.isEmpty()) {
             clampPage();
             return;
         }
+
         int selectedIndex = -1;
+
         for (int i = 0; i < categories.size(); i++) {
             if (categories.get(i).id.equalsIgnoreCase(selected)) {
                 selectedIndex = i;
                 break;
             }
         }
+
         if (selectedIndex < 0) {
             clampPage();
             return;
         }
+
         pageIndex = selectedIndex / PAGE_SIZE;
         clampPage();
     }
 
-    private void renderPageControls(GuiGraphics gg, int mouseX, int mouseY, int x, int y) {
+    // draw the up and down page buttons
+    private void renderPageControls(
+            GuiGraphics gg,
+            int mouseX,
+            int mouseY,
+            int x,
+            int y
+    ) {
         if (categories.size() <= PAGE_SIZE) return;
+
         int controlsY = y + 1;
         int iconX = controlsIconX();
         int downY = controlsY + CONTROL_ICON + CONTROL_GAP;
+
         boolean hoverUp = isOverUp(mouseX, mouseY, x, y);
         boolean hoverDown = isOverDown(mouseX, mouseY, x, y);
-        drawScaledIcon(gg, hoverUp ? MOVE_UP_HIGHLIGHTED : MOVE_UP, iconX, controlsY);
-        drawScaledIcon(gg, hoverDown ? MOVE_DOWN_HIGHLIGHTED : MOVE_DOWN, iconX, downY);
 
+        // use highlighted textures while hovering
+        drawScaledIcon(
+                gg,
+                hoverUp ? MOVE_UP_HIGHLIGHTED : MOVE_UP,
+                iconX,
+                controlsY
+        );
+
+        drawScaledIcon(
+                gg,
+                hoverDown ? MOVE_DOWN_HIGHLIGHTED : MOVE_DOWN,
+                iconX,
+                downY
+        );
+
+        // page number like 1/3
         String text = (pageIndex + 1) + "/" + (maxPageIndex() + 1);
-        int textX = iconX + (CONTROL_ICON / 2) - (int) ((mc.font.width(text) * 0.8f) / 2f);
+
+        int textX =
+                iconX +
+                        (CONTROL_ICON / 2) -
+                        (int) ((mc.font.width(text) * 0.8f) / 2f);
+
         int textY = downY + CONTROL_ICON + 2;
+
         drawScaledString(gg, text, 0.8f, textX, textY, 0xFFFFFFFF);
 
+        // show page button tooltips when the button can be used
         if (hoverUp && pageIndex > 0) {
-            pendingTooltip = Component.translatable("ui.boundless.pagination.previous");
+            pendingTooltip =
+                    Component.translatable("ui.boundless.pagination.previous");
+
             pendingTooltipX = mouseX;
             pendingTooltipY = mouseY;
         } else if (hoverDown && pageIndex < maxPageIndex()) {
-            pendingTooltip = Component.translatable("ui.boundless.pagination.next");
+            pendingTooltip =
+                    Component.translatable("ui.boundless.pagination.next");
+
             pendingTooltipX = mouseX;
             pendingTooltipY = mouseY;
         }
     }
 
+    // check if the mouse is over the up button
     private boolean isOverUp(double mouseX, double mouseY, int x, int y) {
         int controlsY = y + 1;
         int iconX = controlsIconX();
-        return mouseX >= iconX && mouseX < iconX + CONTROL_ICON
-                && mouseY >= controlsY && mouseY < controlsY + CONTROL_ICON;
+
+        return mouseX >= iconX &&
+                mouseX < iconX + CONTROL_ICON &&
+                mouseY >= controlsY &&
+                mouseY < controlsY + CONTROL_ICON;
     }
 
+    // check if the mouse is over the down button
     private boolean isOverDown(double mouseX, double mouseY, int x, int y) {
         int controlsY = y + 1;
         int iconX = controlsIconX();
         int downY = controlsY + CONTROL_ICON + CONTROL_GAP;
-        return mouseX >= iconX && mouseX < iconX + CONTROL_ICON
-                && mouseY >= downY && mouseY < downY + CONTROL_ICON;
+
+        return mouseX >= iconX &&
+                mouseX < iconX + CONTROL_ICON &&
+                mouseY >= downY &&
+                mouseY < downY + CONTROL_ICON;
     }
 
+    // center the page buttons under the tabs
     private int controlsIconX() {
-        return tabRenderX() + (cellW - CONTROL_ICON) / 2 + CONTROL_X_SHIFT;
+        return tabRenderX() +
+                (cellW - CONTROL_ICON) / 2 +
+                CONTROL_X_SHIFT;
     }
 
-    private void drawScaledString(GuiGraphics gg, String text, float scale, int x, int y, int color) {
+    // draw smaller text using the pose scale
+    private void drawScaledString(
+            GuiGraphics gg,
+            String text,
+            float scale,
+            int x,
+            int y,
+            int color
+    ) {
         if (text == null || text.isEmpty()) return;
+
         gg.pose().pushPose();
         gg.pose().scale(scale, scale, 1f);
+
         float inv = 1f / scale;
-        gg.drawString(mc.font, text, (int) (x * inv), (int) (y * inv), color, false);
+
+        gg.drawString(
+                mc.font,
+                text,
+                (int) (x * inv),
+                (int) (y * inv),
+                color,
+                false
+        );
+
         gg.pose().popPose();
     }
 
-    private void drawScaledIcon(GuiGraphics gg, ResourceLocation tex, int x, int y) {
+    // draw an icon using the set scale
+    private void drawScaledIcon(
+            GuiGraphics gg,
+            ResourceLocation tex,
+            int x,
+            int y
+    ) {
         gg.pose().pushPose();
         gg.pose().translate(x, y, 0.0F);
         gg.pose().scale(CONTROL_ICON_SCALE, CONTROL_ICON_SCALE, 1.0F);
-        gg.blit(tex, 0, 0, 0, 0, CONTROL_ICON_BASE, CONTROL_ICON_BASE, CONTROL_ICON_BASE, CONTROL_ICON_BASE);
+
+        gg.blit(
+                tex,
+                0,
+                0,
+                0,
+                0,
+                CONTROL_ICON_BASE,
+                CONTROL_ICON_BASE,
+                CONTROL_ICON_BASE,
+                CONTROL_ICON_BASE
+        );
+
         gg.pose().popPose();
     }
 
     @Override
-    protected void updateWidgetNarration(NarrationElementOutput narration) {}
+    protected void updateWidgetNarration(NarrationElementOutput narration) {
+    }
 }

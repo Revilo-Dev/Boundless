@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 
 public final class QuestPackStorage {
+    // backup folder timestamp
     private static final DateTimeFormatter BACKUP_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS", Locale.ROOT);
 
@@ -30,6 +31,7 @@ public final class QuestPackStorage {
         writeBytesAtomically(gson.toJson(element).getBytes(StandardCharsets.UTF_8), target);
     }
 
+    // write files through a temp path
     public static void writeBytesAtomically(byte[] bytes, Path target) throws IOException {
         if (target == null) throw new IOException("Target path unavailable");
         if (bytes == null || bytes.length == 0) throw new IOException("Refusing to write empty file");
@@ -83,6 +85,7 @@ public final class QuestPackStorage {
         Files.copy(normalizedOriginal, destination, StandardCopyOption.REPLACE_EXISTING);
     }
 
+    // archive the old pack before swap
     public static void replaceDirectoryWithArchive(Path liveRoot, Path stagedRoot, String packName, String reason) throws IOException {
         if (stagedRoot == null || !Files.isDirectory(stagedRoot)) {
             throw new IOException("Replacement questpack is missing");

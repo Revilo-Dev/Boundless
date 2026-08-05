@@ -28,6 +28,7 @@ import java.util.function.Consumer;
 @OnlyIn(Dist.CLIENT)
 public final class QuestListWidget extends AbstractWidget {
 
+    // quest row textures for each quest state
     private static final ResourceLocation ROW_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget.png");
     private static final ResourceLocation ROW_TEX_DISABLED =
@@ -45,11 +46,13 @@ public final class QuestListWidget extends AbstractWidget {
     private final Consumer<QuestData.Quest> onClick;
     private final Map<String, Boolean> subOpen = new HashMap<>();
 
+    // scrolling and row sizing
     private float scrollY = 0;
     private final int rowH = 27;
     private final int pad = 1;
     private final int subHeaderH = 12;
 
+    // cached visible rows
     private String category = "all";
     private boolean bypassFilters = false;
     private List<RowEntry> cachedRows = List.of();
@@ -69,6 +72,7 @@ public final class QuestListWidget extends AbstractWidget {
         this.onClick = onClick;
     }
 
+    // replace the quest source with the current sorted list
     public void setQuests(Iterable<QuestData.Quest> qs) {
         quests.clear();
         for (QuestData.Quest q : qs) quests.add(q);
@@ -77,17 +81,20 @@ public final class QuestListWidget extends AbstractWidget {
         invalidateRowsCache();
     }
 
+    // filter the list to one category or all
     public void setCategory(String cat) {
         category = cat == null ? "all" : cat;
         scrollY = 0;
         invalidateRowsCache();
     }
 
+    // bypass category and visibility filters
     public void setBypassFilters(boolean bypass) {
         this.bypassFilters = bypass;
         invalidateRowsCache();
     }
 
+    // sync list bounds with the parent panel
     public void setBounds(int x, int y, int w, int h) {
         this.setX(x);
         this.setY(y);
@@ -95,6 +102,7 @@ public final class QuestListWidget extends AbstractWidget {
         this.height = h;
     }
 
+    // apply the live quest search text
     public void setSearchQuery(String searchQuery) {
         String next = searchQuery == null ? "" : searchQuery.trim().toLowerCase(java.util.Locale.ROOT);
         if (Objects.equals(this.searchQuery, next)) return;
@@ -103,10 +111,12 @@ public final class QuestListWidget extends AbstractWidget {
         invalidateRowsCache();
     }
 
+    // reserve space for the search box above the list
     public void setTopInset(int topInset) {
         this.topInset = Math.max(0, topInset);
     }
 
+    // disable config scaling for reused list variants
     public void setUseConfigScaling(boolean useConfigScaling) {
         this.useConfigScaling = useConfigScaling;
     }
@@ -123,6 +133,7 @@ public final class QuestListWidget extends AbstractWidget {
         return useConfigScaling ? Config.questWidgetTextColor() : 0xFFFFFF;
     }
 
+    // row model for headers and quests
     private static final class RowEntry {
         final QuestData.SubCategory subCategory;
         final QuestData.Quest quest;
@@ -142,18 +153,21 @@ public final class QuestListWidget extends AbstractWidget {
         }
     }
 
+    // build a stable key for sub category open state
     private String subKey(String cat, String subId) {
         String c = cat == null ? "" : cat;
         String s = subId == null ? "" : subId;
         return c + "::" + s;
     }
 
+    // remember whether a sub category is expanded
     private boolean isSubOpen(QuestData.SubCategory sc) {
         if (sc == null) return true;
         String key = subKey(sc.category, sc.id);
         return subOpen.getOrDefault(key, sc.defaultOpen);
     }
 
+    // collapse or expand one sub category group
     private void toggleSubOpen(QuestData.SubCategory sc) {
         if (sc == null) return;
         String key = subKey(sc.category, sc.id);
@@ -162,6 +176,7 @@ public final class QuestListWidget extends AbstractWidget {
         invalidateRowsCache();
     }
 
+    // turn raw ids into readable labels
     private String prettifyId(String raw) {
         if (raw == null || raw.isBlank()) return "";
         String clean = raw.replace('_', ' ').replace('-', ' ').trim();
@@ -176,6 +191,7 @@ public final class QuestListWidget extends AbstractWidget {
         return out.toString();
     }
 
+    // draw scaled text without changing callers
     private void drawScaledString(GuiGraphics gg, String text, float scale, int x, int y, int color) {
         if (text == null || text.isEmpty()) return;
         gg.pose().pushPose();
@@ -185,17 +201,20 @@ public final class QuestListWidget extends AbstractWidget {
         gg.pose().popPose();
     }
 
+    // check whether the selected category is unlocked
     private boolean categoryUnlocked(String catId) {
         var c = QuestData.categoryById(catId).orElse(null);
         if (mc.player == null) return true;
         return QuestData.isCategoryUnlocked(c, mc.player);
     }
 
+    // decide if a quest belongs in the all tab
     private boolean includeInAll(QuestData.Quest q) {
         if (mc.player == null) return true;
         return QuestData.includeQuestInAll(q, mc.player);
     }
 
+    // filter quests by the active category
     private boolean matchesCategory(QuestData.Quest q) {
         if (bypassFilters) return true;
         if (Config.disabledCategories().contains(q.category)) return false;
@@ -204,6 +223,7 @@ public final class QuestListWidget extends AbstractWidget {
         return categoryUnlocked(q.category);
     }
 
+    // hide quests that should not appear yet
     private boolean isActuallyVisible(QuestData.Quest q) {
         if (bypassFilters) return true;
         if (mc.player == null) return true;
@@ -214,6 +234,7 @@ public final class QuestListWidget extends AbstractWidget {
         return true;
     }
 
+    // apply redeemed rejected and locked filters
     private boolean passesFilters(QuestData.Quest q) {
         if (bypassFilters) return true;
         if (mc.player == null) return true;
@@ -236,12 +257,14 @@ public final class QuestListWidget extends AbstractWidget {
         return true;
     }
 
+    // match quests against the current search text
     private boolean matchesSearch(QuestData.Quest q) {
         if (q == null) return false;
         if (searchQuery == null || searchQuery.isBlank()) return true;
         return q.name != null && q.name.toLowerCase(java.util.Locale.ROOT).contains(searchQuery);
     }
 
+    // build the visible list rows from quests and sub categories
     private List<RowEntry> buildRows() {
         List<RowEntry> rows = new ArrayList<>();
         if (mc.player == null) return rows;
@@ -310,12 +333,14 @@ public final class QuestListWidget extends AbstractWidget {
         return rows;
     }
 
+    // drop cached rows when visible state changes
     private void invalidateRowsCache() {
         cachedRows = List.of();
         cachedContentHeight = 0;
         cachedTick = Long.MIN_VALUE;
     }
 
+    // rebuild rows only when list state changes
     private List<RowEntry> rowsForCurrentState() {
         if (mc.player == null) return List.of();
 
@@ -345,11 +370,13 @@ public final class QuestListWidget extends AbstractWidget {
         return cachedRows;
     }
 
+    // pick the rendered height for each row type
     private int rowHeight(RowEntry row) {
         if (row == null) return 0;
         return (row.isHeader() ? subHeaderH : rowH) + pad;
     }
 
+    // measure total scrollable list height
     private int contentHeight(List<RowEntry> rows) {
         int total = 0;
         for (RowEntry row : rows) {
@@ -363,6 +390,7 @@ public final class QuestListWidget extends AbstractWidget {
         return cachedContentHeight;
     }
 
+    // render the current quest rows inside the scissor area
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float pt) {
         if (!visible || mc.player == null) return;
@@ -489,12 +517,14 @@ public final class QuestListWidget extends AbstractWidget {
         }
     }
 
+    // draw one quest row texture with hover brightening
     private void blitQuestWidget(GuiGraphics gg, ResourceLocation texture, int x, int y, int w, int h, boolean hovered) {
         if (hovered) RenderSystem.setShaderColor(1.1f, 1.1f, 1.1f, 1.0f);
         gg.blit(texture, x, y, 0, 0, w, h, w, h);
         if (hovered) RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
+    // draw a scaled item icon in the quest row slot
     private void renderScaledItem(GuiGraphics gg, ItemStack stack, int x, int y) {
         if (stack == null || stack.isEmpty()) return;
         float scale = configuredIconScale();
@@ -508,6 +538,7 @@ public final class QuestListWidget extends AbstractWidget {
         gg.pose().popPose();
     }
 
+    // resolve and draw the quest icon
     private void renderQuestIcon(GuiGraphics gg, QuestData.Quest quest, int x, int y) {
         if (quest == null) return;
         ResourceLocation texture = textureIcon(quest.icon);
@@ -518,6 +549,7 @@ public final class QuestListWidget extends AbstractWidget {
         quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x, y));
     }
 
+    // treat texture paths as direct icon sources
     private ResourceLocation textureIcon(String icon) {
         if (icon == null || icon.isBlank()) return null;
         try {
@@ -529,6 +561,7 @@ public final class QuestListWidget extends AbstractWidget {
         }
     }
 
+    // cache texture existence checks for icon paths
     private boolean textureExists(ResourceLocation texture) {
         if (texture == null) return false;
         Boolean cached = TEXTURE_EXISTS_CACHE.get(texture);
@@ -542,6 +575,7 @@ public final class QuestListWidget extends AbstractWidget {
         return exists;
     }
 
+    // draw a scaled texture icon in the quest row slot
     private void renderScaledTextureIcon(GuiGraphics gg, ResourceLocation texture, int x, int y) {
         float scale = configuredIconScale();
         int size = Math.max(1, Math.round(16 * scale));
@@ -554,6 +588,7 @@ public final class QuestListWidget extends AbstractWidget {
         gg.pose().popPose();
     }
 
+    // open quests or toggle sub category headers on click
     @Override
     public boolean mouseClicked(double mxD, double myD, int button) {
         if (!visible || !active || button != 0) return false;
@@ -588,6 +623,7 @@ public final class QuestListWidget extends AbstractWidget {
         return false;
     }
 
+    // scroll the quest list inside the viewport
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (!visible || !active) return false;
         int content = contentHeight();

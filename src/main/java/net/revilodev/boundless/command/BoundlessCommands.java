@@ -24,16 +24,18 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 public final class BoundlessCommands {
+    // local quest pack directory used by questpack commands
     private static final Path INSTANCE_QUEST_PACKS_ROOT =
             net.neoforged.fml.loading.FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks");
 
+    // register the root boundless command and its subcommands
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("boundless")
                 .requires(s -> s.hasPermission(2))
+                // boundless reload reloads quest data and resyncs players
                 .then(Commands.literal("reload")
                         .executes(ctx -> {
                             MinecraftServer server = ctx.getSource().getServer();
@@ -41,9 +43,10 @@ public final class BoundlessCommands {
                             for (ServerPlayer p : server.getPlayerList().getPlayers()) {
                                 BoundlessNetwork.syncPlayer(p);
                             }
-                            ctx.getSource().sendSuccess(() -> Component.literal("Quests Reloaded."), true);
+                            ctx.getSource().sendSuccess(() -> cmd("reload.success"), true);
                             return 1;
                         }))
+                // boundless reset clears saved quest progress
                 .then(Commands.literal("reset")
                         .then(Commands.literal("all")
                                 .executes(ctx -> resetAll(ctx.getSource(), selfOrEmpty(ctx.getSource())))
@@ -63,6 +66,7 @@ public final class BoundlessCommands {
                                                 ctx.getSource(),
                                                 EntityArgument.getPlayers(ctx, "targets"),
                                                 StringArgumentType.getString(ctx, "id"))))))
+                // boundless complete force completes quests without rewards
                 .then(Commands.literal("complete")
                         .then(Commands.literal("all")
                                 .executes(ctx -> completeAll(ctx.getSource(), selfOrEmpty(ctx.getSource())))
@@ -82,6 +86,7 @@ public final class BoundlessCommands {
                                                 ctx.getSource(),
                                                 EntityArgument.getPlayers(ctx, "targets"),
                                                 StringArgumentType.getString(ctx, "id"))))))
+                // boundless redeem force redeems quests and grants rewards
                 .then(Commands.literal("redeem")
                         .then(Commands.literal("all")
                                 .executes(ctx -> redeemAll(ctx.getSource(), selfOrEmpty(ctx.getSource())))
@@ -101,6 +106,7 @@ public final class BoundlessCommands {
                                                 ctx.getSource(),
                                                 EntityArgument.getPlayers(ctx, "targets"),
                                                 StringArgumentType.getString(ctx, "id"))))))
+                // boundless questpack manages server enabled quest packs
                 .then(Commands.literal("questpack")
                         .then(Commands.literal("enable")
                                 .then(Commands.argument("id", StringArgumentType.word())
@@ -118,34 +124,37 @@ public final class BoundlessCommands {
                                         .executes(ctx -> setQuestPackEnabled(ctx.getSource(), StringArgumentType.getString(ctx, "id"), false))))
                         .then(Commands.literal("list")
                                 .executes(ctx -> listQuestPacks(ctx.getSource())))));
-                }
+    }
 
+    // default target is the command player
     private static List<ServerPlayer> selfOrEmpty(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
         return player == null ? List.of() : List.of(player);
     }
 
+    // reset all quest progress for the target players
     private static int resetAll(CommandSourceStack source, Collection<ServerPlayer> targets) {
         if (targets.isEmpty()) {
-            source.sendFailure(Component.literal("No target players."));
+            source.sendFailure(cmd("error.no_targets"));
             return 0;
         }
         for (ServerPlayer player : targets) {
             QuestTracker.reset(player);
         }
-        source.sendSuccess(() -> Component.literal("Quest progress reset for " + targets.size() + " player(s)."), false);
+        source.sendSuccess(() -> cmd("reset.all.success", targets.size()), false);
         return targets.size();
     }
 
+    // reset one quest for the target players
     private static int resetQuest(CommandSourceStack source, Collection<ServerPlayer> targets, String id) {
         if (targets.isEmpty()) {
-            source.sendFailure(Component.literal("No target players."));
+            source.sendFailure(cmd("error.no_targets"));
             return 0;
         }
         MinecraftServer server = source.getServer();
         var opt = QuestData.byIdServer(server, id);
         if (opt.isEmpty()) {
-            source.sendFailure(Component.literal("Unknown quest: " + id));
+            source.sendFailure(cmd("error.unknown_quest", id));
             return 0;
         }
         for (ServerPlayer player : targets) {
@@ -153,13 +162,14 @@ public final class BoundlessCommands {
             BoundlessNetwork.sendStatus(player, id, QuestTracker.Status.INCOMPLETE.name());
             BoundlessNetwork.sendProgressMeta(player, id);
         }
-        source.sendSuccess(() -> Component.literal("Reset " + id + " for " + targets.size() + " player(s)."), false);
+        source.sendSuccess(() -> cmd("reset.quest.success", id, targets.size()), false);
         return targets.size();
     }
 
+    // complete every quest for the target players
     private static int completeAll(CommandSourceStack source, Collection<ServerPlayer> targets) {
         if (targets.isEmpty()) {
-            source.sendFailure(Component.literal("No target players."));
+            source.sendFailure(cmd("error.no_targets"));
             return 0;
         }
         for (ServerPlayer player : targets) {
@@ -168,18 +178,19 @@ public final class BoundlessCommands {
                 BoundlessNetwork.sendProgressMeta(player, q.id);
             }
         }
-        source.sendSuccess(() -> Component.literal("Completed all quests for " + targets.size() + " player(s)."), false);
+        source.sendSuccess(() -> cmd("complete.all.success", targets.size()), false);
         return targets.size();
     }
 
+    // complete one quest for the target players
     private static int completeQuest(CommandSourceStack source, Collection<ServerPlayer> targets, String id) {
         if (targets.isEmpty()) {
-            source.sendFailure(Component.literal("No target players."));
+            source.sendFailure(cmd("error.no_targets"));
             return 0;
         }
         var opt = QuestData.byIdServer(source.getServer(), id);
         if (opt.isEmpty()) {
-            source.sendFailure(Component.literal(id + " Invalid"));
+            source.sendFailure(cmd("error.invalid_quest", id));
             return 0;
         }
         QuestData.Quest q = opt.get();
@@ -187,13 +198,14 @@ public final class BoundlessCommands {
             QuestTracker.forceCompleteWithoutRewards(q, player);
             BoundlessNetwork.sendProgressMeta(player, q.id);
         }
-        source.sendSuccess(() -> Component.literal("Completed " + q.id + " for " + targets.size() + " player(s)."), false);
+        source.sendSuccess(() -> cmd("complete.quest.success", q.id, targets.size()), false);
         return targets.size();
     }
 
+    // redeem every quest for the target players
     private static int redeemAll(CommandSourceStack source, Collection<ServerPlayer> targets) {
         if (targets.isEmpty()) {
-            source.sendFailure(Component.literal("No target players."));
+            source.sendFailure(cmd("error.no_targets"));
             return 0;
         }
         int redeemedCount = 0;
@@ -208,18 +220,19 @@ public final class BoundlessCommands {
             }
         }
         int finalRedeemedCount = redeemedCount;
-        source.sendSuccess(() -> Component.literal("Redeemed " + finalRedeemedCount + " quest(s) across " + targets.size() + " player(s)."), false);
+        source.sendSuccess(() -> cmd("redeem.all.success", finalRedeemedCount, targets.size()), false);
         return redeemedCount;
     }
 
+    // redeem one quest for the target players
     private static int redeemQuest(CommandSourceStack source, Collection<ServerPlayer> targets, String id) {
         if (targets.isEmpty()) {
-            source.sendFailure(Component.literal("No target players."));
+            source.sendFailure(cmd("error.no_targets"));
             return 0;
         }
         var opt = QuestData.byIdServer(source.getServer(), id);
         if (opt.isEmpty()) {
-            source.sendFailure(Component.literal(id + " Invalid"));
+            source.sendFailure(cmd("error.invalid_quest", id));
             return 0;
         }
         QuestData.Quest q = opt.get();
@@ -233,20 +246,21 @@ public final class BoundlessCommands {
             }
         }
         int finalRedeemedPlayers = redeemedPlayers;
-        source.sendSuccess(() -> Component.literal("Redeemed " + q.id + " for " + finalRedeemedPlayers + " player(s)."), false);
+        source.sendSuccess(() -> cmd("redeem.quest.success", q.id, finalRedeemedPlayers), false);
         return redeemedPlayers;
     }
 
+    // enable or disable one quest pack on the server
     private static int setQuestPackEnabled(CommandSourceStack source, String id, boolean enabled) {
         String key = id == null ? "" : id.trim();
         if (key.isBlank()) {
-            source.sendFailure(Component.literal("Questpack id required."));
+            source.sendFailure(cmd("error.questpack_id_required"));
             return 0;
         }
 
         Path packRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(key);
         if (!Files.isDirectory(packRoot)) {
-            source.sendFailure(Component.literal("Unknown questpack: " + key));
+            source.sendFailure(cmd("error.unknown_questpack", key));
             return 0;
         }
         Config.setQuestPackApplied(key, enabled);
@@ -256,22 +270,24 @@ public final class BoundlessCommands {
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             BoundlessNetwork.syncPlayer(p);
         }
-        source.sendSuccess(() -> Component.literal("Questpack " + key + " " + (enabled ? "enabled" : "disabled") + "."), true);
+        source.sendSuccess(() -> cmd(enabled ? "questpack.enable.success" : "questpack.disable.success", key), true);
         return 1;
     }
 
+    // list all quest packs visible to the server
     private static int listQuestPacks(CommandSourceStack source) {
         Map<String, Boolean> packs = listInstanceQuestPacks();
         if (packs.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("No instance questpacks found."), false);
+            source.sendSuccess(() -> cmd("questpack.list.empty"), false);
             return 0;
         }
-        source.sendSuccess(() -> Component.literal("Questpacks:"), false);
+        source.sendSuccess(() -> cmd("questpack.list.header"), false);
         packs.forEach((id, enabled) ->
-                source.sendSuccess(() -> Component.literal("- " + id + " [" + (enabled ? "enabled" : "disabled") + "]"), false));
+                source.sendSuccess(() -> cmd("questpack.list.entry", id, cmd(enabled ? "state.enabled" : "state.disabled").getString()), false));
         return packs.size();
     }
 
+    // scan the questpack directory for available packs
     private static Map<String, Boolean> listInstanceQuestPacks() {
         Map<String, Boolean> out = new LinkedHashMap<>();
         if (!Files.isDirectory(INSTANCE_QUEST_PACKS_ROOT)) return out;
@@ -287,6 +303,7 @@ public final class BoundlessCommands {
         return out;
     }
 
+    // read the effective enabled state for one quest pack
     private static boolean readQuestPackEnabled(Path packRoot) {
         String id = packRoot == null || packRoot.getFileName() == null ? "" : packRoot.getFileName().toString();
         Boolean enabledFromPackJson = readEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"));
@@ -300,6 +317,7 @@ public final class BoundlessCommands {
         return Config.isQuestPackApplied(id, defaultEnabled);
     }
 
+    // read the enabled flag from pack metadata
     private static Boolean readEnabledFlag(Path metaPath) {
         if (metaPath == null || !Files.exists(metaPath)) return null;
         try (BufferedReader reader = Files.newBufferedReader(metaPath, StandardCharsets.UTF_8)) {
@@ -315,5 +333,9 @@ public final class BoundlessCommands {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private static Component cmd(String key, Object... args) {
+        return Component.translatable("commands.boundless." + key, args);
     }
 }

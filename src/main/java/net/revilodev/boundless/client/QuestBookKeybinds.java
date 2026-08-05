@@ -12,6 +12,7 @@ import org.lwjgl.glfw.GLFW;
 
 @OnlyIn(Dist.CLIENT)
 public final class QuestBookKeybinds {
+    // quest book key mapping
     private static final String CATEGORY = "key.categories.boundless";
     private static final String KEY_OPEN = "key.boundless.open_quest_book";
     private static KeyMapping openQuestBook;
@@ -19,6 +20,7 @@ public final class QuestBookKeybinds {
 
     private QuestBookKeybinds() {}
 
+    // register key mapping once
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         if (registered) return;
         registered = true;
@@ -28,6 +30,7 @@ public final class QuestBookKeybinds {
         event.register(openQuestBook);
     }
 
+    // open quest book on key press
     public static void onClientTick(ClientTickEvent.Post event) {
         if (openQuestBook == null) return;
         if (Config.disableQuestBook()) return;

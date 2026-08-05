@@ -44,6 +44,7 @@ import java.util.regex.Pattern;
 @OnlyIn(Dist.CLIENT)
 public final class QuestDetailsPanel extends AbstractWidget {
 
+    // quest detail layout values
     private static final int LINE_ITEM_ROW = 22;
     private static final int BOTTOM_PADDING = 12;
     private static final int CONTENT_BOTTOM_MARGIN = 6;
@@ -64,6 +65,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
     private static final Map<ResourceLocation, List<Item>> TAG_ITEM_CACHE = new HashMap<>();
 
+    // active quest and panel widgets
     private final Minecraft mc = Minecraft.getInstance();
     private QuestData.Quest quest;
 
@@ -85,15 +87,18 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private final List<ItemClickRegion> itemRegions = new ArrayList<>();
     private final Map<String, EditBox> inputBoxes = new HashMap<>();
 
+    // parse ids without throwing into callers
     private static ResourceLocation safeParse(String id) {
         return id == null || id.isBlank() ? null : ResourceLocation.tryParse(id);
     }
 
+    // resolve item ids used by quest icons and tooltips
     private static Item resolveItem(String id) {
         ResourceLocation rl = safeParse(id);
         return rl == null ? null : BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
     }
 
+    // cycle through accepted target ids for mixed targets
     private String cycledAcceptedId(QuestData.Target target) {
         if (target == null) return "";
         List<String> accepted = target.acceptedIdsOrLegacy();
@@ -102,6 +107,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return accepted.get(index);
     }
 
+    // cycle through accepted reward ids for mixed rewards
     private String cycledAcceptedRewardId(QuestData.RewardEntry reward) {
         if (reward == null) return "";
         List<String> accepted = reward.acceptedItemsOrLegacy();
@@ -110,23 +116,25 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return accepted.get(index);
     }
 
+    // build the accepted target tooltip lines
     private List<Component> acceptedEntriesTooltip(QuestData.Target target) {
         List<Component> lines = new ArrayList<>();
         if (target == null) return lines;
         List<String> accepted = target.acceptedIdsOrLegacy();
         if (accepted.isEmpty()) return lines;
-        String label = target.isSubmit()
-                ? "submit:"
+        Component label = target.isSubmit()
+                ? Component.translatable("ui.boundless.questbook.submit")
                 : target.isEntity()
-                ? "kill:"
-                : "collect:";
-        lines.add(Component.literal(label));
+                ? Component.translatable("ui.boundless.questbook.kill")
+                : Component.translatable("ui.boundless.questbook.collect");
+        lines.add(label);
         for (String acceptedId : accepted) {
             lines.add(Component.literal(acceptedEntryName(target, acceptedId)));
         }
         return lines;
     }
 
+    // turn accepted ids into readable names
     private String acceptedEntryName(QuestData.Target target, String acceptedId) {
         if (target != null && target.isEntity()) {
             ResourceLocation rl = safeParse(acceptedId);
@@ -139,12 +147,13 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return item == null ? acceptedId : new ItemStack(item).getHoverName().getString();
     }
 
+    // build the accepted reward tooltip lines
     private List<Component> acceptedRewardEntriesTooltip(QuestData.RewardEntry reward) {
         List<Component> lines = new ArrayList<>();
         if (reward == null) return lines;
         List<String> accepted = reward.acceptedItemsOrLegacy();
         if (accepted.isEmpty()) return lines;
-        lines.add(Component.literal("reward:"));
+        lines.add(Component.translatable("ui.boundless.questbook.reward"));
         for (String acceptedId : accepted) {
             QuestItemSpec spec = QuestItemSpec.parse(acceptedId);
             if (spec.tag) {
@@ -157,6 +166,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return lines;
     }
 
+    // choose a readable objective label for special targets
     private String objectiveDisplayName(QuestData.Target target) {
         if (target == null) return "";
         if (target.isObserve()) {
@@ -181,16 +191,18 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return target.id == null ? "" : target.id;
     }
 
+    // find the current check objective label
     private String pendingCheckLabel() {
-        if (quest == null || quest.completion == null || quest.completion.targets == null) return "Understand";
+        if (quest == null || quest.completion == null || quest.completion.targets == null) return Component.translatable("ui.boundless.questbook.understand").getString();
         for (QuestData.Target target : quest.completion.targets) {
             if (target == null || !target.isCheck()) continue;
             String label = target.id == null ? "" : target.id.trim();
-            return label.isBlank() ? "Understand" : label;
+            return label.isBlank() ? Component.translatable("ui.boundless.questbook.understand").getString() : label;
         }
-        return "Understand";
+        return Component.translatable("ui.boundless.questbook.understand").getString();
     }
 
+    // clickable quest dependency text regions
     private static final class DepClickRegion {
         final int x, y, w, h;
         final String questId;
@@ -208,6 +220,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    // create the quest details panel and action buttons
     public QuestDetailsPanel(int x, int y, int w, int h, Runnable onBack) {
         super(x, y, w, h, Component.empty());
         this.onBack = onBack;
@@ -262,6 +275,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         setBounds(x, y, w, h);
     }
 
+    // clickable item and tooltip regions inside the panel
     private static final class ItemClickRegion {
         final int x;
         final int y;
@@ -294,6 +308,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    // parsed description character with final style state
     private static final class StyledDescriptionChar {
         final char value;
         final int color;
@@ -312,6 +327,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    // wrapped description line with layout metadata
     private static final class DescriptionLine {
         final List<StyledDescriptionChar> chars;
         final int width;
@@ -342,6 +358,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    // result of splitting one description line
     private static final class DescriptionWordWrapResult {
         final List<StyledDescriptionChar> line;
         final List<StyledDescriptionChar> remainder;
@@ -352,6 +369,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    // cache key for expensive panel layout work
     private record LayoutCacheKey(
             int questIdentity,
             int panelWidth,
@@ -364,6 +382,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             String descriptionTextAlignment
     ) {}
 
+    // cached layout data for one quest and panel width
     private static final class LayoutCache {
         private static final LayoutCache EMPTY = new LayoutCache(null, "", List.of(), 0, List.of(), 0, 0);
 
@@ -398,14 +417,17 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
     }
 
+    // expose panel buttons to the parent screen
     public AbstractButton backButton() { return back; }
     public AbstractButton completeButton() { return complete; }
     public AbstractButton rejectButton() { return reject; }
     public AbstractButton pinButton() { return pin; }
     public AbstractButton scrollButton() { return scroll; }
 
+    // hide the back button in standalone views
     public void setHideBackButton(boolean v) { this.hideBackButton = v; }
 
+    // lay out panel buttons for the current bounds
     public void setBounds(int x, int y, int w, int h) {
         this.setX(x);
         this.setY(y);
@@ -425,6 +447,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         scroll.setPosition(actionX, actionY);
     }
 
+    // load a new quest into the details panel
     public void setQuest(QuestData.Quest q) {
         this.quest = q;
         this.scrollY = 0f;
@@ -435,10 +458,12 @@ public final class QuestDetailsPanel extends AbstractWidget {
         if (q != null) PinnedQuestHud.setCurrentQuestId(q.id);
     }
 
+    // current header title for parent screens
     public String currentQuestTitle() {
         return quest == null ? "" : quest.name;
     }
 
+    // render the active quest details page
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         if (!this.visible || quest == null) return;
@@ -574,7 +599,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         List<QuestData.Category> unlockedCategories = cache.unlockedCategories;
         if (!unlockedCategories.isEmpty()) {
-            Component unlocksLabel = Component.literal("Unlocks Categories");
+            Component unlocksLabel = Component.translatable("ui.boundless.questbook.unlocks_categories");
             drawScaledWordWrap(gg, unlocksLabel, x + 4, curY[0], w - 8, 0x55CCFF);
             curY[0] += scaledWrappedHeight(unlocksLabel, w - 8) + 2;
 
@@ -828,7 +853,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
                     curY[0] += scaledRowHeight();
                 } else if (t.isObserve()) {
-                    drawScaledString(gg, Component.literal("Observe:"), x + 4, curY[0], 0xB46CFF);
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.observe"), x + 4, curY[0], 0xB46CFF);
                     curY[0] += scaledLineHeight() + 2;
                     boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
                     int color = done ? 0x55FF55 : 0xFF5555;
@@ -840,7 +865,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     }
                     curY[0] += scaledRowHeight();
                 } else if (t.isBiome()) {
-                    drawScaledString(gg, Component.literal("Biome:"), x + 4, curY[0], 0x55CC55);
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.biome"), x + 4, curY[0], 0x55CC55);
                     curY[0] += scaledLineHeight() + 2;
                     boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
                     int color = done ? 0x55FF55 : 0xFF5555;
@@ -852,7 +877,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     }
                     curY[0] += scaledRowHeight();
                 } else if (t.isDimension()) {
-                    drawScaledString(gg, Component.literal("Dimension:"), x + 4, curY[0], 0xFF5555);
+                    drawScaledString(gg, Component.translatable("ui.boundless.questbook.dimension"), x + 4, curY[0], 0xFF5555);
                     curY[0] += scaledLineHeight() + 2;
                     boolean done = QuestTracker.isTargetSatisfied(quest, t, mc.player);
                     int color = done ? 0x55FF55 : 0xFF5555;
@@ -1095,7 +1120,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean canUndoReject = rej && quest.optional;
 
         complete.setMessage(canUndoReject
-                ? Component.literal("Undo Reject")
+                ? Component.translatable("ui.boundless.questbook.undo_reject")
                 : canAcknowledge
                 ? Component.literal(pendingCheckLabel())
                 : Component.translatable(canRepeat ? "ui.boundless.questbook.repeat" : "quest.boundless.complete"));
@@ -1160,7 +1185,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         }
 
         if (!unlockedCategories.isEmpty()) {
-            y += scaledWrappedHeight(Component.literal("Unlocks Categories"), w - 8) + 2;
+            y += scaledWrappedHeight(Component.translatable("ui.boundless.questbook.unlocks_categories"), w - 8) + 2;
             y += unlockedCategories.size() * scaledRowHeight() + 2;
         }
 
@@ -1667,7 +1692,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 } else if (code == 'e') {
                     encrypted = !encrypted;
                 } else if (code == 'h') {
-                    // Highlight animation is rendered by drawFormattedDescription.
+                    // highlight animation is rendered by drawFormattedDescription
                 } else if (code == 'x') {
                     current = defaultColor;
                     bold = false;
@@ -1687,6 +1712,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return out;
     }
 
+    // strip color tokens from raw description text
     private String stripColorTokens(String raw) {
         String text = raw == null ? "" : raw;
         StringBuilder out = new StringBuilder(text.length());
@@ -1700,12 +1726,14 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return out.toString();
     }
 
+    // detect inline color tokens
     private boolean startsWithColorToken(String text, int index) {
         return index + 1 < text.length()
                 && text.charAt(index) == '/'
                 && isColorTokenCode(text.charAt(index + 1));
     }
 
+    // validate supported inline color token codes
     private boolean isColorTokenCode(char code) {
         return switch (Character.toLowerCase(code)) {
             case 'w', 'r', 'g', 'b', 'y', 'o', 'a', 'p', 'x', 'l', 'i', 'e', 'h' -> true;
@@ -1713,6 +1741,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         };
     }
 
+    // map inline color tokens to final colors
     private int formatColor(char code, int fallback) {
         return switch (Character.toLowerCase(code)) {
             case 'w' -> 0x55FFFF;
@@ -1728,6 +1757,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         };
     }
 
+    // extract loot table ids from reward commands
     private String lootTableIdFromCommand(String command) {
         if (command == null) return "";
         String trimmed = command.trim();
@@ -1737,6 +1767,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return trimmed.substring(prefix.length()).trim();
     }
 
+    // count reward commands that spawn loot tables
     private int computeCommandLootRewardCount() {
         if (quest == null || quest.rewards == null || quest.rewards.commands == null) return 0;
         int total = 0;
@@ -1746,6 +1777,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return total;
     }
 
+    // turn loot table ids into readable labels
     private String prettyLootTableName(String lootTableId) {
         if (lootTableId == null || lootTableId.isBlank()) return Component.translatable("ui.boundless.questbook.unknown").getString();
         String cleaned = lootTableId;
@@ -1766,6 +1798,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return out.toString();
     }
 
+    // choose an icon for loot table rewards
     private ItemStack lootTableIcon(String lootTableId) {
         if (lootTableId == null || lootTableId.isBlank()) return new ItemStack(Items.CHEST);
         String namespace = "minecraft";
@@ -1786,6 +1819,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return new ItemStack(Items.CHEST);
     }
 
+    // resolve item and block tags into item stacks
     private List<Item> resolveTagItems(ResourceLocation tagId) {
         List<Item> cached = TAG_ITEM_CACHE.get(tagId);
         if (cached != null) return cached;
@@ -1808,6 +1842,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return resolved;
     }
 
+    // create synced text input fields for field targets
     private EditBox createInputBox() {
         EditBox box = new EditBox(mc.font, 0, 0, 40, 16, Component.empty());
         box.setMaxLength(128);
@@ -1827,11 +1862,13 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return box;
     }
 
+    // open jei for clicked items when available
     private boolean openJeiForStack(ItemStack stack) {
         if (stack == null || stack.isEmpty() || !JeiCompat.isJeiInstalled()) return false;
         return JeiCompat.showItem(stack, true) || JeiCompat.showItem(stack, false);
     }
 
+    // scroll quest details inside the viewport
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (!this.visible || !this.active) return false;
 
@@ -1853,6 +1890,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return mouseScrolled(mouseX, mouseY, deltaY);
     }
 
+    // handle button clicks links and item clicks
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (!this.visible || !this.active) return false;
 
@@ -1921,6 +1959,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return false;
     }
 
+    // forward key input into active field boxes
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         for (EditBox box : inputBoxes.values()) {
@@ -1930,6 +1969,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    // forward typed text into active field boxes
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         for (EditBox box : inputBoxes.values()) {
@@ -1942,6 +1982,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     @Override
     protected void updateWidgetNarration(NarrationElementOutput narration) {}
 
+    // pin and unpin the active quest
     private static final class PinButton extends AbstractButton {
 
         public PinButton(int x, int y) {
@@ -1972,6 +2013,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
+    // create quest completion scrolls from the details panel
     private static final class ScrollButton extends AbstractButton {
         private final Runnable onPress;
 
@@ -2001,6 +2043,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
+    // return from quest details to the quest list
     private static final class BackButton extends AbstractButton {
         private static final ResourceLocation TEX_NORMAL =
                 ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_button.png");
@@ -2030,6 +2073,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
+    // claim complete restart or acknowledge the quest
     private static final class CompleteButton extends AbstractButton {
         private static final ResourceLocation TEX_NORMAL =
                 ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
@@ -2070,6 +2114,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
+    // reject optional quests with a confirmation step
     private static final class RejectButton extends AbstractButton {
         private static final ResourceLocation TEX_NORMAL =
                 ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject.png");

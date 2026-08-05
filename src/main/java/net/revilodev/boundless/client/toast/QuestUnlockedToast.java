@@ -12,6 +12,7 @@ import net.minecraft.world.item.ItemStack;
 import net.revilodev.boundless.Config;
 
 public final class QuestUnlockedToast implements Toast {
+    // quest unlock toast texture
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_toast.png");
     private final Component title;
     private final Component subtitle;
@@ -23,6 +24,7 @@ public final class QuestUnlockedToast implements Toast {
         this.icon = icon;
     }
 
+    // show the default unlock toast
     public static void show(String questName, Item icon) {
         if (!Config.enableQuestToasts()) return;
         Minecraft mc = Minecraft.getInstance();
@@ -52,6 +54,7 @@ public final class QuestUnlockedToast implements Toast {
     }
 
 
+    // draw the toast contents
     public Visibility render(GuiGraphics gg, ToastComponent component, long time) {
         gg.blit(TEXTURE, 0, 0, 0, 0, this.width(), this.height(), this.width(), this.height());
         if (icon != null) gg.renderItem(new ItemStack(icon), 6, 6);

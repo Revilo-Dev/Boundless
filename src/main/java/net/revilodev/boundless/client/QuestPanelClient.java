@@ -25,6 +25,7 @@ import java.util.WeakHashMap;
 
 @OnlyIn(Dist.CLIENT)
 public final class QuestPanelClient {
+    // inventory button and panel textures
     private static final ResourceLocation BTN_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_button.png");
     private static final ResourceLocation BTN_TEX_HOVER =
@@ -45,6 +46,8 @@ public final class QuestPanelClient {
     private static final int BTN_Y_BESIDE_RECIPE = 61;
     private static final int BTN_X_ABOVE_OFFHAND = 76;
     private static final int BTN_Y_ABOVE_OFFHAND = 43;
+
+    // live quest panel state per inventory screen
     private static final Map<Screen, State> STATES = new WeakHashMap<>();
     private static Field LEFT_FIELD;
     private static boolean lastQuestOpen = false;
@@ -53,6 +56,7 @@ public final class QuestPanelClient {
     private QuestPanelClient() {
     }
 
+    // attach quest panel widgets to inventory screens
     public static void onScreenInit(ScreenEvent.Init.Post e) {
         Screen s = e.getScreen();
         if (!(s instanceof InventoryScreen inv)) return;
@@ -145,6 +149,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // restore saved panel state when inventory closes
     public static void onScreenClosing(ScreenEvent.Closing e) {
         State st = STATES.remove(e.getScreen());
         if (st == null) return;
@@ -156,6 +161,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // keep panel layout and button state in sync every frame
     public static void onScreenRenderPre(ScreenEvent.Render.Pre e) {
         Screen s = e.getScreen();
         State st = STATES.get(s);
@@ -179,6 +185,7 @@ public final class QuestPanelClient {
         handleRecipeButtonRules(inv, st);
     }
 
+    // route wheel input into the open panel
     public static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre e) {
         Screen s = e.getScreen();
         State st = STATES.get(s);
@@ -211,6 +218,7 @@ public final class QuestPanelClient {
         if (used) e.setCanceled(true);
     }
 
+    // close the panel when the recipe book button is pressed
     public static void onMouseButtonPressed(ScreenEvent.MouseButtonPressed.Pre e) {
         if (e.getButton() != 0) return;
         Screen s = e.getScreen();
@@ -228,6 +236,7 @@ public final class QuestPanelClient {
         updateVisibility(st);
     }
 
+    // refresh live panels after config or quest data changes
     public static void applyConfigChanges() {
         for (State st : STATES.values()) {
             if (st == null) continue;
@@ -262,6 +271,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // open or close the inventory quest panel
     private static void toggle(State st) {
         if (!isQuestBookEnabled()) return;
         st.open = !st.open;
@@ -286,6 +296,7 @@ public final class QuestPanelClient {
         updateVisibility(st);
     }
 
+    // center inventory and quest panel as one layout
     private static int computeCenteredLeft(InventoryScreen inv) {
         int screenW = inv.width;
         int invW = inv.getXSize();
@@ -293,14 +304,17 @@ public final class QuestPanelClient {
         return (screenW - total) / 2 + PANEL_W + 2;
     }
 
+    // place the quest panel to the left of inventory
     private static int computePanelX(InventoryScreen inv) {
         return inv.getGuiLeft() - PANEL_W - 2;
     }
 
+    // place category tabs beside the quest panel
     private static int computeTabsX(InventoryScreen inv) {
         return computePanelX(inv) - 41;
     }
 
+    // lay out all widgets that live inside the panel
     private static void setPanelChildBounds(InventoryScreen inv, State st) {
         int bgx = computePanelX(inv);
         int bgy = inv.getGuiTop();
@@ -345,6 +359,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // reposition panel widgets after inventory moves
     private static void reposition(InventoryScreen inv, State st) {
         repositionRecipeButton(inv, st);
         if (st.btn != null) {
@@ -360,6 +375,7 @@ public final class QuestPanelClient {
         setPanelChildBounds(inv, st);
     }
 
+    // keep the inventory quest button visibility in sync
     private static void handleRecipeButtonRules(InventoryScreen inv, State st) {
         if (st.btn != null) {
             boolean show = shouldShowInventoryQuestButton();
@@ -368,6 +384,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // find the recipe book button on the inventory screen
     private static ImageButton findRecipeButton(InventoryScreen inv) {
         for (var child : inv.children()) {
             if (child instanceof ImageButton btn && btn.getWidth() == 20 && btn.getHeight() == 18) {
@@ -377,6 +394,7 @@ public final class QuestPanelClient {
         return null;
     }
 
+    // keep the recipe book button anchored to the inventory gui
     private static void repositionRecipeButton(InventoryScreen inv, State st) {
         ImageButton recipe = findRecipeButton(inv);
         if (recipe == null) return;
@@ -388,11 +406,13 @@ public final class QuestPanelClient {
         recipe.setPosition(inv.getGuiLeft() + st.recipeOffsetX, inv.getGuiTop() + st.recipeOffsetY);
     }
 
+    // detect when the recipe book is already expanded
     private static boolean isRecipePanelOpen(InventoryScreen inv) {
         int centeredLeft = (inv.width - inv.getXSize()) / 2;
         return inv.getGuiLeft() > centeredLeft + 10;
     }
 
+    // read the private inventory left position
     private static Integer getLeft(InventoryScreen inv) {
         try {
             if (LEFT_FIELD == null) LEFT_FIELD = findLeftField(inv.getClass());
@@ -402,6 +422,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // write the private inventory left position
     private static void setLeft(InventoryScreen inv, int v) {
         try {
             if (LEFT_FIELD == null) LEFT_FIELD = findLeftField(inv.getClass());
@@ -410,6 +431,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // find the left position field across gui superclasses
     private static Field findLeftField(Class<?> c) throws NoSuchFieldException {
         Class<?> cur = c;
         while (cur != null) {
@@ -424,6 +446,7 @@ public final class QuestPanelClient {
         throw new NoSuchFieldException("leftPos");
     }
 
+    // switch from the list view into quest details
     private static void openDetails(State st, QuestData.Quest quest) {
         if (st.details == null) return;
         st.details.setQuest(quest);
@@ -431,11 +454,13 @@ public final class QuestPanelClient {
         updateVisibility(st);
     }
 
+    // return from quest details to the quest list
     private static void closeDetails(State st) {
         st.showingDetails = false;
         updateVisibility(st);
     }
 
+    // show only the widgets for the current panel mode
     private static void updateVisibility(State st) {
         boolean listVisible = st.open && !st.showingDetails;
         boolean detailsVisible = st.open && st.showingDetails;
@@ -506,32 +531,38 @@ public final class QuestPanelClient {
         }
     }
 
+    // block panel access when the quest book is disabled
     private static boolean isQuestBookEnabled() {
         return !Config.disableQuestBook();
     }
 
+    // hide the inventory quest button when config disables it
     private static boolean shouldShowInventoryQuestButton() {
         return isQuestBookEnabled() && !Config.hideQuestBookInInventory();
     }
 
+    // pick the quest button x offset from config
     private static int computeQuestButtonX(InventoryScreen inv) {
         String mode = Config.questBookInventoryButtonPosition();
         int offset = "above_offhand_slot".equals(mode) ? BTN_X_ABOVE_OFFHAND : BTN_X_BESIDE_RECIPE;
         return inv.getGuiLeft() + offset;
     }
 
+    // pick the quest button y offset from config
     private static int computeQuestButtonY(InventoryScreen inv) {
         String mode = Config.questBookInventoryButtonPosition();
         int offset = "above_offhand_slot".equals(mode) ? BTN_Y_ABOVE_OFFHAND : BTN_Y_BESIDE_RECIPE;
         return inv.getGuiTop() + offset;
     }
 
+    // open the settings screen for admins
     private static void openSettings(InventoryScreen inv) {
         var mc = Minecraft.getInstance();
         if (mc.player == null || !mc.player.hasPermissions(2)) return;
         mc.setScreen(new QuestSettingsScreen(inv));
     }
 
+    // reapply the saved category after reopening the panel
     private static void applySelectedCategory(State st) {
         if (st.tabs == null) return;
         if (Config.disableCategories()) {
@@ -549,17 +580,19 @@ public final class QuestPanelClient {
         }
     }
 
+    // show the selected category name in the panel header
     private static String sectionTitle(State st) {
         if (st == null) return "";
         return st.tabs == null ? "" : st.tabs.getSelectedName();
     }
 
-
+    // panel background widget
     private static final class PanelBackground extends AbstractWidget {
         public PanelBackground(int x, int y, int w, int h) {
             super(x, y, w, h, Component.empty());
         }
 
+        // sync the background with the panel bounds
         public void setBounds(int x, int y, int w, int h) {
             this.setX(x);
             this.setY(y);
@@ -583,6 +616,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // per screen quest panel state
     private static final class State {
         final InventoryScreen inv;
         QuestToggleButton btn;
@@ -608,6 +642,7 @@ public final class QuestPanelClient {
         }
     }
 
+    // settings button beside the quest panel
     private static final class SettingsButton extends net.minecraft.client.gui.components.AbstractButton {
         private final Runnable onPress;
 

@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class QuestProgressState extends SavedData {
+    // saved quest progress by player
     private final Map<String, Map<String, QuestProgress>> byPlayer = new HashMap<>();
 
     public static final class QuestProgress {
@@ -66,6 +67,7 @@ public final class QuestProgressState extends SavedData {
         );
     }
 
+    // load saved quest progress
     public static QuestProgressState load(CompoundTag tag, HolderLookup.Provider provider) {
         QuestProgressState s = new QuestProgressState();
         for (String playerKey : tag.getAllKeys()) {

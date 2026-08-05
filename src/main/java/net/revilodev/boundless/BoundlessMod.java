@@ -98,16 +98,17 @@ public final class BoundlessMod {
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        LOGGER.info("Boundless server starting");
         QuestData.loadServer(event.getServer(), true);
     }
 
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer sp) {
+            //config: give player questbook on join
             if (!Config.disableQuestBook() && Config.spawnWithQuestBook() && !hasQuestBook(sp)) {
                 sp.getInventory().add(new ItemStack(ModItems.QUEST_BOOK.get()));
             }
+            QuestTracker.markServerStateDirty(sp);
             QuestTracker.refreshPersistentContextTargets(sp);
             QuestTracker.serverTickPlayer(sp);
             BoundlessNetwork.syncPlayer(sp);
@@ -132,6 +133,7 @@ public final class BoundlessMod {
 
     @SubscribeEvent
     public void onLivingDeath(LivingDeathEvent event) {
+        // track server kill progress
         if (!(event.getEntity() instanceof LivingEntity victim)) return;
         if (!(event.getSource().getEntity() instanceof ServerPlayer sp)) return;
         if (!(sp.level() instanceof ServerLevel server)) return;
@@ -142,11 +144,15 @@ public final class BoundlessMod {
         BoundlessNetwork.KillEntry entry = new BoundlessNetwork.KillEntry(rl.toString(), count);
         BoundlessNetwork.SyncKills payload = new BoundlessNetwork.SyncKills(List.of(entry));
         PacketDistributor.sendToPlayer(sp, payload);
+        QuestTracker.markServerStateDirty(sp);
+        QuestTracker.serverTickPlayer(sp);
     }
 
     @SubscribeEvent
     public void onAdvancementEarned(AdvancementEvent.AdvancementEarnEvent event) {
+        //track advancement progress
         if (event.getEntity() instanceof ServerPlayer sp) {
+            net.revilodev.boundless.quest.QuestTracker.markServerStateDirty(sp);
             net.revilodev.boundless.quest.QuestTracker.serverTickPlayer(sp);
         }
     }

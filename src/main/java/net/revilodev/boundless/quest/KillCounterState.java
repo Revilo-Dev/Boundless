@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class KillCounterState extends SavedData {
+    // kills stored by player and entity
     private final Map<String, Map<String, Integer>> byPlayer = new HashMap<>();
 
     public static KillCounterState get(ServerLevel level) {
@@ -23,6 +24,7 @@ public final class KillCounterState extends SavedData {
     private KillCounterState() {
     }
 
+    // load saved kill counts
     public static KillCounterState load(CompoundTag tag, HolderLookup.Provider provider) {
         KillCounterState s = new KillCounterState();
         for (String player : tag.getAllKeys()) {
@@ -47,6 +49,7 @@ public final class KillCounterState extends SavedData {
         return tag;
     }
 
+    // increment saved kill counts
     public void inc(UUID player, String entityId) {
         Map<String, Integer> m = byPlayer.computeIfAbsent(player.toString(), k -> new HashMap<>());
         m.put(entityId, m.getOrDefault(entityId, 0) + 1);

@@ -42,7 +42,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -51,6 +54,7 @@ import java.util.zip.ZipInputStream;
 
 public final class BoundlessNetwork {
 
+    // network channel and shared packet state
     private static final String CHANNEL = "boundless";
     private static final String VERSION = "3";
     private static boolean REGISTERED = false;
@@ -58,6 +62,7 @@ public final class BoundlessNetwork {
     private static final Gson GSON = new GsonBuilder().setLenient().create();
     private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, QuestPackUploadSession> QUESTPACK_UPLOADS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<java.util.UUID, ObjectiveProgressSnapshot> LAST_OBJECTIVE_SYNC = new ConcurrentHashMap<>();
 
     private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
     private static final int QUEST_CHUNK_BYTES = 60000;
@@ -65,10 +70,23 @@ public final class BoundlessNetwork {
 
     private BoundlessNetwork() {}
 
+    // last objective sync snapshot per player
+    private record ObjectiveProgressSnapshot(
+            Map<String, Integer> items,
+            Map<String, Boolean> flags,
+            Map<String, String> inputs
+    ) {
+        private static ObjectiveProgressSnapshot empty() {
+            return new ObjectiveProgressSnapshot(Map.of(), Map.of(), Map.of());
+        }
+    }
+
+    // register payload handlers once per game session
     public static void bootstrap(IEventBus bus) {
         bus.addListener(BoundlessNetwork::register);
     }
 
+    // bind every client and server payload handler
     private static void register(RegisterPayloadHandlersEvent event) {
         if (REGISTERED) return;
         REGISTERED = true;
@@ -100,6 +118,7 @@ public final class BoundlessNetwork {
         r.playToClient(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC, BoundlessNetwork::handleSyncQuestsChunk);
     }
 
+    // client request to redeem one quest
     public record Redeem(String questId) implements CustomPacketPayload {
         public static final Type<Redeem> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "redeem"));
@@ -110,6 +129,7 @@ public final class BoundlessNetwork {
         @Override public Type<Redeem> type() { return TYPE; }
     }
 
+    // client request to reject one optional quest
     public record Reject(String questId) implements CustomPacketPayload {
         public static final Type<Reject> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "reject"));
@@ -120,6 +140,7 @@ public final class BoundlessNetwork {
         @Override public Type<Reject> type() { return TYPE; }
     }
 
+    // client request to undo a quest rejection
     public record UndoReject(String questId) implements CustomPacketPayload {
         public static final Type<UndoReject> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "undo_reject"));
@@ -130,6 +151,7 @@ public final class BoundlessNetwork {
         @Override public Type<UndoReject> type() { return TYPE; }
     }
 
+    // client request to create a quest scroll
     public record CreateScroll(String questId) implements CustomPacketPayload {
         public static final Type<CreateScroll> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "create_scroll"));
@@ -140,6 +162,7 @@ public final class BoundlessNetwork {
         @Override public Type<CreateScroll> type() { return TYPE; }
     }
 
+    // client request to restart a repeatable quest
     public record RestartRepeatable(String questId) implements CustomPacketPayload {
         public static final Type<RestartRepeatable> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "restart_repeatable"));
@@ -150,6 +173,7 @@ public final class BoundlessNetwork {
         @Override public Type<RestartRepeatable> type() { return TYPE; }
     }
 
+    // client sync for field input objectives
     public record UpdateFieldInput(String questId, String targetId, String value) implements CustomPacketPayload {
         public static final Type<UpdateFieldInput> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_field_input"));
@@ -164,6 +188,7 @@ public final class BoundlessNetwork {
         @Override public Type<UpdateFieldInput> type() { return TYPE; }
     }
 
+    // client sync for observe objectives
     public record ReportObserve(String questId, String targetId) implements CustomPacketPayload {
         public static final Type<ReportObserve> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "report_observe"));
@@ -177,6 +202,7 @@ public final class BoundlessNetwork {
         @Override public Type<ReportObserve> type() { return TYPE; }
     }
 
+    // client request to enable or disable a quest pack
     public record SetQuestPackEnabled(String id, boolean enabled, boolean builtin) implements CustomPacketPayload {
         public static final Type<SetQuestPackEnabled> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "set_questpack_enabled"));
@@ -191,6 +217,7 @@ public final class BoundlessNetwork {
         @Override public Type<SetQuestPackEnabled> type() { return TYPE; }
     }
 
+    // client snapshot of synced config values
     public record UpdateServerConfig(
             String pinnedQuestHudPosition,
             boolean hideQuestBookInInventory,
@@ -271,6 +298,7 @@ public final class BoundlessNetwork {
         @Override public Type<UpdateServerConfig> type() { return TYPE; }
     }
 
+    // one quest pack upload chunk from the editor
     public record UploadQuestPackChunk(String id, boolean enabled, int uploadId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
         public static final Type<UploadQuestPackChunk> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "upload_questpack_chunk"));
@@ -301,6 +329,7 @@ public final class BoundlessNetwork {
         @Override public Type<UploadQuestPackChunk> type() { return TYPE; }
     }
 
+    // client request to delete one quest pack
     public record DeleteQuestPack(String id) implements CustomPacketPayload {
         public static final Type<DeleteQuestPack> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "delete_questpack"));
@@ -311,6 +340,7 @@ public final class BoundlessNetwork {
         @Override public Type<DeleteQuestPack> type() { return TYPE; }
     }
 
+    // single quest status sync to clients
     public record SyncStatus(String questId, String status) implements CustomPacketPayload {
         public static final Type<SyncStatus> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_status"));
@@ -324,6 +354,7 @@ public final class BoundlessNetwork {
         @Override public Type<SyncStatus> type() { return TYPE; }
     }
 
+    // entry model for bulk status sync
     public record StatusEntry(String questId, String status) {
         public static final StreamCodec<FriendlyByteBuf, StatusEntry> CODEC = StreamCodec.of(
                 (buf, e) -> {
@@ -334,6 +365,7 @@ public final class BoundlessNetwork {
         );
     }
 
+    // bulk quest status sync to clients
     public record SyncStatuses(List<StatusEntry> entries) implements CustomPacketPayload {
         public static final Type<SyncStatuses> TYPE =
                 new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_statuses"));
@@ -630,13 +662,16 @@ public final class BoundlessNetwork {
         @Override public Type<SyncQuestsChunk> type() { return TYPE; }
     }
 
+    // push full quest and progress state to one player
     public static void syncPlayer(ServerPlayer p) {
+        clearObjectiveProgressCache(p);
         PacketDistributor.sendToPlayer(p, new SyncClear());
         sendConfig(p);
         sendQuestData(p);
         syncPlayerProgress(p);
     }
 
+    // sync quest statuses progress kills and config
     private static void syncPlayerProgress(ServerPlayer p) {
         if (p == null) return;
 
@@ -671,22 +706,68 @@ public final class BoundlessNetwork {
         syncComputedCompletion(p);
     }
 
+    // sync objective counters only when they changed
     public static void sendObjectiveProgress(ServerPlayer player) {
         if (player == null) return;
         QuestObjectiveState objectiveState = QuestObjectiveState.get(player.serverLevel());
-        List<ObjectiveItemEntry> objectiveItems = new ArrayList<>();
-        objectiveState.itemSnapshotFor(player.getUUID())
-                .forEach((key, count) -> objectiveItems.add(new ObjectiveItemEntry(key, count == null ? 0 : count)));
-        List<ObjectiveFlagEntry> objectiveFlags = new ArrayList<>();
-        objectiveState.flagSnapshotFor(player.getUUID())
-                .forEach((key, done) -> objectiveFlags.add(new ObjectiveFlagEntry(key, Boolean.TRUE.equals(done))));
-        List<ObjectiveInputEntry> objectiveInputs = new ArrayList<>();
-        objectiveState.inputSnapshotFor(player.getUUID())
-                .forEach((key, value) -> objectiveInputs.add(new ObjectiveInputEntry(key, value == null ? "" : value)));
-        if (objectiveItems.isEmpty() && objectiveFlags.isEmpty() && objectiveInputs.isEmpty()) return;
+        Map<String, Integer> itemSnapshot = sanitizeObjectiveItems(objectiveState.itemSnapshotFor(player.getUUID()));
+        Map<String, Boolean> flagSnapshot = sanitizeObjectiveFlags(objectiveState.flagSnapshotFor(player.getUUID()));
+        Map<String, String> inputSnapshot = sanitizeObjectiveInputs(objectiveState.inputSnapshotFor(player.getUUID()));
+        ObjectiveProgressSnapshot next = new ObjectiveProgressSnapshot(itemSnapshot, flagSnapshot, inputSnapshot);
+        ObjectiveProgressSnapshot previous = LAST_OBJECTIVE_SYNC.put(player.getUUID(), next);
+        if (next.equals(previous)) return;
+
+        List<ObjectiveItemEntry> objectiveItems = new ArrayList<>(itemSnapshot.size());
+        itemSnapshot.forEach((key, count) -> objectiveItems.add(new ObjectiveItemEntry(key, count)));
+        List<ObjectiveFlagEntry> objectiveFlags = new ArrayList<>(flagSnapshot.size());
+        flagSnapshot.forEach((key, done) -> objectiveFlags.add(new ObjectiveFlagEntry(key, done)));
+        List<ObjectiveInputEntry> objectiveInputs = new ArrayList<>(inputSnapshot.size());
+        inputSnapshot.forEach((key, value) -> objectiveInputs.add(new ObjectiveInputEntry(key, value)));
         PacketDistributor.sendToPlayer(player, new SyncObjectiveProgress(objectiveItems, objectiveFlags, objectiveInputs));
     }
 
+    // clear cached objective sync state for one player
+    public static void clearObjectiveProgressCache(ServerPlayer player) {
+        if (player == null) return;
+        LAST_OBJECTIVE_SYNC.remove(player.getUUID());
+    }
+
+    // normalize synced item objective values
+    private static Map<String, Integer> sanitizeObjectiveItems(Map<String, Integer> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) return Map.of();
+        Map<String, Integer> sanitized = new HashMap<>();
+        snapshot.forEach((key, count) -> {
+            if (key == null || key.isBlank()) return;
+            int value = Math.max(0, count == null ? 0 : count);
+            if (value > 0) sanitized.put(key, value);
+        });
+        return sanitized.isEmpty() ? Map.of() : Collections.unmodifiableMap(sanitized);
+    }
+
+    // normalize synced flag objective values
+    private static Map<String, Boolean> sanitizeObjectiveFlags(Map<String, Boolean> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) return Map.of();
+        Map<String, Boolean> sanitized = new HashMap<>();
+        snapshot.forEach((key, done) -> {
+            if (key == null || key.isBlank() || !Boolean.TRUE.equals(done)) return;
+            sanitized.put(key, true);
+        });
+        return sanitized.isEmpty() ? Map.of() : Collections.unmodifiableMap(sanitized);
+    }
+
+    // normalize synced input objective values
+    private static Map<String, String> sanitizeObjectiveInputs(Map<String, String> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) return Map.of();
+        Map<String, String> sanitized = new HashMap<>();
+        snapshot.forEach((key, value) -> {
+            if (key == null || key.isBlank()) return;
+            String normalized = value == null ? "" : value.trim();
+            if (!normalized.isBlank()) sanitized.put(key, normalized);
+        });
+        return sanitized.isEmpty() ? Map.of() : Collections.unmodifiableMap(sanitized);
+    }
+
+    // send the authority config snapshot to one player
     private static void sendConfig(ServerPlayer p) {
         PacketDistributor.sendToPlayer(p, new SyncConfig(
                 configStringList(Config.disabledCategories()),
@@ -719,6 +800,7 @@ public final class BoundlessNetwork {
         ));
     }
 
+    // copy config string lists into stable packet data
     private static List<String> configStringList(List<? extends String> values) {
         if (values == null || values.isEmpty()) return List.of();
         List<String> out = new ArrayList<>(values.size());
@@ -746,6 +828,7 @@ public final class BoundlessNetwork {
         return values;
     }
 
+    // send one quest claim and scroll meta update
     public static void sendProgressMeta(ServerPlayer player, String questId) {
         if (player == null || questId == null || questId.isBlank()) return;
         var progress = QuestProgressState.get(player.serverLevel()).progress(player.getUUID(), questId);
@@ -771,11 +854,12 @@ public final class BoundlessNetwork {
         }
     }
 
-    // inside BoundlessNetwork.java
+    // sync computed completion state after progress changes
     private static void sendQuestData(ServerPlayer p) {
         sendQuestData(List.of(p));
     }
 
+    // send the full authoritative quest definition snapshot
     private static void sendQuestData(List<ServerPlayer> players) {
         if (players == null || players.isEmpty()) return;
         ServerPlayer first = players.get(0);
@@ -786,6 +870,7 @@ public final class BoundlessNetwork {
         }
     }
 
+    // build the authoritative quest json snapshot
     private static String buildQuestSyncJson(MinecraftServer server) {
         var quests = QuestData.allServer(server);
         var categories = QuestData.categoriesOrderedServer(server);
@@ -967,6 +1052,7 @@ public final class BoundlessNetwork {
     }
 
 
+    // split large quest json into client packet chunks
     private static void sendQuestJsonChunked(ServerPlayer p, String json) {
         if (json == null) json = "";
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
@@ -983,28 +1069,34 @@ public final class BoundlessNetwork {
         }
     }
 
+    // sync one quest status to one player
     public static void sendStatus(ServerPlayer p, String questId, String status) {
         PacketDistributor.sendToPlayer(p, new SyncStatus(questId, status));
     }
 
+    // send a quest unlock toast to one player
     public static void sendToast(ServerPlayer p, String questId) {
         PacketDistributor.sendToPlayer(p, new Toast(questId));
     }
 
+    // send a reward toast to one player
     public static void sendRewardToast(ServerPlayer p, String title, String description, String icon) {
         PacketDistributor.sendToPlayer(p, new RewardToast(title, description, icon));
     }
 
+    // open the standalone quest book for one player
     public static void sendOpenQuestBook(ServerPlayer p) {
         PacketDistributor.sendToPlayer(p, new OpenQuestBook());
     }
 
+    // show a local client toast without networking
     public static void sendToastLocal(String questId) {
         QuestData.byId(questId).ifPresent(q ->
                 QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
         );
     }
 
+    // redeem quests on the server authority
     private static void handleRedeem(Redeem p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1027,6 +1119,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // reject optional quests on the server authority
     private static void handleReject(Reject p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1039,6 +1132,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // create quest scrolls on the server authority
     private static void handleCreateScroll(CreateScroll p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1055,6 +1149,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // undo rejected quests on the server authority
     private static void handleUndoReject(UndoReject p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1066,6 +1161,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // restart repeatable quests on the server authority
     private static void handleRestartRepeatable(RestartRepeatable p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1077,6 +1173,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // store field input progress on the server authority
     private static void handleUpdateFieldInput(UpdateFieldInput p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1093,9 +1190,13 @@ public final class BoundlessNetwork {
             if (!validFieldTarget) return;
             String key = p.questId() + ":field:" + p.targetId();
             QuestTracker.setFieldInputProgress(sp, key, p.value());
+            QuestTracker.markServerStateDirty(sp);
+            QuestTracker.serverTickPlayer(sp);
+            sendObjectiveProgress(sp);
         });
     }
 
+    // toggle quest packs on the current authority
     private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1120,6 +1221,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // apply synced config edits on the server authority
     private static void handleUpdateServerConfig(UpdateServerConfig p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1156,6 +1258,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // accept quest pack upload chunks from the editor
     private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1190,6 +1293,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // delete quest packs on the server authority
     private static void handleDeleteQuestPack(DeleteQuestPack p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1205,6 +1309,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // mark observe targets on the server authority
     private static void handleReportObserve(ReportObserve p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1216,6 +1321,7 @@ public final class BoundlessNetwork {
                     if (!p.targetId().equals(target.id)) continue;
                     String key = QuestTracker.flagProgressKey(q, target);
                     if (QuestTracker.markFlagProgress(sp, key)) {
+                        QuestTracker.markServerStateDirty(sp);
                         sendObjectiveProgress(sp);
                         QuestTracker.serverTickPlayer(sp);
                     }
@@ -1225,6 +1331,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // reload quests and resync every connected player
     private static void reloadAndSyncAll(ServerPlayer sp) {
         QuestData.loadServer(sp.server, true);
         List<ServerPlayer> players = sp.server.getPlayerList().getPlayers();
@@ -1238,6 +1345,7 @@ public final class BoundlessNetwork {
         }
     }
 
+    // normalize uploaded pack folder names
     private static String normalizeQuestPackFolderName(String raw) {
         String id = raw == null ? "" : raw.trim();
         if (id.isBlank()) return "";
@@ -1246,6 +1354,7 @@ public final class BoundlessNetwork {
         return id;
     }
 
+    // unpack uploaded quest packs into authoritative storage
     private static void writeUploadedQuestPack(String id, byte[] zipBytes) throws IOException {
         Files.createDirectories(INSTANCE_QUEST_PACKS_ROOT);
         Path targetRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
@@ -1277,6 +1386,7 @@ public final class BoundlessNetwork {
         QuestPackStorage.replaceDirectoryWithArchive(targetRoot, tempRoot, id, "uploaded");
     }
 
+    // delete an extracted quest pack directory tree
     private static void deleteDirectoryIfExists(Path root) throws IOException {
         if (root == null || !Files.exists(root)) return;
         Path normalized = root.normalize();
@@ -1294,12 +1404,14 @@ public final class BoundlessNetwork {
         }
     }
 
+    // apply one quest status sync on clients
     private static void handleSyncStatus(SyncStatus p, IPayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()))
         );
     }
 
+    // apply bulk quest status sync on clients
     private static void handleSyncStatuses(SyncStatuses p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (StatusEntry e : p.entries()) {
@@ -1308,6 +1420,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // apply quest meta sync on clients
     private static void handleSyncProgressMeta(SyncProgressMeta p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (ProgressMetaEntry e : p.entries()) {
@@ -1318,6 +1431,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // apply objective progress sync on clients
     private static void handleSyncObjectiveProgress(SyncObjectiveProgress p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (ObjectiveItemEntry entry : p.items()) {
@@ -1332,6 +1446,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // apply kill counter sync on clients
     private static void handleSyncKills(SyncKills p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (KillEntry e : p.entries())
@@ -1339,6 +1454,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // clear client progress and remote quest data
     private static void handleSyncClear(SyncClear p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             QuestTracker.clientClearAll();
@@ -1347,6 +1463,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // show quest unlock toasts on clients
     private static void handleToast(Toast p, IPayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestData.byId(p.questId()).ifPresent(q ->
@@ -1355,6 +1472,7 @@ public final class BoundlessNetwork {
         );
     }
 
+    // show reward toasts on clients
     private static void handleRewardToast(RewardToast p, IPayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestUnlockedToast.showCustom(p.title(), p.description(), p.icon())

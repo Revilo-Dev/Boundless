@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class QuestObjectiveState extends SavedData {
+    // saved objective progress by player
     private final Map<String, Map<String, Integer>> itemProgressByPlayer = new HashMap<>();
     private final Map<String, Map<String, Boolean>> effectProgressByPlayer = new HashMap<>();
     private final Map<String, Map<String, String>> inputProgressByPlayer = new HashMap<>();
@@ -25,6 +26,7 @@ public final class QuestObjectiveState extends SavedData {
         );
     }
 
+    // load saved objective progress
     public static QuestObjectiveState load(CompoundTag tag, HolderLookup.Provider provider) {
         QuestObjectiveState s = new QuestObjectiveState();
 

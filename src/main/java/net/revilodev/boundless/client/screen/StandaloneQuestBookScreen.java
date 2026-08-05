@@ -19,6 +19,7 @@ import net.revilodev.boundless.quest.QuestData;
 @OnlyIn(Dist.CLIENT)
 public final class StandaloneQuestBookScreen extends Screen {
 
+    // standalone quest book textures
     private static final ResourceLocation PANEL_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
     private static final ResourceLocation BTN_SETTINGS =
@@ -50,6 +51,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         super(Component.translatable("ui.boundless.questbook.title"));
     }
 
+    // build the standalone quest book
     @Override
     protected void init() {
         if (Config.disableQuestBook()) {
@@ -147,6 +149,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         updateVisibility();
     }
 
+    // swap between list and details
     private void updateVisibility() {
         list.visible = true;
         list.active = true;
