@@ -24,8 +24,8 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.revilodev.boundless.client.ClientQuestEvents;
 import net.revilodev.boundless.client.QuestBookKeybinds;
+import net.revilodev.boundless.client.ClientQuestEvents;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.command.BoundlessCommands;
 import net.revilodev.boundless.item.ModItems;
@@ -34,6 +34,7 @@ import net.revilodev.boundless.quest.KillCounterState;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestEvents;
 import net.revilodev.boundless.quest.ServerQuestEvents;
+import net.revilodev.boundless.quest.QuestTracker;
 import org.slf4j.Logger;
 
 import java.util.List;
@@ -58,7 +59,10 @@ public final class BoundlessMod {
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.addListener(QuestEvents::onPlayerTick);
         MinecraftForge.EVENT_BUS.addListener(ServerQuestEvents::onLogout);
+        MinecraftForge.EVENT_BUS.addListener(ServerQuestEvents::onChangedDimension);
+        MinecraftForge.EVENT_BUS.addListener(ServerQuestEvents::onRespawn);
         MinecraftForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.ServerQuestTicker::onPlayerTick);
+
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -74,6 +78,7 @@ public final class BoundlessMod {
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLevelUnload);
+
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
@@ -94,16 +99,19 @@ public final class BoundlessMod {
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        LOGGER.info("Boundless server starting");
         QuestData.loadServer(event.getServer(), true);
     }
 
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer sp) {
+            //config: give player questbook on join
             if (!Config.disableQuestBook() && Config.spawnWithQuestBook() && !hasQuestBook(sp)) {
                 sp.getInventory().add(new ItemStack(ModItems.QUEST_BOOK.get()));
             }
+            QuestTracker.markServerStateDirty(sp);
+            QuestTracker.refreshPersistentContextTargets(sp);
+            QuestTracker.serverTickPlayer(sp);
             BoundlessNetwork.syncPlayer(sp);
         }
     }
@@ -130,6 +138,7 @@ public final class BoundlessMod {
 
     @SubscribeEvent
     public void onLivingDeath(LivingDeathEvent event) {
+        // track server kill progress
         LivingEntity victim = event.getEntity();
         if (!(event.getSource().getEntity() instanceof ServerPlayer sp)) return;
         if (!(sp.level() instanceof ServerLevel server)) return;
@@ -137,12 +146,18 @@ public final class BoundlessMod {
         if (rl == null) return;
         KillCounterState.get(server).inc(sp.getUUID(), rl.toString());
         int count = KillCounterState.get(server).get(sp.getUUID(), rl.toString());
-        BoundlessNetwork.sendToPlayer(sp, new BoundlessNetwork.SyncKills(List.of(new BoundlessNetwork.KillEntry(rl.toString(), count))));
+        BoundlessNetwork.KillEntry entry = new BoundlessNetwork.KillEntry(rl.toString(), count);
+        BoundlessNetwork.SyncKills payload = new BoundlessNetwork.SyncKills(List.of(entry));
+        BoundlessNetwork.sendToPlayer(sp, payload);
+        QuestTracker.markServerStateDirty(sp);
+        QuestTracker.serverTickPlayer(sp);
     }
 
     @SubscribeEvent
     public void onAdvancementEarned(AdvancementEvent.AdvancementEarnEvent event) {
+        //track advancement progress
         if (event.getEntity() instanceof ServerPlayer sp) {
+            net.revilodev.boundless.quest.QuestTracker.markServerStateDirty(sp);
             net.revilodev.boundless.quest.QuestTracker.serverTickPlayer(sp);
         }
     }

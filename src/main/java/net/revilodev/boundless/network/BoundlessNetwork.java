@@ -42,7 +42,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -54,25 +57,34 @@ import java.util.zip.ZipInputStream;
 
 public final class BoundlessNetwork {
 
+    // network channel and shared packet state
     private static final ResourceLocation CHANNEL_NAME = new ResourceLocation("boundless", "main");
     private static final String VERSION = "3";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            CHANNEL_NAME,
-            () -> VERSION,
-            VERSION::equals,
-            VERSION::equals
-    );
+            CHANNEL_NAME, () -> VERSION, VERSION::equals, VERSION::equals);
     private static boolean REGISTERED = false;
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
     private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, QuestPackUploadSession> QUESTPACK_UPLOADS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<java.util.UUID, ObjectiveProgressSnapshot> LAST_OBJECTIVE_SYNC = new ConcurrentHashMap<>();
 
     private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
     private static final int QUEST_CHUNK_BYTES = 60000;
     private static final Path INSTANCE_QUEST_PACKS_ROOT = Config.questPacksRoot();
 
     private BoundlessNetwork() {}
+
+    // last objective sync snapshot per player
+    private record ObjectiveProgressSnapshot(
+            Map<String, Integer> items,
+            Map<String, Boolean> flags,
+            Map<String, String> inputs
+    ) {
+        private static ObjectiveProgressSnapshot empty() {
+            return new ObjectiveProgressSnapshot(Map.of(), Map.of(), Map.of());
+        }
+    }
 
     public static void bootstrap() {
         if (REGISTERED) return;
@@ -89,7 +101,6 @@ public final class BoundlessNetwork {
         register(id++, UpdateServerConfig.class, UpdateServerConfig.CODEC::encode, UpdateServerConfig.CODEC::decode, BoundlessNetwork::handleUpdateServerConfig, NetworkDirection.PLAY_TO_SERVER);
         register(id++, UploadQuestPackChunk.class, UploadQuestPackChunk.CODEC::encode, UploadQuestPackChunk.CODEC::decode, BoundlessNetwork::handleUploadQuestPackChunk, NetworkDirection.PLAY_TO_SERVER);
         register(id++, DeleteQuestPack.class, DeleteQuestPack.CODEC::encode, DeleteQuestPack.CODEC::decode, BoundlessNetwork::handleDeleteQuestPack, NetworkDirection.PLAY_TO_SERVER);
-
         register(id++, SyncStatus.class, SyncStatus.CODEC::encode, SyncStatus.CODEC::decode, BoundlessNetwork::handleSyncStatus, NetworkDirection.PLAY_TO_CLIENT);
         register(id++, SyncStatuses.class, SyncStatuses.CODEC::encode, SyncStatuses.CODEC::decode, BoundlessNetwork::handleSyncStatuses, NetworkDirection.PLAY_TO_CLIENT);
         register(id++, SyncProgressMeta.class, SyncProgressMeta.CODEC::encode, SyncProgressMeta.CODEC::decode, BoundlessNetwork::handleSyncProgressMeta, NetworkDirection.PLAY_TO_CLIENT);
@@ -103,37 +114,40 @@ public final class BoundlessNetwork {
         register(id, SyncQuestsChunk.class, SyncQuestsChunk.CODEC::encode, SyncQuestsChunk.CODEC::decode, BoundlessNetwork::handleSyncQuestsChunk, NetworkDirection.PLAY_TO_CLIENT);
     }
 
-    private static <T> void register(
-            int id,
-            Class<T> type,
-            BiConsumer<FriendlyByteBuf, T> encoder,
-            Function<FriendlyByteBuf, T> decoder,
-            BiConsumer<T, PayloadContext> handler,
-            NetworkDirection direction) {
-        CHANNEL.messageBuilder(type, id, direction)
-                .encoder((message, buf) -> encoder.accept(buf, message))
-                .decoder(decoder)
-                .consumerMainThread((message, contextSupplier) -> {
-                    handler.accept(message, new PayloadContext(contextSupplier));
-                    contextSupplier.get().setPacketHandled(true);
-                })
-                .add();
+    private static <T> void register(int id, Class<T> type, BiConsumer<FriendlyByteBuf, T> encoder,
+                                     Function<FriendlyByteBuf, T> decoder, BiConsumer<T, PayloadContext> handler,
+                                     NetworkDirection direction) {
+        CHANNEL.messageBuilder(type, id, direction).encoder((message, buffer) -> encoder.accept(buffer, message))
+                .decoder(decoder).consumerMainThread((message, context) -> {
+                    handler.accept(message, new PayloadContext(context));
+                    context.get().setPacketHandled(true);
+                }).add();
     }
 
-    private record PayloadContext(Supplier<NetworkEvent.Context> contextSupplier) {
-        void enqueueWork(Runnable runnable) {
-            contextSupplier.get().enqueueWork(runnable);
-        }
-
+    private record PayloadContext(Supplier<NetworkEvent.Context> context) {
+        void enqueueWork(Runnable work) { context.get().enqueueWork(work); }
         net.minecraft.world.entity.player.Player player() {
-            ServerPlayer sender = contextSupplier.get().getSender();
+            ServerPlayer sender = context.get().getSender();
             return sender != null ? sender : ClientOnly.player();
         }
     }
 
+    /** Sends a registered message to one connected client. */
+    public static <T> void sendToPlayer(ServerPlayer player, T message) {
+        if (player != null && message != null) {
+            CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), message);
+        }
+    }
+
+    /** Sends a registered message from the client to its current server. */
+    public static <T> void sendToServer(T message) {
+        if (message != null) CHANNEL.sendToServer(message);
+    }
+
+    // client request to redeem one quest
     public record Redeem(String questId) implements CustomPacketPayload {
         public static final Type<Redeem> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "redeem"));
+                new Type<>(new ResourceLocation("boundless", "redeem"));
         public static final StreamCodec<FriendlyByteBuf, Redeem> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new Redeem(buf.readUtf())
@@ -141,9 +155,10 @@ public final class BoundlessNetwork {
         @Override public Type<Redeem> type() { return TYPE; }
     }
 
+    // client request to reject one optional quest
     public record Reject(String questId) implements CustomPacketPayload {
         public static final Type<Reject> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "reject"));
+                new Type<>(new ResourceLocation("boundless", "reject"));
         public static final StreamCodec<FriendlyByteBuf, Reject> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new Reject(buf.readUtf())
@@ -151,9 +166,10 @@ public final class BoundlessNetwork {
         @Override public Type<Reject> type() { return TYPE; }
     }
 
+    // client request to undo a quest rejection
     public record UndoReject(String questId) implements CustomPacketPayload {
         public static final Type<UndoReject> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "undo_reject"));
+                new Type<>(new ResourceLocation("boundless", "undo_reject"));
         public static final StreamCodec<FriendlyByteBuf, UndoReject> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new UndoReject(buf.readUtf())
@@ -161,9 +177,10 @@ public final class BoundlessNetwork {
         @Override public Type<UndoReject> type() { return TYPE; }
     }
 
+    // client request to create a quest scroll
     public record CreateScroll(String questId) implements CustomPacketPayload {
         public static final Type<CreateScroll> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "create_scroll"));
+                new Type<>(new ResourceLocation("boundless", "create_scroll"));
         public static final StreamCodec<FriendlyByteBuf, CreateScroll> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new CreateScroll(buf.readUtf())
@@ -171,9 +188,10 @@ public final class BoundlessNetwork {
         @Override public Type<CreateScroll> type() { return TYPE; }
     }
 
+    // client request to restart a repeatable quest
     public record RestartRepeatable(String questId) implements CustomPacketPayload {
         public static final Type<RestartRepeatable> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "restart_repeatable"));
+                new Type<>(new ResourceLocation("boundless", "restart_repeatable"));
         public static final StreamCodec<FriendlyByteBuf, RestartRepeatable> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new RestartRepeatable(buf.readUtf())
@@ -181,9 +199,10 @@ public final class BoundlessNetwork {
         @Override public Type<RestartRepeatable> type() { return TYPE; }
     }
 
+    // client sync for field input objectives
     public record UpdateFieldInput(String questId, String targetId, String value) implements CustomPacketPayload {
         public static final Type<UpdateFieldInput> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_field_input"));
+                new Type<>(new ResourceLocation("boundless", "update_field_input"));
         public static final StreamCodec<FriendlyByteBuf, UpdateFieldInput> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.questId);
@@ -195,9 +214,10 @@ public final class BoundlessNetwork {
         @Override public Type<UpdateFieldInput> type() { return TYPE; }
     }
 
+    // client sync for observe objectives
     public record ReportObserve(String questId, String targetId) implements CustomPacketPayload {
         public static final Type<ReportObserve> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "report_observe"));
+                new Type<>(new ResourceLocation("boundless", "report_observe"));
         public static final StreamCodec<FriendlyByteBuf, ReportObserve> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.questId == null ? "" : p.questId);
@@ -208,9 +228,10 @@ public final class BoundlessNetwork {
         @Override public Type<ReportObserve> type() { return TYPE; }
     }
 
+    // client request to enable or disable a quest pack
     public record SetQuestPackEnabled(String id, boolean enabled, boolean builtin) implements CustomPacketPayload {
         public static final Type<SetQuestPackEnabled> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "set_questpack_enabled"));
+                new Type<>(new ResourceLocation("boundless", "set_questpack_enabled"));
         public static final StreamCodec<FriendlyByteBuf, SetQuestPackEnabled> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.id == null ? "" : p.id);
@@ -222,6 +243,7 @@ public final class BoundlessNetwork {
         @Override public Type<SetQuestPackEnabled> type() { return TYPE; }
     }
 
+    // client snapshot of synced config values
     public record UpdateServerConfig(
             String pinnedQuestHudPosition,
             boolean hideQuestBookInInventory,
@@ -247,7 +269,7 @@ public final class BoundlessNetwork {
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<UpdateServerConfig> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "update_server_config"));
+                new Type<>(new ResourceLocation("boundless", "update_server_config"));
         public static final StreamCodec<FriendlyByteBuf, UpdateServerConfig> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.pinnedQuestHudPosition == null ? "" : p.pinnedQuestHudPosition);
@@ -302,9 +324,10 @@ public final class BoundlessNetwork {
         @Override public Type<UpdateServerConfig> type() { return TYPE; }
     }
 
+    // one quest pack upload chunk from the editor
     public record UploadQuestPackChunk(String id, boolean enabled, int uploadId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
         public static final Type<UploadQuestPackChunk> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "upload_questpack_chunk"));
+                new Type<>(new ResourceLocation("boundless", "upload_questpack_chunk"));
         public static final StreamCodec<FriendlyByteBuf, UploadQuestPackChunk> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.id == null ? "" : p.id);
@@ -332,9 +355,10 @@ public final class BoundlessNetwork {
         @Override public Type<UploadQuestPackChunk> type() { return TYPE; }
     }
 
+    // client request to delete one quest pack
     public record DeleteQuestPack(String id) implements CustomPacketPayload {
         public static final Type<DeleteQuestPack> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "delete_questpack"));
+                new Type<>(new ResourceLocation("boundless", "delete_questpack"));
         public static final StreamCodec<FriendlyByteBuf, DeleteQuestPack> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.id == null ? "" : p.id),
                 buf -> new DeleteQuestPack(buf.readUtf())
@@ -342,9 +366,10 @@ public final class BoundlessNetwork {
         @Override public Type<DeleteQuestPack> type() { return TYPE; }
     }
 
+    // single quest status sync to clients
     public record SyncStatus(String questId, String status) implements CustomPacketPayload {
         public static final Type<SyncStatus> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_status"));
+                new Type<>(new ResourceLocation("boundless", "sync_status"));
         public static final StreamCodec<FriendlyByteBuf, SyncStatus> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.questId);
@@ -355,6 +380,7 @@ public final class BoundlessNetwork {
         @Override public Type<SyncStatus> type() { return TYPE; }
     }
 
+    // entry model for bulk status sync
     public record StatusEntry(String questId, String status) {
         public static final StreamCodec<FriendlyByteBuf, StatusEntry> CODEC = StreamCodec.of(
                 (buf, e) -> {
@@ -365,9 +391,10 @@ public final class BoundlessNetwork {
         );
     }
 
+    // bulk quest status sync to clients
     public record SyncStatuses(List<StatusEntry> entries) implements CustomPacketPayload {
         public static final Type<SyncStatuses> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_statuses"));
+                new Type<>(new ResourceLocation("boundless", "sync_statuses"));
         public static final StreamCodec<FriendlyByteBuf, SyncStatuses> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.entries.size());
@@ -397,7 +424,7 @@ public final class BoundlessNetwork {
 
     public record SyncProgressMeta(List<ProgressMetaEntry> entries) implements CustomPacketPayload {
         public static final Type<SyncProgressMeta> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_progress_meta"));
+                new Type<>(new ResourceLocation("boundless", "sync_progress_meta"));
         public static final StreamCodec<FriendlyByteBuf, SyncProgressMeta> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.entries.size());
@@ -443,23 +470,12 @@ public final class BoundlessNetwork {
         );
     }
 
-    public record StatEntry(String statId, int count) {
-        public static final StreamCodec<FriendlyByteBuf, StatEntry> CODEC = StreamCodec.of(
-                (buf, e) -> {
-                    buf.writeUtf(e.statId);
-                    buf.writeVarInt(e.count);
-                },
-                buf -> new StatEntry(buf.readUtf(), buf.readVarInt())
-        );
-    }
-
     public record SyncObjectiveProgress(
             List<ObjectiveItemEntry> items,
             List<ObjectiveFlagEntry> flags,
-            List<ObjectiveInputEntry> inputs,
-            List<StatEntry> stats) implements CustomPacketPayload {
+            List<ObjectiveInputEntry> inputs) implements CustomPacketPayload {
         public static final Type<SyncObjectiveProgress> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_objective_progress"));
+                new Type<>(new ResourceLocation("boundless", "sync_objective_progress"));
         public static final StreamCodec<FriendlyByteBuf, SyncObjectiveProgress> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.items.size());
@@ -468,8 +484,6 @@ public final class BoundlessNetwork {
                     for (ObjectiveFlagEntry entry : p.flags) ObjectiveFlagEntry.CODEC.encode(buf, entry);
                     buf.writeVarInt(p.inputs.size());
                     for (ObjectiveInputEntry entry : p.inputs) ObjectiveInputEntry.CODEC.encode(buf, entry);
-                    buf.writeVarInt(p.stats.size());
-                    for (StatEntry entry : p.stats) StatEntry.CODEC.encode(buf, entry);
                 },
                 buf -> {
                     int itemCount = buf.readVarInt();
@@ -481,10 +495,7 @@ public final class BoundlessNetwork {
                     int inputCount = buf.readVarInt();
                     List<ObjectiveInputEntry> inputs = new ArrayList<>(inputCount);
                     for (int i = 0; i < inputCount; i++) inputs.add(ObjectiveInputEntry.CODEC.decode(buf));
-                    int statCount = buf.readVarInt();
-                    List<StatEntry> stats = new ArrayList<>(statCount);
-                    for (int i = 0; i < statCount; i++) stats.add(StatEntry.CODEC.decode(buf));
-                    return new SyncObjectiveProgress(items, flags, inputs, stats);
+                    return new SyncObjectiveProgress(items, flags, inputs);
                 }
         );
         @Override public Type<SyncObjectiveProgress> type() { return TYPE; }
@@ -504,7 +515,7 @@ public final class BoundlessNetwork {
 
     public record SyncKills(List<KillEntry> entries) implements CustomPacketPayload {
         public static final Type<SyncKills> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_kills"));
+                new Type<>(new ResourceLocation("boundless", "sync_kills"));
         public static final StreamCodec<FriendlyByteBuf, SyncKills> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.entries.size());
@@ -522,7 +533,7 @@ public final class BoundlessNetwork {
 
     public record SyncClear() implements CustomPacketPayload {
         public static final Type<SyncClear> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_clear"));
+                new Type<>(new ResourceLocation("boundless", "sync_clear"));
         public static final StreamCodec<FriendlyByteBuf, SyncClear> CODEC =
                 StreamCodec.of((b, p) -> {}, b -> new SyncClear());
         @Override public Type<SyncClear> type() { return TYPE; }
@@ -530,7 +541,7 @@ public final class BoundlessNetwork {
 
     public record Toast(String questId) implements CustomPacketPayload {
         public static final Type<Toast> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "toast"));
+                new Type<>(new ResourceLocation("boundless", "toast"));
         public static final StreamCodec<FriendlyByteBuf, Toast> CODEC = StreamCodec.of(
                 (buf, p) -> buf.writeUtf(p.questId),
                 buf -> new Toast(buf.readUtf())
@@ -538,14 +549,14 @@ public final class BoundlessNetwork {
         @Override public Type<Toast> type() { return TYPE; }
     }
 
-    public record RewardToast(String title, String description, String iconId) implements CustomPacketPayload {
+    public record RewardToast(String title, String description, String icon) implements CustomPacketPayload {
         public static final Type<RewardToast> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "reward_toast"));
+                new Type<>(new ResourceLocation("boundless", "reward_toast"));
         public static final StreamCodec<FriendlyByteBuf, RewardToast> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeUtf(p.title == null ? "" : p.title);
                     buf.writeUtf(p.description == null ? "" : p.description);
-                    buf.writeUtf(p.iconId == null ? "" : p.iconId);
+                    buf.writeUtf(p.icon == null ? "" : p.icon);
                 },
                 buf -> new RewardToast(buf.readUtf(), buf.readUtf(), buf.readUtf())
         );
@@ -554,7 +565,7 @@ public final class BoundlessNetwork {
 
     public record OpenQuestBook() implements CustomPacketPayload {
         public static final Type<OpenQuestBook> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "open_quest_book"));
+                new Type<>(new ResourceLocation("boundless", "open_quest_book"));
         public static final StreamCodec<FriendlyByteBuf, OpenQuestBook> CODEC =
                 StreamCodec.of((buf, p) -> {}, buf -> new OpenQuestBook());
         @Override public Type<OpenQuestBook> type() { return TYPE; }
@@ -589,7 +600,7 @@ public final class BoundlessNetwork {
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<SyncConfig> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_config"));
+                new Type<>(new ResourceLocation("boundless", "sync_config"));
         public static final StreamCodec<FriendlyByteBuf, SyncConfig> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     writeStringList(buf, p.disabledCategories);
@@ -654,7 +665,7 @@ public final class BoundlessNetwork {
 
     public record SyncQuestsChunk(int syncId, int totalParts, int index, byte[] part) implements CustomPacketPayload {
         public static final Type<SyncQuestsChunk> TYPE =
-                new Type<>(ResourceLocation.fromNamespaceAndPath("boundless", "sync_quests_chunk"));
+                new Type<>(new ResourceLocation("boundless", "sync_quests_chunk"));
         public static final StreamCodec<FriendlyByteBuf, SyncQuestsChunk> CODEC = StreamCodec.of(
                 (buf, p) -> {
                     buf.writeVarInt(p.syncId);
@@ -677,13 +688,16 @@ public final class BoundlessNetwork {
         @Override public Type<SyncQuestsChunk> type() { return TYPE; }
     }
 
+    // push full quest and progress state to one player
     public static void syncPlayer(ServerPlayer p) {
+        clearObjectiveProgressCache(p);
         sendToPlayer(p, new SyncClear());
         sendConfig(p);
         sendQuestData(p);
         syncPlayerProgress(p);
     }
 
+    // sync quest statuses progress kills and config
     private static void syncPlayerProgress(ServerPlayer p) {
         if (p == null) return;
 
@@ -718,39 +732,68 @@ public final class BoundlessNetwork {
         syncComputedCompletion(p);
     }
 
+    // sync objective counters only when they changed
     public static void sendObjectiveProgress(ServerPlayer player) {
         if (player == null) return;
         QuestObjectiveState objectiveState = QuestObjectiveState.get(player.serverLevel());
-        List<ObjectiveItemEntry> objectiveItems = new ArrayList<>();
-        objectiveState.itemSnapshotFor(player.getUUID())
-                .forEach((key, count) -> objectiveItems.add(new ObjectiveItemEntry(key, count == null ? 0 : count)));
-        List<ObjectiveFlagEntry> objectiveFlags = new ArrayList<>();
-        objectiveState.flagSnapshotFor(player.getUUID())
-                .forEach((key, done) -> objectiveFlags.add(new ObjectiveFlagEntry(key, Boolean.TRUE.equals(done))));
-        List<ObjectiveInputEntry> objectiveInputs = new ArrayList<>();
-        objectiveState.inputSnapshotFor(player.getUUID())
-                .forEach((key, value) -> objectiveInputs.add(new ObjectiveInputEntry(key, value == null ? "" : value)));
-        List<StatEntry> statEntries = collectStatEntries(player);
-        if (objectiveItems.isEmpty() && objectiveFlags.isEmpty() && objectiveInputs.isEmpty() && statEntries.isEmpty()) return;
-        sendToPlayer(player, new SyncObjectiveProgress(objectiveItems, objectiveFlags, objectiveInputs, statEntries));
+        Map<String, Integer> itemSnapshot = sanitizeObjectiveItems(objectiveState.itemSnapshotFor(player.getUUID()));
+        Map<String, Boolean> flagSnapshot = sanitizeObjectiveFlags(objectiveState.flagSnapshotFor(player.getUUID()));
+        Map<String, String> inputSnapshot = sanitizeObjectiveInputs(objectiveState.inputSnapshotFor(player.getUUID()));
+        ObjectiveProgressSnapshot next = new ObjectiveProgressSnapshot(itemSnapshot, flagSnapshot, inputSnapshot);
+        ObjectiveProgressSnapshot previous = LAST_OBJECTIVE_SYNC.put(player.getUUID(), next);
+        if (next.equals(previous)) return;
+
+        List<ObjectiveItemEntry> objectiveItems = new ArrayList<>(itemSnapshot.size());
+        itemSnapshot.forEach((key, count) -> objectiveItems.add(new ObjectiveItemEntry(key, count)));
+        List<ObjectiveFlagEntry> objectiveFlags = new ArrayList<>(flagSnapshot.size());
+        flagSnapshot.forEach((key, done) -> objectiveFlags.add(new ObjectiveFlagEntry(key, done)));
+        List<ObjectiveInputEntry> objectiveInputs = new ArrayList<>(inputSnapshot.size());
+        inputSnapshot.forEach((key, value) -> objectiveInputs.add(new ObjectiveInputEntry(key, value)));
+        sendToPlayer(player, new SyncObjectiveProgress(objectiveItems, objectiveFlags, objectiveInputs));
     }
 
-    private static List<StatEntry> collectStatEntries(ServerPlayer player) {
-        List<StatEntry> entries = new ArrayList<>();
-        if (player == null) return entries;
-        Set<String> seen = ConcurrentHashMap.newKeySet();
-        for (QuestData.Quest quest : QuestData.allServer(player.server)) {
-            if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
-            for (QuestData.Target target : quest.completion.targets) {
-                if (target == null || !target.isStat()) continue;
-                String statId = QuestTracker.normalizeStatId(target.id);
-                if (statId.isBlank() || !seen.add(statId)) continue;
-                entries.add(new StatEntry(statId, Math.max(0, QuestTracker.getStatCount(player, statId))));
-            }
-        }
-        return entries;
+    // clear cached objective sync state for one player
+    public static void clearObjectiveProgressCache(ServerPlayer player) {
+        if (player == null) return;
+        LAST_OBJECTIVE_SYNC.remove(player.getUUID());
     }
 
+    // normalize synced item objective values
+    private static Map<String, Integer> sanitizeObjectiveItems(Map<String, Integer> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) return Map.of();
+        Map<String, Integer> sanitized = new HashMap<>();
+        snapshot.forEach((key, count) -> {
+            if (key == null || key.isBlank()) return;
+            int value = Math.max(0, count == null ? 0 : count);
+            if (value > 0) sanitized.put(key, value);
+        });
+        return sanitized.isEmpty() ? Map.of() : Collections.unmodifiableMap(sanitized);
+    }
+
+    // normalize synced flag objective values
+    private static Map<String, Boolean> sanitizeObjectiveFlags(Map<String, Boolean> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) return Map.of();
+        Map<String, Boolean> sanitized = new HashMap<>();
+        snapshot.forEach((key, done) -> {
+            if (key == null || key.isBlank() || !Boolean.TRUE.equals(done)) return;
+            sanitized.put(key, true);
+        });
+        return sanitized.isEmpty() ? Map.of() : Collections.unmodifiableMap(sanitized);
+    }
+
+    // normalize synced input objective values
+    private static Map<String, String> sanitizeObjectiveInputs(Map<String, String> snapshot) {
+        if (snapshot == null || snapshot.isEmpty()) return Map.of();
+        Map<String, String> sanitized = new HashMap<>();
+        snapshot.forEach((key, value) -> {
+            if (key == null || key.isBlank()) return;
+            String normalized = value == null ? "" : value.trim();
+            if (!normalized.isBlank()) sanitized.put(key, normalized);
+        });
+        return sanitized.isEmpty() ? Map.of() : Collections.unmodifiableMap(sanitized);
+    }
+
+    // send the authority config snapshot to one player
     private static void sendConfig(ServerPlayer p) {
         sendToPlayer(p, new SyncConfig(
                 configStringList(Config.disabledCategories()),
@@ -769,8 +812,8 @@ public final class BoundlessNetwork {
                 Config.questIconScale(),
                 Config.enableQuestSearchBox(),
                 Config.enableDescriptionColors(),
-                Config.QUEST_WIDGET_TEXT_COLOR.get(),
-                Config.DESCRIPTION_TEXT_COLOR.get(),
+                String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor()),
+                String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor()),
                 Config.enableDescriptionReadMore(),
                 Config.enableDescriptionTextWrapping(),
                 Config.descriptionTextAlignment(),
@@ -783,6 +826,7 @@ public final class BoundlessNetwork {
         ));
     }
 
+    // copy config string lists into stable packet data
     private static List<String> configStringList(List<? extends String> values) {
         if (values == null || values.isEmpty()) return List.of();
         List<String> out = new ArrayList<>(values.size());
@@ -790,12 +834,6 @@ public final class BoundlessNetwork {
             if (value != null) out.add(value);
         }
         return out.isEmpty() ? List.of() : List.copyOf(out);
-    }
-
-    private static String normalizeHexColor(String value, String fallback) {
-        String cleaned = value == null ? "" : value.trim().replace("#", "");
-        if (cleaned.matches("(?i)[0-9a-f]{6}")) return cleaned.toUpperCase();
-        return fallback;
     }
 
     private static void writeStringList(FriendlyByteBuf buf, List<String> values) {
@@ -816,6 +854,7 @@ public final class BoundlessNetwork {
         return values;
     }
 
+    // send one quest claim and scroll meta update
     public static void sendProgressMeta(ServerPlayer player, String questId) {
         if (player == null || questId == null || questId.isBlank()) return;
         var progress = QuestProgressState.get(player.serverLevel()).progress(player.getUUID(), questId);
@@ -841,11 +880,12 @@ public final class BoundlessNetwork {
         }
     }
 
-    // inside BoundlessNetwork.java
+    // sync computed completion state after progress changes
     private static void sendQuestData(ServerPlayer p) {
         sendQuestData(List.of(p));
     }
 
+    // send the full authoritative quest definition snapshot
     private static void sendQuestData(List<ServerPlayer> players) {
         if (players == null || players.isEmpty()) return;
         ServerPlayer first = players.get(0);
@@ -856,6 +896,7 @@ public final class BoundlessNetwork {
         }
     }
 
+    // build the authoritative quest json snapshot
     private static String buildQuestSyncJson(MinecraftServer server) {
         var quests = QuestData.allServer(server);
         var categories = QuestData.categoriesOrderedServer(server);
@@ -963,6 +1004,24 @@ public final class BoundlessNetwork {
                 }
                 ro.add("lootTables", lootTables);
 
+                JsonArray advancements = new JsonArray();
+                for (QuestData.AdvancementReward ar : q.rewards.advancements) {
+                    JsonObject ao = new JsonObject();
+                    ao.addProperty("advancement", ar.advancement);
+                    advancements.add(ao);
+                }
+                ro.add("advancements", advancements);
+
+                JsonArray toasts = new JsonArray();
+                for (QuestData.ToastReward tr : q.rewards.toasts) {
+                    JsonObject to = new JsonObject();
+                    to.addProperty("title", tr.title);
+                    to.addProperty("description", tr.description);
+                    to.addProperty("icon", tr.icon);
+                    toasts.add(to);
+                }
+                ro.add("toasts", toasts);
+
                 ro.addProperty("expType", q.rewards.expType);
                 ro.addProperty("expAmount", q.rewards.expAmount);
 
@@ -1019,6 +1078,7 @@ public final class BoundlessNetwork {
     }
 
 
+    // split large quest json into client packet chunks
     private static void sendQuestJsonChunked(ServerPlayer p, String json) {
         if (json == null) json = "";
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
@@ -1035,38 +1095,34 @@ public final class BoundlessNetwork {
         }
     }
 
+    // sync one quest status to one player
     public static void sendStatus(ServerPlayer p, String questId, String status) {
         sendToPlayer(p, new SyncStatus(questId, status));
     }
 
+    // send a quest unlock toast to one player
     public static void sendToast(ServerPlayer p, String questId) {
         sendToPlayer(p, new Toast(questId));
     }
 
-    public static void sendRewardToast(ServerPlayer p, String title, String description, String iconId) {
-        sendToPlayer(p, new RewardToast(title, description, iconId));
+    // send a reward toast to one player
+    public static void sendRewardToast(ServerPlayer p, String title, String description, String icon) {
+        sendToPlayer(p, new RewardToast(title, description, icon));
     }
 
+    // open the standalone quest book for one player
     public static void sendOpenQuestBook(ServerPlayer p) {
         sendToPlayer(p, new OpenQuestBook());
     }
 
-    public static void sendToPlayer(ServerPlayer player, Object message) {
-        if (player == null || message == null) return;
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), message);
-    }
-
-    public static void sendToServer(Object message) {
-        if (message == null) return;
-        CHANNEL.sendToServer(message);
-    }
-
+    // show a local client toast without networking
     public static void sendToastLocal(String questId) {
         QuestData.byId(questId).ifPresent(q ->
                 QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
         );
     }
 
+    // redeem quests on the server authority
     private static void handleRedeem(Redeem p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1089,6 +1145,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // reject optional quests on the server authority
     private static void handleReject(Reject p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1101,6 +1158,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // create quest scrolls on the server authority
     private static void handleCreateScroll(CreateScroll p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1117,6 +1175,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // undo rejected quests on the server authority
     private static void handleUndoReject(UndoReject p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1128,6 +1187,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // restart repeatable quests on the server authority
     private static void handleRestartRepeatable(RestartRepeatable p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1139,6 +1199,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // store field input progress on the server authority
     private static void handleUpdateFieldInput(UpdateFieldInput p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1155,9 +1216,13 @@ public final class BoundlessNetwork {
             if (!validFieldTarget) return;
             String key = p.questId() + ":field:" + p.targetId();
             QuestTracker.setFieldInputProgress(sp, key, p.value());
+            QuestTracker.markServerStateDirty(sp);
+            QuestTracker.serverTickPlayer(sp);
+            sendObjectiveProgress(sp);
         });
     }
 
+    // toggle quest packs on the current authority
     private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1182,6 +1247,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // apply synced config edits on the server authority
     private static void handleUpdateServerConfig(UpdateServerConfig p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1199,8 +1265,8 @@ public final class BoundlessNetwork {
             Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
             Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
             Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
-            Config.QUEST_WIDGET_TEXT_COLOR.set(normalizeHexColor(p.questWidgetTextColor(), "FFFFFF"));
-            Config.DESCRIPTION_TEXT_COLOR.set(normalizeHexColor(p.descriptionTextColor(), "CFCFCF"));
+            Config.QUEST_WIDGET_TEXT_COLOR.set(p.questWidgetTextColor());
+            Config.DESCRIPTION_TEXT_COLOR.set(p.descriptionTextColor());
             Config.ENABLE_DESCRIPTION_READ_MORE.set(p.enableDescriptionReadMore());
             Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(p.enableDescriptionTextWrapping());
             Config.DESCRIPTION_TEXT_ALIGNMENT.set(p.descriptionTextAlignment());
@@ -1218,6 +1284,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // accept quest pack upload chunks from the editor
     private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1252,6 +1319,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // delete quest packs on the server authority
     private static void handleDeleteQuestPack(DeleteQuestPack p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1267,6 +1335,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // mark observe targets on the server authority
     private static void handleReportObserve(ReportObserve p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
@@ -1278,6 +1347,7 @@ public final class BoundlessNetwork {
                     if (!p.targetId().equals(target.id)) continue;
                     String key = QuestTracker.flagProgressKey(q, target);
                     if (QuestTracker.markFlagProgress(sp, key)) {
+                        QuestTracker.markServerStateDirty(sp);
                         sendObjectiveProgress(sp);
                         QuestTracker.serverTickPlayer(sp);
                     }
@@ -1287,6 +1357,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // reload quests and resync every connected player
     private static void reloadAndSyncAll(ServerPlayer sp) {
         QuestData.loadServer(sp.server, true);
         List<ServerPlayer> players = sp.server.getPlayerList().getPlayers();
@@ -1300,6 +1371,7 @@ public final class BoundlessNetwork {
         }
     }
 
+    // normalize uploaded pack folder names
     private static String normalizeQuestPackFolderName(String raw) {
         String id = raw == null ? "" : raw.trim();
         if (id.isBlank()) return "";
@@ -1308,6 +1380,7 @@ public final class BoundlessNetwork {
         return id;
     }
 
+    // unpack uploaded quest packs into authoritative storage
     private static void writeUploadedQuestPack(String id, byte[] zipBytes) throws IOException {
         Files.createDirectories(INSTANCE_QUEST_PACKS_ROOT);
         Path targetRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
@@ -1339,6 +1412,7 @@ public final class BoundlessNetwork {
         QuestPackStorage.replaceDirectoryWithArchive(targetRoot, tempRoot, id, "uploaded");
     }
 
+    // delete an extracted quest pack directory tree
     private static void deleteDirectoryIfExists(Path root) throws IOException {
         if (root == null || !Files.exists(root)) return;
         Path normalized = root.normalize();
@@ -1356,12 +1430,14 @@ public final class BoundlessNetwork {
         }
     }
 
+    // apply one quest status sync on clients
     private static void handleSyncStatus(SyncStatus p, PayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()))
         );
     }
 
+    // apply bulk quest status sync on clients
     private static void handleSyncStatuses(SyncStatuses p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (StatusEntry e : p.entries()) {
@@ -1370,6 +1446,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // apply quest meta sync on clients
     private static void handleSyncProgressMeta(SyncProgressMeta p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (ProgressMetaEntry e : p.entries()) {
@@ -1380,6 +1457,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // apply objective progress sync on clients
     private static void handleSyncObjectiveProgress(SyncObjectiveProgress p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (ObjectiveItemEntry entry : p.items()) {
@@ -1391,12 +1469,10 @@ public final class BoundlessNetwork {
             for (ObjectiveInputEntry entry : p.inputs()) {
                 QuestTracker.clientSetInputProgress(entry.key(), entry.value());
             }
-            for (StatEntry entry : p.stats()) {
-                QuestTracker.clientSetStat(entry.statId(), entry.count());
-            }
         });
     }
 
+    // apply kill counter sync on clients
     private static void handleSyncKills(SyncKills p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             for (KillEntry e : p.entries())
@@ -1404,6 +1480,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // clear client progress and remote quest data
     private static void handleSyncClear(SyncClear p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             QuestTracker.clientClearAll();
@@ -1412,6 +1489,7 @@ public final class BoundlessNetwork {
         });
     }
 
+    // show quest unlock toasts on clients
     private static void handleToast(Toast p, PayloadContext ctx) {
         ctx.enqueueWork(() ->
                 QuestData.byId(p.questId()).ifPresent(q ->
@@ -1420,8 +1498,11 @@ public final class BoundlessNetwork {
         );
     }
 
+    // show reward toasts on clients
     private static void handleRewardToast(RewardToast p, PayloadContext ctx) {
-        ctx.enqueueWork(() -> QuestUnlockedToast.showCustom(p.title(), p.description(), p.iconId()));
+        ctx.enqueueWork(() ->
+                QuestUnlockedToast.showCustom(p.title(), p.description(), p.icon())
+        );
     }
 
     private static void handleOpenQuestBook(OpenQuestBook p, PayloadContext ctx) {
@@ -1520,7 +1601,7 @@ public final class BoundlessNetwork {
         int size = inv.getContainerSize();
         ItemStack[] sim = new ItemStack[size];
         for (int i = 0; i < size; i++) sim[i] = inv.getItem(i).copy();
-        HolderLookup.Provider registries = sp.server.registryAccess();
+        HolderLookup.Provider registries = sp.level().registryAccess();
         QuestTracker.ExperienceSnapshot simulatedXp =
                 new QuestTracker.ExperienceSnapshot(sp.experienceLevel, sp.experienceProgress);
         boolean hasXpSubmitTarget = false;

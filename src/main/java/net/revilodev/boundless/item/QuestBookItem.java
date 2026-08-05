@@ -22,6 +22,7 @@ public class QuestBookItem extends Item {
             return InteractionResultHolder.pass(player.getItemInHand(hand));
         }
 
+        // opens quest book gui
         if (!level.isClientSide && player instanceof ServerPlayer sp) {
             BoundlessNetwork.sendOpenQuestBook(sp);
         }

@@ -1,3 +1,4 @@
+
 package net.revilodev.boundless.client;
 
 import net.minecraft.client.Minecraft;
@@ -8,19 +9,29 @@ import net.revilodev.boundless.quest.QuestTracker;
 
 public final class ClientQuestEvents {
 
+    // load quest data when the player joins
     public static void onClientLogin(ClientPlayerNetworkEvent.LoggingIn e) {
         QuestData.loadClient(true);
-        QuestTracker.setClientMultiplayer(!Minecraft.getInstance().hasSingleplayerServer());
+
+        // check if the player joined a multiplayer server
+        QuestTracker.setClientMultiplayer(
+                !Minecraft.getInstance().hasSingleplayerServer()
+        );
     }
 
+    // save quest progress when the player leaves
     public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut e) {
         QuestTracker.forceSave();
         QuestTracker.setClientMultiplayer(false);
     }
 
+    // save again when the client world closes
     public static void onClientLevelUnload(LevelEvent.Unload e) {
+        // ignore server side worlds
         if (!e.getLevel().isClientSide()) return;
+
         QuestTracker.forceSave();
         QuestTracker.setClientMultiplayer(false);
     }
 }
+

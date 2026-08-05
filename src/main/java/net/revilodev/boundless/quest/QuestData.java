@@ -30,6 +30,7 @@ import java.util.*;
 public final class QuestData {
     private QuestData() {}
 
+    // quest pack json loader
     private static final Gson GSON = new GsonBuilder().setLenient().create();
     private static final String PATH_QUESTS = "quests";
     private static final String PATH_CATEGORIES = "quests/categories";
@@ -40,6 +41,7 @@ public final class QuestData {
     private static final Path INSTANCE_QUEST_PACKS_ROOT =
             FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks");
 
+    // loaded quest definitions
     private static final Map<String, Quest> QUESTS = new LinkedHashMap<>();
     private static final Map<String, Category> CATEGORIES = new LinkedHashMap<>();
     private static final Map<String, SubCategory> SUBCATEGORIES = new LinkedHashMap<>();
@@ -49,6 +51,7 @@ public final class QuestData {
 
     private static String lastWorldId = null;
 
+    // immutable quest definition
     public static final class Quest {
         public final String id;
         public final String name;
