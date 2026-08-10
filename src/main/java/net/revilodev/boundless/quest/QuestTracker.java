@@ -39,6 +39,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.revilodev.boundless.BoundlessMod;
+import net.revilodev.boundless.BoundlessDebug;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.network.BoundlessNetwork;
@@ -1491,6 +1492,7 @@ public final class QuestTracker {
 
     public static void serverTickPlayer(ServerPlayer sp) {
         if (sp == null) return;
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         int dirtyMask = consumeServerDirtyMask(sp);
         if (dirtyMask == 0) return;
         List<QuestData.Quest> quests = new ArrayList<>(QuestData.allServer(sp.server));
@@ -1500,11 +1502,21 @@ public final class QuestTracker {
             return;
         }
 
+        int start = Math.floorMod(SERVER_QUEST_SCAN_CURSOR.getOrDefault(sp.getUUID(), 0), total);
+        int batch = Math.min(SERVER_QUEST_SCAN_BATCH, total);
+
         EvaluationCache cache = new EvaluationCache(sp.getUUID());
         EVALUATION_CACHE.set(cache);
         try {
-            refreshPersistentContextTargets(sp, quests, 0, total, true, true, true);
-            for (QuestData.Quest q : quests) {
+            // Observe targets are reported by multiplayer clients. Avoid rescanning every
+            // context target when only inventory/xp/effect state changed.
+            boolean contextChanged = (dirtyMask & DIRTY_CONTEXT) != 0;
+            if (contextChanged || shouldUseServerObserveDetection(sp)) {
+                refreshPersistentContextTargets(sp, quests, start, batch,
+                        shouldUseServerObserveDetection(sp), contextChanged, contextChanged);
+            }
+            for (int processed = 0; processed < batch; processed++) {
+                QuestData.Quest q = quests.get((start + processed) % total);
                 if (q == null || !questNeedsEvaluationForMask(q, dirtyMask)) continue;
                 if (Config.disabledCategories().contains(q.category)) continue;
 
@@ -1534,7 +1546,22 @@ public final class QuestTracker {
         } finally {
             EVALUATION_CACHE.remove();
         }
+        int next = (start + batch) % total;
+        if (batch < total) {
+            // Keep the dirty state until every quest has been checked. The previous code
+            // defined this batch limit but accidentally scanned the full quest list anyway.
+            SERVER_QUEST_SCAN_CURSOR.put(sp.getUUID(), next);
+            SERVER_DIRTY_MASKS.merge(sp.getUUID(), dirtyMask, (a, b) -> a | b);
+        } else {
+            SERVER_QUEST_SCAN_CURSOR.remove(sp.getUUID());
+        }
         BoundlessNetwork.sendObjectiveProgress(sp);
+        if (startedAt != 0L) {
+            long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000L;
+            BoundlessDebug.rateLimited("quest-evaluation:" + sp.getUUID(), 5_000L,
+                    "player={}, quests={}/{}, dirtyMask={}, elapsed={}ms, pending={}",
+                    sp.getGameProfile().getName(), batch, total, dirtyMask, elapsedMillis, batch < total);
+        }
     }
 
     private static int consumeServerDirtyMask(ServerPlayer sp) {

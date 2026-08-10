@@ -157,6 +157,17 @@ public final class Config {
         BUILDER.pop();
     }
 
+    static {
+        BUILDER.push("Development");
+    }
+    // devMode enables rate-limited multiplayer performance diagnostics in the game log
+    public static final ModConfigSpec.ConfigValue<Boolean> DEV_MODE =
+            BUILDER.comment("Enables Boundless development performance diagnostics. Keep false during normal play.")
+                    .define("devMode", false);
+    static {
+        BUILDER.pop();
+    }
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     // boundless config root under the game directory
@@ -176,6 +187,10 @@ public final class Config {
 
     public static int questPackBackupLimit() {
         return QUEST_PACK_BACKUP_LIMIT;
+    }
+
+    public static boolean devMode() {
+        return DEV_MODE.get();
     }
 
     public static List<? extends String> disabledCategories() {
@@ -244,8 +259,8 @@ public final class Config {
             boolean disableQuestBook,
             boolean spawnWithQuestBook) {
         DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
-        APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : List.copyOf(appliedQuestPacks));
-        DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : List.copyOf(disabledQuestPacks));
+        // Pack enablement is server-authoritative. The client only receives this
+        // snapshot for display; it never uploads local pack overrides to a server.
         PINNED_QUEST_HUD_POSITION.set(pinnedQuestHudPosition);
         HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
         QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);

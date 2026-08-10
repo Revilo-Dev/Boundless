@@ -16,6 +16,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.fml.loading.FMLPaths;
 import net.revilodev.boundless.Config;
+import net.revilodev.boundless.BoundlessDebug;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -49,7 +50,10 @@ public final class QuestData {
     private static boolean loadedClient = false;
     private static boolean loadedServer = false;
 
-    private static String lastWorldId = null;
+    // Keep client and server cache identities separate. A multiplayer client has no
+    // local world id (null), which is still a valid cache key for server-synced data.
+    private static String lastClientWorldId = null;
+    private static String lastServerWorldId = null;
 
     // immutable quest definition
     public static final class Quest {
@@ -441,7 +445,8 @@ public final class QuestData {
     public static void forceReloadAll(MinecraftServer server) {
         loadedClient = false;
         loadedServer = false;
-        lastWorldId = null;
+        lastClientWorldId = null;
+        lastServerWorldId = null;
         loadServer(server, true);
     }
 
@@ -519,6 +524,7 @@ public final class QuestData {
 
     private static void loadModQuestPacksFromInstance() {
         if (!Files.isDirectory(INSTANCE_QUEST_PACKS_ROOT)) return;
+        QuestPackStorage.recoverStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
 
         try (DirectoryStream<Path> packs = Files.newDirectoryStream(INSTANCE_QUEST_PACKS_ROOT)) {
             for (Path packRoot : packs) {
@@ -828,17 +834,22 @@ public final class QuestData {
         } catch (Throwable ignored) {}
 
         if (!forceReload && !QUESTS.isEmpty()
-                && lastWorldId != null
-                && Objects.equals(lastWorldId, worldId)
+                && Objects.equals(lastClientWorldId, worldId)
                 && loadedClient) {
             return;
         }
 
-        lastWorldId = worldId;
+        lastClientWorldId = worldId;
 
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         ResourceManager rm = mc.getResourceManager();
         load(rm, forceReload);
         loadedClient = true;
+        if (startedAt != 0L) {
+            BoundlessDebug.rateLimited("client-quest-load", 2_000L,
+                    "forceReload={}, quests={}, categories={}, elapsed={}ms", forceReload, QUESTS.size(), CATEGORIES.size(),
+                    (System.nanoTime() - startedAt) / 1_000_000L);
+        }
     }
 
     public static synchronized void loadServer(MinecraftServer server, boolean forceReload) {
@@ -850,17 +861,22 @@ public final class QuestData {
         }
 
         if (!forceReload && !QUESTS.isEmpty()
-                && lastWorldId != null
-                && Objects.equals(lastWorldId, worldId)
+                && Objects.equals(lastServerWorldId, worldId)
                 && loadedServer) {
             return;
         }
 
-        lastWorldId = worldId;
+        lastServerWorldId = worldId;
 
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         ResourceManager rm = server.getServerResources().resourceManager();
         load(rm, forceReload);
         loadedServer = true;
+        if (startedAt != 0L) {
+            BoundlessDebug.rateLimited("server-quest-load", 2_000L,
+                    "world={}, forceReload={}, quests={}, categories={}, elapsed={}ms", worldId, forceReload, QUESTS.size(), CATEGORIES.size(),
+                    (System.nanoTime() - startedAt) / 1_000_000L);
+        }
     }
 
     public static synchronized boolean isEmpty() { return QUESTS.isEmpty(); }
@@ -1586,6 +1602,7 @@ public final class QuestData {
     }
 
     public static synchronized void applyNetworkJson(String json) {
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         QUESTS.clear();
         CATEGORIES.clear();
         SUBCATEGORIES.clear();
@@ -1832,6 +1849,11 @@ public final class QuestData {
 
             ensureSubCategoriesFromQuests();
             loadedClient = true;
+            if (startedAt != 0L) {
+                BoundlessDebug.rateLimited("client-quest-parse", 2_000L,
+                        "bytes={}, quests={}, categories={}, elapsed={}ms", json == null ? 0 : json.length(), QUESTS.size(), CATEGORIES.size(),
+                        (System.nanoTime() - startedAt) / 1_000_000L);
+            }
         } catch (Exception e) {
             QUESTS.clear();
             CATEGORIES.clear();

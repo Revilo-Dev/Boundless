@@ -15,6 +15,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.revilodev.boundless.Config;
+import net.revilodev.boundless.BoundlessDebug;
 import net.revilodev.boundless.client.screen.QuestSettingsScreen;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
@@ -163,6 +164,7 @@ public final class QuestPanelClient {
 
     // keep panel layout and button state in sync every frame
     public static void onScreenRenderPre(ScreenEvent.Render.Pre e) {
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         Screen s = e.getScreen();
         State st = STATES.get(s);
         if (st == null || !(s instanceof InventoryScreen inv)) return;
@@ -183,6 +185,13 @@ public final class QuestPanelClient {
         reposition(inv, st);
         updateVisibility(st);
         handleRecipeButtonRules(inv, st);
+        if (startedAt != 0L) {
+            long elapsedMicros = (System.nanoTime() - startedAt) / 1_000L;
+            if (elapsedMicros >= 4_000L) {
+                BoundlessDebug.rateLimited("quest-panel-render", 2_000L,
+                        "elapsed={}ms, panelOpen={}, questCount={}", elapsedMicros / 1_000D, st.open, QuestData.all().size());
+            }
+        }
     }
 
     // route wheel input into the open panel

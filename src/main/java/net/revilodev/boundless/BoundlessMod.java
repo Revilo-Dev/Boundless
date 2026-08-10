@@ -104,21 +104,32 @@ public final class BoundlessMod {
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer sp) {
+            long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
             //config: give player questbook on join
             if (!Config.disableQuestBook() && Config.spawnWithQuestBook() && !hasQuestBook(sp)) {
                 sp.getInventory().add(new ItemStack(ModItems.QUEST_BOOK.get()));
             }
             QuestTracker.markServerStateDirty(sp);
-            QuestTracker.refreshPersistentContextTargets(sp);
             QuestTracker.serverTickPlayer(sp);
             BoundlessNetwork.syncPlayer(sp);
+            if (startedAt != 0L) {
+                BoundlessDebug.rateLimited("player-login:" + sp.getUUID(), 2_000L,
+                        "player={}, onlinePlayers={}, elapsed={}ms", sp.getGameProfile().getName(),
+                        sp.server.getPlayerList().getPlayerCount(), (System.nanoTime() - startedAt) / 1_000_000L);
+            }
         }
     }
 
     @SubscribeEvent
     public void onDatapackSync(OnDatapackSyncEvent event) {
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         QuestData.loadServer(event.getPlayerList().getServer(), true);
-        event.getRelevantPlayers().forEach(BoundlessNetwork::syncPlayer);
+        List<ServerPlayer> players = event.getRelevantPlayers().toList();
+        players.forEach(BoundlessNetwork::syncPlayer);
+        if (startedAt != 0L) {
+            BoundlessDebug.rateLimited("datapack-sync", 2_000L,
+                    "players={}, elapsed={}ms", players.size(), (System.nanoTime() - startedAt) / 1_000_000L);
+        }
     }
 
     private static boolean hasQuestBook(ServerPlayer player) {

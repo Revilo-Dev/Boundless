@@ -25,6 +25,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.revilodev.boundless.Config;
+import net.revilodev.boundless.BoundlessDebug;
 import net.revilodev.boundless.client.toast.QuestUnlockedToast;
 import net.revilodev.boundless.item.ModItems;
 import net.revilodev.boundless.quest.KillCounterState;
@@ -664,16 +665,22 @@ public final class BoundlessNetwork {
 
     // push full quest and progress state to one player
     public static void syncPlayer(ServerPlayer p) {
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         clearObjectiveProgressCache(p);
         PacketDistributor.sendToPlayer(p, new SyncClear());
         sendConfig(p);
         sendQuestData(p);
         syncPlayerProgress(p);
+        if (startedAt != 0L) {
+            BoundlessDebug.rateLimited("player-sync:" + p.getUUID(), 2_000L,
+                    "player={}, elapsed={}ms", p.getGameProfile().getName(), (System.nanoTime() - startedAt) / 1_000_000L);
+        }
     }
 
     // sync quest statuses progress kills and config
     private static void syncPlayerProgress(ServerPlayer p) {
         if (p == null) return;
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
 
         List<KillEntry> killEntries = new ArrayList<>();
         KillCounterState.get(p.serverLevel()).snapshotFor(p.getUUID())
@@ -703,7 +710,11 @@ public final class BoundlessNetwork {
 
         sendObjectiveProgress(p);
 
-        syncComputedCompletion(p);
+        if (startedAt != 0L) {
+            BoundlessDebug.rateLimited("player-progress-sync:" + p.getUUID(), 2_000L,
+                    "player={}, kills={}, statuses={}, meta={}, elapsed={}ms", p.getGameProfile().getName(), killEntries.size(), statuses.size(), metaEntries.size(),
+                    (System.nanoTime() - startedAt) / 1_000_000L);
+        }
     }
 
     // sync objective counters only when they changed
@@ -724,6 +735,9 @@ public final class BoundlessNetwork {
         List<ObjectiveInputEntry> objectiveInputs = new ArrayList<>(inputSnapshot.size());
         inputSnapshot.forEach((key, value) -> objectiveInputs.add(new ObjectiveInputEntry(key, value)));
         PacketDistributor.sendToPlayer(player, new SyncObjectiveProgress(objectiveItems, objectiveFlags, objectiveInputs));
+        BoundlessDebug.rateLimited("objective-sync:" + player.getUUID(), 2_000L,
+                "player={}, itemEntries={}, flagEntries={}, inputEntries={}",
+                player.getGameProfile().getName(), objectiveItems.size(), objectiveFlags.size(), objectiveInputs.size());
     }
 
     // clear cached objective sync state for one player
@@ -837,24 +851,7 @@ public final class BoundlessNetwork {
         )));
     }
 
-    private static void syncComputedCompletion(ServerPlayer p) {
-        List<QuestData.Quest> quests = new ArrayList<>(QuestData.allServer(p.server));
-        for (QuestData.Quest q : quests) {
-            if (q == null) continue;
-            QuestTracker.Status st = QuestTracker.getStatus(q, p);
-            if (st == QuestTracker.Status.REDEEMED || st == QuestTracker.Status.REJECTED) continue;
-            if (QuestTracker.updateProgressAndCheckReady(q, p) && st == QuestTracker.Status.INCOMPLETE) {
-                if (Config.autoClaimQuestRewards()) {
-                    claimQuest(p, q);
-                } else {
-                    QuestTracker.setServerStatus(p, q.id, QuestTracker.Status.COMPLETED);
-                    sendStatus(p, q.id, QuestTracker.Status.COMPLETED.name());
-                }
-            }
-        }
-    }
-
-    // sync computed completion state after progress changes
+    // sync full authoritative quest definitions
     private static void sendQuestData(ServerPlayer p) {
         sendQuestData(List.of(p));
     }
@@ -862,11 +859,19 @@ public final class BoundlessNetwork {
     // send the full authoritative quest definition snapshot
     private static void sendQuestData(List<ServerPlayer> players) {
         if (players == null || players.isEmpty()) return;
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         ServerPlayer first = players.get(0);
         if (first == null || first.server == null) return;
         String json = buildQuestSyncJson(first.server);
         for (ServerPlayer player : players) {
             if (player != null) sendQuestJsonChunked(player, json);
+        }
+        if (startedAt != 0L) {
+            BoundlessDebug.rateLimited("quest-data-sync", 2_000L,
+                    "players={}, questBytes={}, chunksPerPlayer={}, elapsed={}ms",
+                    players.size(), json.getBytes(StandardCharsets.UTF_8).length,
+                    Math.max(1, (json.getBytes(StandardCharsets.UTF_8).length + QUEST_CHUNK_BYTES - 1) / QUEST_CHUNK_BYTES),
+                    (System.nanoTime() - startedAt) / 1_000_000L);
         }
     }
 
@@ -1067,6 +1072,8 @@ public final class BoundlessNetwork {
             byte[] part = start >= end ? new byte[0] : java.util.Arrays.copyOfRange(bytes, start, end);
             PacketDistributor.sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
         }
+        BoundlessDebug.rateLimited("quest-chunks:" + p.getUUID(), 2_000L,
+                "player={}, syncId={}, bytes={}, chunks={}", p.getGameProfile().getName(), syncId, bytes.length, total);
     }
 
     // sync one quest status to one player
@@ -1321,6 +1328,8 @@ public final class BoundlessNetwork {
                     if (!p.targetId().equals(target.id)) continue;
                     String key = QuestTracker.flagProgressKey(q, target);
                     if (QuestTracker.markFlagProgress(sp, key)) {
+                        BoundlessDebug.rateLimited("observe-report", 2_000L,
+                                "player={}, quest={}, target={}", sp.getGameProfile().getName(), q.id, target.id);
                         QuestTracker.markServerStateDirty(sp);
                         sendObjectiveProgress(sp);
                         QuestTracker.serverTickPlayer(sp);
@@ -1351,12 +1360,15 @@ public final class BoundlessNetwork {
         if (id.isBlank()) return "";
         if (".".equals(id) || "..".equals(id)) return "";
         if (id.contains("/") || id.contains("\\") || id.matches(".*[<>:\"|?*].*")) return "";
+        String lower = id.toLowerCase(java.util.Locale.ROOT);
+        if (id.startsWith(".") || lower.endsWith(".upload") || lower.endsWith(".tmp") || lower.endsWith(".temp")) return "";
         return id;
     }
 
     // unpack uploaded quest packs into authoritative storage
     private static void writeUploadedQuestPack(String id, byte[] zipBytes) throws IOException {
         Files.createDirectories(INSTANCE_QUEST_PACKS_ROOT);
+        QuestPackStorage.recoverStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
         Path targetRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
         if (!targetRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
         if (targetRoot.equals(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
@@ -1434,6 +1446,8 @@ public final class BoundlessNetwork {
     // apply objective progress sync on clients
     private static void handleSyncObjectiveProgress(SyncObjectiveProgress p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
+            BoundlessDebug.rateLimited("client-objective-apply", 2_000L,
+                    "itemEntries={}, flagEntries={}, inputEntries={}", p.items().size(), p.flags().size(), p.inputs().size());
             for (ObjectiveItemEntry entry : p.items()) {
                 QuestTracker.clientSetItemProgress(entry.key(), entry.count());
             }
@@ -1926,6 +1940,7 @@ public final class BoundlessNetwork {
             }
 
             if (received >= expected) {
+                long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
                 int totalLen = 0;
                 for (int i = 0; i < expected; i++) {
                     if (parts[i] == null) { reset(); return; }
@@ -1944,6 +1959,11 @@ public final class BoundlessNetwork {
                 reset();
                 QuestData.applyNetworkJson(json);
                 ClientOnly.applyConfigChanges();
+                if (startedAt != 0L) {
+                    BoundlessDebug.rateLimited("client-quest-sync", 2_000L,
+                            "syncId={}, bytes={}, chunks={}, elapsed={}ms", sid, totalLen, total,
+                            (System.nanoTime() - startedAt) / 1_000_000L);
+                }
             }
         }
     }

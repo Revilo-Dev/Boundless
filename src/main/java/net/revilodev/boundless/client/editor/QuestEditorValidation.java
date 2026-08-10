@@ -59,17 +59,17 @@ public final class QuestEditorValidation {
         );
     }
 
-    // compute invalid quest id
+    // determine invalid quest id
     public static boolean computeInvalidQuestId(EditorType editorType, String questId, boolean hasCurrentPack, Iterable<NamedEntry> questEntries, Path editingPath) {
         return editorType == EditorType.QUEST && (safe(questId).trim().isBlank() || isDuplicateQuestId(questId, hasCurrentPack, questEntries, editingPath));
     }
 
-    // compute invalid quest name
+    // determine invalid quest name
     public static boolean computeInvalidQuestName(EditorType editorType, String questName) {
         return editorType == EditorType.QUEST && safe(questName).trim().isBlank();
     }
 
-    // compute invalid quest dependencies
+    // determine invalid quest dependencies
     public static boolean computeInvalidQuestDependencies(String dependencyRaw, boolean hasCurrentPack, Collection<String> dependencyCache) {
         if (!hasCurrentPack || safe(dependencyRaw).trim().isBlank()) return false;
         for (String dependency : QuestEditorEntryCodec.extractEntryLines(dependencyRaw)) {
