@@ -6,10 +6,10 @@ import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.revilodev.boundless.Config;
-import net.revilodev.boundless.quest.QuestTracker;
 
 public final class QuestUnlockedToast implements Toast {
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_toast.png");
@@ -25,12 +25,31 @@ public final class QuestUnlockedToast implements Toast {
 
     public static void show(String questName, Item icon) {
         if (!Config.enableQuestToasts()) return;
-        if (QuestTracker.serverToastsDisabled()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return;
         mc.getToasts().addToast(new QuestUnlockedToast(
                 Component.translatable("toast.boundless.quest_unlocked"),
                 Component.literal(questName),
+                icon
+        ));
+    }
+
+    public static void showCustom(String title, String description, String iconId) {
+        if (!Config.enableQuestToasts()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null) return;
+
+        Item icon = null;
+        try {
+            if (iconId != null && !iconId.isBlank()) {
+                icon = BuiltInRegistries.ITEM.getOptional(ResourceLocation.parse(iconId)).orElse(null);
+            }
+        } catch (Exception ignored) {
+        }
+
+        mc.getToasts().addToast(new QuestUnlockedToast(
+                Component.literal(title == null ? "" : title),
+                Component.literal(description == null ? "" : description),
                 icon
         ));
     }

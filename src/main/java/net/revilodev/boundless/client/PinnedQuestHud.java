@@ -16,11 +16,8 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import net.neoforged.neoforge.common.NeoForge;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.quest.QuestData;
@@ -42,7 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
-@OnlyIn(Dist.CLIENT)
+@Environment(EnvType.CLIENT)
 public final class PinnedQuestHud {
     private static final ResourceLocation TEX_BG =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pinned_quest_toast.png");
@@ -66,7 +63,6 @@ public final class PinnedQuestHud {
 
     private static final Deque<String> PINS = new ArrayDeque<>();
     private static final Map<String, ItemStack> ITEM_ICON_CACHE = new HashMap<>();
-    private static boolean REGISTERED = false;
 
     private static boolean LOADED = false;
     private static String ACTIVE_KEY = null;
@@ -76,11 +72,9 @@ public final class PinnedQuestHud {
     private PinnedQuestHud() {}
 
     public static void init() {
-        ensureRegistered();
     }
 
     public static void setCurrentQuestId(String questId) {
-        ensureRegistered();
         CURRENT_QUEST_ID = questId;
     }
 
@@ -101,7 +95,6 @@ public final class PinnedQuestHud {
     public static void toggle(String questId) {
         if (questId == null || questId.isBlank()) return;
         if (Config.disableQuestPinning()) return;
-        ensureRegistered();
         ensureLoaded();
 
         if (PINS.remove(questId)) {
@@ -117,21 +110,12 @@ public final class PinnedQuestHud {
     public static boolean isPinned(String questId) {
         if (questId == null || questId.isBlank()) return false;
         if (Config.disableQuestPinning()) return false;
-        ensureRegistered();
         ensureLoaded();
         return PINS.contains(questId);
     }
 
     public static void resetPinsOnLeave() {
-        ensureRegistered();
         resetPins(true);
-    }
-
-    private static void ensureRegistered() {
-        if (REGISTERED) return;
-        REGISTERED = true;
-        NeoForge.EVENT_BUS.addListener(PinnedQuestHud::onRenderGui);
-        NeoForge.EVENT_BUS.addListener(PinnedQuestHud::onClientLogout);
     }
 
     private static void ensureLoaded() {
@@ -248,11 +232,7 @@ public final class PinnedQuestHud {
         ACTIVE_KEY = null;
     }
 
-    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut e) {
-        resetPins(true);
-    }
-
-    public static void onRenderGui(RenderGuiEvent.Post e) {
+    public static void onRenderGui(GuiGraphics gg) {
         if (Config.disableQuestPinning()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.player == null) return;
@@ -281,7 +261,6 @@ public final class PinnedQuestHud {
 
         if (PINS.isEmpty()) return;
 
-        GuiGraphics gg = e.getGuiGraphics();
         int sw = mc.getWindow().getGuiScaledWidth();
         int sh = mc.getWindow().getGuiScaledHeight();
 

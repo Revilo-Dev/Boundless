@@ -34,9 +34,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.entity.MobCategory;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -76,7 +75,7 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-@OnlyIn(Dist.CLIENT)
+@Environment(EnvType.CLIENT)
 public final class QuestEditorScreen extends Screen {
     private static final ResourceLocation PANEL_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
@@ -565,7 +564,6 @@ public final class QuestEditorScreen extends Screen {
         initEntryRowBoxes();
         initDescriptionFormatterButtons();
 
-        attachPackNameSanitizer(packNameBox);
         attachIdSanitizer(packNamespaceBox, false);
         attachIdSanitizer(packIconPathBox, false);
         attachIdSanitizer(catIdBox, false);
@@ -1417,12 +1415,9 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void savePackCreate() {
-        String name = normalizePackName(packNameBox.getValue());
-        if (!Objects.equals(name, safe(packNameBox.getValue()))) {
-            packNameBox.setValue(name);
-        }
+        String name = safe(packNameBox.getValue()).trim();
         String namespace = namespaceFromPackName(name);
-        if (!hasPackNameContent(name)) {
+        if (name.isBlank()) {
             setError("Pack name required");
             return;
         }
@@ -1459,12 +1454,9 @@ public final class QuestEditorScreen extends Screen {
     private void savePackOptions() {
         if (currentPack == null) return;
 
-        String requestedName = normalizePackName(packNameBox.getValue());
-        if (!Objects.equals(requestedName, safe(packNameBox.getValue()))) {
-            packNameBox.setValue(requestedName);
-        }
+        String requestedName = safe(packNameBox.getValue()).trim();
         String requestedNamespace = namespaceFromPackName(requestedName);
-        if (!hasPackNameContent(requestedName)) {
+        if (requestedName.isBlank()) {
             setError("Pack name required");
             return;
         }
@@ -2028,8 +2020,8 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private String nextAvailablePackName(String baseName) {
-        String base = normalizePackName(baseName);
-        if (base.isBlank()) return "new-pack";
+        String base = safe(baseName).trim();
+        if (base.isBlank()) return "New Pack";
         Set<String> existing = new HashSet<>();
         for (QuestPack pack : listPacks()) {
             if (pack != null && pack.name != null && !pack.name.isBlank()) {
@@ -2039,13 +2031,13 @@ public final class QuestEditorScreen extends Screen {
         if (!existing.contains(base) && !Files.exists(packsRoot().resolve(base))) {
             return base;
         }
-        String copyBase = base + "-copy";
+        String copyBase = base + " Copy";
         if (!existing.contains(copyBase) && !Files.exists(packsRoot().resolve(copyBase))) {
             return copyBase;
         }
         int index = 2;
         while (true) {
-            String candidate = copyBase + "-" + index;
+            String candidate = copyBase + " " + index;
             if (!existing.contains(candidate) && !Files.exists(packsRoot().resolve(candidate))) {
                 return candidate;
             }
@@ -3755,21 +3747,6 @@ public final class QuestEditorScreen extends Screen {
         });
     }
 
-    private void attachPackNameSanitizer(EditBox box) {
-        if (box == null) return;
-        box.setResponder(value -> {
-            if (suppressIdSanitizer) return;
-            String normalized = normalizePackName(value);
-            if (normalized.equals(value)) return;
-            int cursor = box.getCursorPosition();
-            suppressIdSanitizer = true;
-            box.setValue(normalized);
-            box.setCursorPosition(Math.min(cursor, normalized.length()));
-            box.setHighlightPos(box.getCursorPosition());
-            suppressIdSanitizer = false;
-        });
-    }
-
     private String normalizeIdInput(String value, boolean commaSeparated) {
         String raw = safe(value);
         if (raw.isEmpty()) return raw;
@@ -3786,12 +3763,6 @@ public final class QuestEditorScreen extends Screen {
             out.append(normalized);
         }
         return out.toString();
-    }
-
-    private String normalizePackName(String value) {
-        String raw = safe(value).toLowerCase(Locale.ROOT);
-        if (raw.isBlank()) return "";
-        return raw.replaceAll("\\s+", "-").replaceAll("[^a-z0-9_.-]", "");
     }
 
     private void addOptional(JsonObject obj, String key, String value) {
@@ -3925,11 +3896,7 @@ public final class QuestEditorScreen extends Screen {
 
     private boolean isInvalidPackFolderName(String name) {
         String value = safe(name).trim();
-        return !hasPackNameContent(value) || !value.equals(normalizePackName(value));
-    }
-
-    private boolean hasPackNameContent(String name) {
-        return safe(name).toLowerCase(Locale.ROOT).matches(".*[a-z0-9].*");
+        return value.isBlank() || value.matches(".*[<>:\"/\\\\|?*].*");
     }
 
     private boolean isInvalidNamespace(String namespace) {
@@ -3938,9 +3905,11 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private String namespaceFromPackName(String packName) {
-        String value = normalizePackName(packName);
+        String value = safe(packName).trim().toLowerCase(Locale.ROOT);
         if (value.isBlank()) return "pack";
-        String normalized = value.replaceAll("^[_\\.-]+|[_\\.-]+$", "");
+        String normalized = value.replaceAll("[^a-z0-9_.-]", "_");
+        normalized = normalized.replaceAll("_+", "_");
+        normalized = normalized.replaceAll("^[_\\.-]+|[_\\.-]+$", "");
         if (normalized.isBlank()) return "pack";
         return normalized;
     }
@@ -4123,7 +4092,7 @@ public final class QuestEditorScreen extends Screen {
 
     private boolean sendQuestPackEnabledToServer(String id, boolean enabled, boolean builtin) {
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
             return true;
         } catch (Throwable ignored) {
             return false;
@@ -4143,7 +4112,7 @@ public final class QuestEditorScreen extends Screen {
                 int start = i * chunkSize;
                 int end = Math.min(zipBytes.length, start + chunkSize);
                 byte[] part = java.util.Arrays.copyOfRange(zipBytes, start, end);
-                PacketDistributor.sendToServer(new BoundlessNetwork.UploadQuestPackChunk(
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.UploadQuestPackChunk(
                         pack.name,
                         enabled,
                         uploadId,
@@ -4162,7 +4131,7 @@ public final class QuestEditorScreen extends Screen {
         String normalizedName = safe(packName).trim();
         if (normalizedName.isBlank()) return false;
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
             return true;
         } catch (Throwable ignored) {
             return false;

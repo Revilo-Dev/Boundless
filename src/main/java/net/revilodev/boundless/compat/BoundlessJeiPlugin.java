@@ -17,4 +17,3 @@ public final class BoundlessJeiPlugin implements IModPlugin {
         JeiCompat.setRuntime(jeiRuntime);
     }
 }
-

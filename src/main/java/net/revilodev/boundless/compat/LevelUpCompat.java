@@ -3,7 +3,7 @@ package net.revilodev.boundless.compat;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
-import net.neoforged.fml.ModList;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.lang.reflect.Method;
 
@@ -72,7 +72,7 @@ public final class LevelUpCompat {
     private static void ensureInitialized() {
         if (initialized) return;
         initialized = true;
-        if (!ModList.get().isLoaded("levelup")) return;
+        if (!FabricLoader.getInstance().isModLoaded("levelup")) return;
         try {
             Class<?> apiClass = Class.forName("com.revilo.levelup.api.LevelUpApi");
             getLevelMethod = apiClass.getMethod("getLevel", Player.class);

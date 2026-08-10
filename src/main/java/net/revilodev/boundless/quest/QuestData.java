@@ -12,9 +12,8 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.Item;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.fml.loading.FMLPaths;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.revilodev.boundless.Config;
 
 import java.io.BufferedReader;
@@ -38,7 +37,7 @@ public final class QuestData {
     private static final String PATH_SUBCATEGORY = "quests/subcategory";
     private static final String PATH_SUBCATEGORY_ALT = "quests/sub-category";
     private static final Path INSTANCE_QUEST_PACKS_ROOT =
-            FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks");
+            FabricLoader.getInstance().getGameDir().resolve("config").resolve("boundless").resolve("questpacks");
 
     private static final Map<String, Quest> QUESTS = new LinkedHashMap<>();
     private static final Map<String, Category> CATEGORIES = new LinkedHashMap<>();
@@ -736,7 +735,7 @@ public final class QuestData {
     }
 
     public static synchronized void loadClient(boolean forceReload) {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
+        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) return;
 
         Minecraft mc = Minecraft.getInstance();
         String worldId = null;
@@ -779,7 +778,7 @@ public final class QuestData {
 
         lastWorldId = worldId;
 
-        ResourceManager rm = server.getServerResources().resourceManager();
+        ResourceManager rm = server.getResourceManager();
         load(rm, forceReload);
         loadedServer = true;
     }
@@ -1587,7 +1586,7 @@ public final class QuestData {
     }
 
     public static synchronized void clearClientNetworkData() {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
+        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) return;
         QUESTS.clear();
         CATEGORIES.clear();
         SUBCATEGORIES.clear();

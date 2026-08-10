@@ -61,7 +61,7 @@ public final class QuestProgressState extends SavedData {
     public static QuestProgressState get(ServerLevel level) {
         ServerLevel overworld = level.getServer().overworld();
         return overworld.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(QuestProgressState::new, QuestProgressState::load),
+                new SavedData.Factory<>(QuestProgressState::new, QuestProgressState::load, null),
                 "boundless_quests"
         );
     }

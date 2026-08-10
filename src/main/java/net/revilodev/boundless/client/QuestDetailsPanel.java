@@ -22,9 +22,8 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.JeiCompat;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -40,7 +39,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@OnlyIn(Dist.CLIENT)
+@Environment(EnvType.CLIENT)
 public final class QuestDetailsPanel extends AbstractWidget {
 
     private static final int LINE_ITEM_ROW = 22;
@@ -122,11 +121,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
             if (quest != null && mc.player != null) {
                 QuestTracker.Status status = QuestTracker.getStatus(quest, mc.player);
                 if (status == QuestTracker.Status.REJECTED && quest.optional) {
-                    PacketDistributor.sendToServer(new BoundlessNetwork.UndoReject(quest.id));
+                    BoundlessNetwork.sendToServer(new BoundlessNetwork.UndoReject(quest.id));
                 } else if (QuestTracker.canRestartRepeatable(quest, mc.player)) {
-                    PacketDistributor.sendToServer(new BoundlessNetwork.RestartRepeatable(quest.id));
+                    BoundlessNetwork.sendToServer(new BoundlessNetwork.RestartRepeatable(quest.id));
                 } else {
-                    PacketDistributor.sendToServer(new BoundlessNetwork.Redeem(quest.id));
+                    BoundlessNetwork.sendToServer(new BoundlessNetwork.Redeem(quest.id));
                 }
                 if (this.onBack != null) this.onBack.run();
             }
@@ -136,7 +135,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         this.reject = new RejectButton(getX(), getY(), () -> {
             if (quest != null && mc.player != null && quest.optional) {
-                PacketDistributor.sendToServer(new BoundlessNetwork.Reject(quest.id));
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.Reject(quest.id));
                 if (this.onBack != null) this.onBack.run();
             }
         });
@@ -149,7 +148,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         this.scroll = new ScrollButton(getX(), getY(), () -> {
             if (quest != null && mc.player != null) {
-                PacketDistributor.sendToServer(new BoundlessNetwork.CreateScroll(quest.id));
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.CreateScroll(quest.id));
             }
         });
         this.scroll.visible = false;
@@ -1380,7 +1379,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 if (targetBox != box) continue;
                 String normalized = value == null ? "" : value.trim();
                 QuestTracker.setFieldInputProgress(mc.player, key, normalized);
-                PacketDistributor.sendToServer(new BoundlessNetwork.UpdateFieldInput(quest.id, target.id, normalized));
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.UpdateFieldInput(quest.id, target.id, normalized));
                 break;
             }
         });

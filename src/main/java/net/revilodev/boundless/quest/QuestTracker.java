@@ -27,9 +27,9 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.fabricmc.loader.api.FabricLoader;
 import net.revilodev.boundless.BoundlessMod;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.LevelUpCompat;
@@ -78,7 +78,7 @@ public final class QuestTracker {
     }
 
     private static boolean isClientMultiplayer() {
-        if (FMLEnvironment.dist != Dist.CLIENT) return false;
+        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) return false;
         return ClientOnly.isClientMultiplayerFlag(CLIENT_IN_MULTIPLAYER);
     }
 
@@ -91,7 +91,7 @@ public final class QuestTracker {
         int prev = CLIENT_ITEM_PROGRESS.getOrDefault(key, 0);
         int now = Math.max(prev, Math.min(cur, req));
 
-        if (FMLEnvironment.dist == Dist.CLIENT && prev > 0) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT && prev > 0) {
             now = ClientOnly.adjustItemProgress(key, cur, req, prev, now);
         }
 
@@ -193,7 +193,7 @@ public final class QuestTracker {
     }
 
     public static void forceSave() {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
+        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) return;
         try {
             if (ACTIVE_KEY == null) ensureClientStateLoaded(null);
         } catch (Throwable ignored) {}
@@ -201,7 +201,7 @@ public final class QuestTracker {
     }
 
     private static void ensureClientStateLoaded(Player player) {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
+        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) return;
         String key = computeClientKey();
         if (!key.equals(ACTIVE_KEY)) {
             if (ACTIVE_KEY != null) ClientOnly.saveClientState(ACTIVE_KEY);
@@ -520,7 +520,7 @@ public final class QuestTracker {
 
         if (player instanceof ServerPlayer sp) return hasAdvancementServer(sp, rl);
 
-        if (FMLEnvironment.dist == Dist.CLIENT && player.level().isClientSide) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT && player.level().isClientSide) {
             try {
                 Class<?> mcClass = Class.forName("net.minecraft.client.Minecraft");
                 Object mc = mcClass.getMethod("getInstance").invoke(null);
@@ -847,7 +847,7 @@ public final class QuestTracker {
             QuestObjectiveState.get(sp.serverLevel()).clearPlayer(sp.getUUID());
             BoundlessNetwork.syncPlayer(sp);
             CLIENT_EFFECT_PROGRESS.clear();
-            if (FMLEnvironment.dist == Dist.CLIENT) clientClearAll();
+            if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) clientClearAll();
             return;
         }
         if (player != null && player.level().isClientSide) clientClearAll();
@@ -855,7 +855,7 @@ public final class QuestTracker {
 
     public static void clientSetStatus(String questId, Status st) {
         if (questId == null || st == null) return;
-        if (FMLEnvironment.dist == Dist.CLIENT) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
             try { ensureClientStateLoaded(null); } catch (Throwable ignored) {}
         }
         if (st == Status.INCOMPLETE) {
@@ -865,7 +865,7 @@ public final class QuestTracker {
             activeStateMap().put(questId, st);
             if (st == Status.REDEEMED) clearClientInputForQuest(questId);
         }
-        if (FMLEnvironment.dist == Dist.CLIENT && ACTIVE_KEY != null) ClientOnly.saveClientState(ACTIVE_KEY);
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT && ACTIVE_KEY != null) ClientOnly.saveClientState(ACTIVE_KEY);
     }
 
     private static void clearClientInputForQuest(String questId) {
@@ -906,7 +906,7 @@ public final class QuestTracker {
         CLIENT_CLAIM_COUNTS.clear();
         CLIENT_SCROLL_REDEEMED.clear();
         CLIENT_SCROLL_CREATED.clear();
-        if (FMLEnvironment.dist == Dist.CLIENT) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
             try { ensureClientStateLoaded(null); } catch (Throwable ignored) {}
             activeStateMap().clear();
             if (ACTIVE_KEY != null) ClientOnly.saveClientState(ACTIVE_KEY);
@@ -983,7 +983,7 @@ public final class QuestTracker {
         SERVER_TOASTS_DISABLED = v;
     }
 
-    @OnlyIn(Dist.CLIENT)
+    @Environment(EnvType.CLIENT)
     private static final class ClientOnly {
 
         private static boolean isClientMultiplayerFlag(boolean fallback) {

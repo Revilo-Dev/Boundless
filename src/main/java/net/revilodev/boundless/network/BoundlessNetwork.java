@@ -16,14 +16,12 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.fml.loading.FMLPaths;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
-import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.loader.api.FabricLoader;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.toast.QuestUnlockedToast;
 import net.revilodev.boundless.item.ModItems;
@@ -60,40 +58,90 @@ public final class BoundlessNetwork {
     private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
     private static final int QUEST_CHUNK_BYTES = 60000;
     private static final Path INSTANCE_QUEST_PACKS_ROOT =
-            FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks").normalize();
+            FabricLoader.getInstance().getGameDir().resolve("config").resolve("boundless").resolve("questpacks").normalize();
 
     private BoundlessNetwork() {}
 
-    public static void bootstrap(IEventBus bus) {
-        bus.addListener(BoundlessNetwork::register);
-    }
-
-    private static void register(RegisterPayloadHandlersEvent event) {
+    public static void bootstrap() {
         if (REGISTERED) return;
         REGISTERED = true;
 
-        PayloadRegistrar r = event.registrar(CHANNEL).versioned(VERSION);
+        PayloadTypeRegistry.playC2S().register(Redeem.TYPE, Redeem.CODEC);
+        PayloadTypeRegistry.playC2S().register(Reject.TYPE, Reject.CODEC);
+        PayloadTypeRegistry.playC2S().register(UndoReject.TYPE, UndoReject.CODEC);
+        PayloadTypeRegistry.playC2S().register(CreateScroll.TYPE, CreateScroll.CODEC);
+        PayloadTypeRegistry.playC2S().register(RestartRepeatable.TYPE, RestartRepeatable.CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateFieldInput.TYPE, UpdateFieldInput.CODEC);
+        PayloadTypeRegistry.playC2S().register(SetQuestPackEnabled.TYPE, SetQuestPackEnabled.CODEC);
+        PayloadTypeRegistry.playC2S().register(UpdateServerConfig.TYPE, UpdateServerConfig.CODEC);
+        PayloadTypeRegistry.playC2S().register(UploadQuestPackChunk.TYPE, UploadQuestPackChunk.CODEC);
+        PayloadTypeRegistry.playC2S().register(DeleteQuestPack.TYPE, DeleteQuestPack.CODEC);
 
-        r.playToServer(Redeem.TYPE, Redeem.CODEC, BoundlessNetwork::handleRedeem);
-        r.playToServer(Reject.TYPE, Reject.CODEC, BoundlessNetwork::handleReject);
-        r.playToServer(UndoReject.TYPE, UndoReject.CODEC, BoundlessNetwork::handleUndoReject);
-        r.playToServer(CreateScroll.TYPE, CreateScroll.CODEC, BoundlessNetwork::handleCreateScroll);
-        r.playToServer(RestartRepeatable.TYPE, RestartRepeatable.CODEC, BoundlessNetwork::handleRestartRepeatable);
-        r.playToServer(UpdateFieldInput.TYPE, UpdateFieldInput.CODEC, BoundlessNetwork::handleUpdateFieldInput);
-        r.playToServer(SetQuestPackEnabled.TYPE, SetQuestPackEnabled.CODEC, BoundlessNetwork::handleSetQuestPackEnabled);
-        r.playToServer(UpdateServerConfig.TYPE, UpdateServerConfig.CODEC, BoundlessNetwork::handleUpdateServerConfig);
-        r.playToServer(UploadQuestPackChunk.TYPE, UploadQuestPackChunk.CODEC, BoundlessNetwork::handleUploadQuestPackChunk);
-        r.playToServer(DeleteQuestPack.TYPE, DeleteQuestPack.CODEC, BoundlessNetwork::handleDeleteQuestPack);
+        PayloadTypeRegistry.playS2C().register(SyncStatus.TYPE, SyncStatus.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncStatuses.TYPE, SyncStatuses.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncProgressMeta.TYPE, SyncProgressMeta.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncKills.TYPE, SyncKills.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncClear.TYPE, SyncClear.CODEC);
+        PayloadTypeRegistry.playS2C().register(Toast.TYPE, Toast.CODEC);
+        PayloadTypeRegistry.playS2C().register(OpenQuestBook.TYPE, OpenQuestBook.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncConfig.TYPE, SyncConfig.CODEC);
+        PayloadTypeRegistry.playS2C().register(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC);
 
-        r.playToClient(SyncStatus.TYPE, SyncStatus.CODEC, BoundlessNetwork::handleSyncStatus);
-        r.playToClient(SyncStatuses.TYPE, SyncStatuses.CODEC, BoundlessNetwork::handleSyncStatuses);
-        r.playToClient(SyncProgressMeta.TYPE, SyncProgressMeta.CODEC, BoundlessNetwork::handleSyncProgressMeta);
-        r.playToClient(SyncKills.TYPE, SyncKills.CODEC, BoundlessNetwork::handleSyncKills);
-        r.playToClient(SyncClear.TYPE, SyncClear.CODEC, BoundlessNetwork::handleSyncClear);
-        r.playToClient(Toast.TYPE, Toast.CODEC, BoundlessNetwork::handleToast);
-        r.playToClient(OpenQuestBook.TYPE, OpenQuestBook.CODEC, BoundlessNetwork::handleOpenQuestBook);
-        r.playToClient(SyncConfig.TYPE, SyncConfig.CODEC, BoundlessNetwork::handleSyncConfig);
-        r.playToClient(SyncQuestsChunk.TYPE, SyncQuestsChunk.CODEC, BoundlessNetwork::handleSyncQuestsChunk);
+        ServerPlayNetworking.registerGlobalReceiver(Redeem.TYPE, (payload, context) ->
+                context.server().execute(() -> handleRedeem(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(Reject.TYPE, (payload, context) ->
+                context.server().execute(() -> handleReject(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UndoReject.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUndoReject(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(CreateScroll.TYPE, (payload, context) ->
+                context.server().execute(() -> handleCreateScroll(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(RestartRepeatable.TYPE, (payload, context) ->
+                context.server().execute(() -> handleRestartRepeatable(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UpdateFieldInput.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUpdateFieldInput(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(SetQuestPackEnabled.TYPE, (payload, context) ->
+                context.server().execute(() -> handleSetQuestPackEnabled(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UpdateServerConfig.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUpdateServerConfig(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(UploadQuestPackChunk.TYPE, (payload, context) ->
+                context.server().execute(() -> handleUploadQuestPackChunk(payload, context.player())));
+        ServerPlayNetworking.registerGlobalReceiver(DeleteQuestPack.TYPE, (payload, context) ->
+                context.server().execute(() -> handleDeleteQuestPack(payload, context.player())));
+    }
+
+    @Environment(EnvType.CLIENT)
+    public static void bootstrapClient() {
+        ClientPlayNetworking.registerGlobalReceiver(SyncStatus.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncStatus(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncStatuses.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncStatuses(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncProgressMeta.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncProgressMeta(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncKills.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncKills(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncClear.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncClear(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(Toast.TYPE, (payload, context) ->
+                context.client().execute(() -> handleToast(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(OpenQuestBook.TYPE, (payload, context) ->
+                context.client().execute(() -> handleOpenQuestBook(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncConfig.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncConfig(payload)));
+        ClientPlayNetworking.registerGlobalReceiver(SyncQuestsChunk.TYPE, (payload, context) ->
+                context.client().execute(() -> handleSyncQuestsChunk(payload)));
+    }
+
+    public static void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
+        if (player != null && payload != null) {
+            ServerPlayNetworking.send(player, payload);
+        }
+    }
+
+    @Environment(EnvType.CLIENT)
+    public static void sendToServer(CustomPacketPayload payload) {
+        if (payload != null) {
+            ClientPlayNetworking.send(payload);
+        }
     }
 
     public record Redeem(String questId) implements CustomPacketPayload {
@@ -509,7 +557,7 @@ public final class BoundlessNetwork {
     }
 
     public static void syncPlayer(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new SyncClear());
+        sendToPlayer(p, new SyncClear());
         sendConfig(p);
         sendQuestData(p);
 
@@ -517,14 +565,14 @@ public final class BoundlessNetwork {
         KillCounterState.get(p.serverLevel()).snapshotFor(p.getUUID())
                 .forEach((id, ct) -> killEntries.add(new KillEntry(id, ct)));
         if (!killEntries.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncKills(killEntries));
+            sendToPlayer(p, new SyncKills(killEntries));
         }
 
         List<StatusEntry> statuses = new ArrayList<>();
         QuestProgressState.get(p.serverLevel()).snapshotFor(p.getUUID())
                 .forEach((questId, status) -> statuses.add(new StatusEntry(questId, status)));
         if (!statuses.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncStatuses(statuses));
+            sendToPlayer(p, new SyncStatuses(statuses));
         }
 
         List<ProgressMetaEntry> metaEntries = new ArrayList<>();
@@ -536,14 +584,14 @@ public final class BoundlessNetwork {
                         progress != null && progress.scrollCreated()
                 )));
         if (!metaEntries.isEmpty()) {
-            PacketDistributor.sendToPlayer(p, new SyncProgressMeta(metaEntries));
+            sendToPlayer(p, new SyncProgressMeta(metaEntries));
         }
 
         syncComputedCompletion(p);
     }
 
     private static void sendConfig(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new SyncConfig(
+        sendToPlayer(p, new SyncConfig(
                 configStringList(Config.disabledCategories()),
                 configStringList(Config.appliedQuestPacks()),
                 configStringList(Config.disabledQuestPacks()),
@@ -599,7 +647,7 @@ public final class BoundlessNetwork {
     public static void sendProgressMeta(ServerPlayer player, String questId) {
         if (player == null || questId == null || questId.isBlank()) return;
         var progress = QuestProgressState.get(player.serverLevel()).progress(player.getUUID(), questId);
-        PacketDistributor.sendToPlayer(player, new SyncProgressMeta(List.of(
+        sendToPlayer(player, new SyncProgressMeta(List.of(
                 new ProgressMetaEntry(questId, progress.claimCount(), progress.scrollRedeemed(), progress.scrollCreated())
         )));
     }
@@ -778,20 +826,20 @@ public final class BoundlessNetwork {
             int start = i * QUEST_CHUNK_BYTES;
             int end = Math.min(bytes.length, start + QUEST_CHUNK_BYTES);
             byte[] part = start >= end ? new byte[0] : java.util.Arrays.copyOfRange(bytes, start, end);
-            PacketDistributor.sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
+            sendToPlayer(p, new SyncQuestsChunk(syncId, total, i, part));
         }
     }
 
     public static void sendStatus(ServerPlayer p, String questId, String status) {
-        PacketDistributor.sendToPlayer(p, new SyncStatus(questId, status));
+        sendToPlayer(p, new SyncStatus(questId, status));
     }
 
     public static void sendToast(ServerPlayer p, String questId) {
-        PacketDistributor.sendToPlayer(p, new Toast(questId));
+        sendToPlayer(p, new Toast(questId));
     }
 
     public static void sendOpenQuestBook(ServerPlayer p) {
-        PacketDistributor.sendToPlayer(p, new OpenQuestBook());
+        sendToPlayer(p, new OpenQuestBook());
     }
 
     public static void sendToastLocal(String questId) {
@@ -800,187 +848,157 @@ public final class BoundlessNetwork {
         );
     }
 
-    private static void handleRedeem(Redeem p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
-                if (!QuestTracker.isReady(q, sp)) return;
-                claimQuest(sp, q);
-            });
+    private static void handleRedeem(Redeem p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (!QuestTracker.isReady(q, sp)) return;
+            claimQuest(sp, q);
         });
     }
 
-    private static void handleReject(Reject p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
-                if (QuestTracker.serverReject(q, sp)) {
-                    QuestTracker.setServerStatus(sp, q.id, QuestTracker.Status.REJECTED);
-                    sendStatus(sp, q.id, QuestTracker.Status.REJECTED.name());
-                }
-            });
-        });
-    }
-
-    private static void handleCreateScroll(CreateScroll p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (!Config.enableQuestScrolls()) return;
-            QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
-                if (!QuestTracker.canCreateScroll(q, sp)) return;
-                QuestProgressState.get(sp.serverLevel()).setScrollCreated(sp.getUUID(), q.id, true);
-                ItemStack stack = ModItems.createQuestScroll(q.id);
-                if (!sp.getInventory().add(stack) && !stack.isEmpty()) {
-                    sp.drop(stack, false);
-                }
-                sendProgressMeta(sp, q.id);
-            });
-        });
-    }
-
-    private static void handleUndoReject(UndoReject p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
-                if (QuestTracker.serverUndoReject(q, sp)) {
-                    sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
-                }
-            });
-        });
-    }
-
-    private static void handleRestartRepeatable(RestartRepeatable p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
-                if (QuestTracker.restartRepeatable(q, sp)) {
-                    sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
-                }
-            });
-        });
-    }
-
-    private static void handleUpdateFieldInput(UpdateFieldInput p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || p.questId() == null || p.questId().isBlank() || p.targetId() == null || p.targetId().isBlank()) return;
-            QuestData.Quest quest = QuestData.byIdServer(sp.server, p.questId()).orElse(null);
-            if (quest == null || quest.completion == null || quest.completion.targets == null) return;
-            boolean validFieldTarget = false;
-            for (QuestData.Target t : quest.completion.targets) {
-                if (t == null || !t.isFieldInput()) continue;
-                if (!p.targetId().equals(t.id)) continue;
-                validFieldTarget = true;
-                break;
-            }
-            if (!validFieldTarget) return;
-            String key = p.questId() + ":field:" + p.targetId();
-            QuestTracker.setFieldInputProgress(sp, key, p.value());
-        });
-    }
-
-    private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
-
-            if (p.builtin()) {
-                Config.ENABLE_BUILTIN_QUEST_PACK.set(p.enabled());
-                Config.SPEC.save();
-            } else {
-                String id = p.id() == null ? "" : p.id().trim();
-                if (id.isBlank()) return;
-                if (id.contains("/") || id.contains("\\")) return;
-                Path packRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
-                if (!packRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT) || !Files.isDirectory(packRoot)) return;
-                Config.setQuestPackApplied(id, p.enabled());
-            }
-
-            QuestData.loadServer(sp.server, true);
-            for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
-                syncPlayer(player);
+    private static void handleReject(Reject p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (QuestTracker.serverReject(q, sp)) {
+                QuestTracker.setServerStatus(sp, q.id, QuestTracker.Status.REJECTED);
+                sendStatus(sp, q.id, QuestTracker.Status.REJECTED.name());
             }
         });
     }
 
-    private static void handleUpdateServerConfig(UpdateServerConfig p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+    private static void handleCreateScroll(CreateScroll p, ServerPlayer sp) {
+        if (!Config.enableQuestScrolls()) return;
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (!QuestTracker.canCreateScroll(q, sp)) return;
+            QuestProgressState.get(sp.serverLevel()).setScrollCreated(sp.getUUID(), q.id, true);
+            ItemStack stack = ModItems.createQuestScroll(q.id);
+            if (!sp.getInventory().add(stack) && !stack.isEmpty()) {
+                sp.drop(stack, false);
+            }
+            sendProgressMeta(sp, q.id);
+        });
+    }
 
-            Config.PINNED_QUEST_HUD_POSITION.set(p.pinnedQuestHudPosition());
-            Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(p.hideQuestBookInInventory());
-            Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(p.questBookInventoryButtonPosition());
-            Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(p.centerInventoryWithQuestPanel());
-            Config.HIDE_CATEGORY_HEADER.set(p.hideCategoryHeader());
-            Config.FILTER_DISPLAY_MODE.set(p.filterDisplayMode());
-            Config.DISABLE_CATEGORIES.set(p.disableCategories());
-            Config.HIDE_QUEST_WIDGET_ICONS.set(p.hideQuestWidgetIcons());
-            Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questTextScale())));
-            Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
-            Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
-            Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
-            Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
-            Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
-            Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
-            Config.ENABLE_QUEST_SCROLLS.set(p.enableQuestScrolls());
-            Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
-            Config.SPAWN_WITH_QUEST_BOOK.set(p.spawnWithQuestBook());
+    private static void handleUndoReject(UndoReject p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (QuestTracker.serverUndoReject(q, sp)) {
+                sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
+            }
+        });
+    }
+
+    private static void handleRestartRepeatable(RestartRepeatable p, ServerPlayer sp) {
+        QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
+            if (QuestTracker.restartRepeatable(q, sp)) {
+                sendStatus(sp, q.id, QuestTracker.Status.INCOMPLETE.name());
+            }
+        });
+    }
+
+    private static void handleUpdateFieldInput(UpdateFieldInput p, ServerPlayer sp) {
+        if (sp == null || p.questId() == null || p.questId().isBlank() || p.targetId() == null || p.targetId().isBlank()) return;
+        QuestData.Quest quest = QuestData.byIdServer(sp.server, p.questId()).orElse(null);
+        if (quest == null || quest.completion == null || quest.completion.targets == null) return;
+        boolean validFieldTarget = false;
+        for (QuestData.Target t : quest.completion.targets) {
+            if (t == null || !t.isFieldInput()) continue;
+            if (!p.targetId().equals(t.id)) continue;
+            validFieldTarget = true;
+            break;
+        }
+        if (!validFieldTarget) return;
+        String key = p.questId() + ":field:" + p.targetId();
+        QuestTracker.setFieldInputProgress(sp, key, p.value());
+    }
+
+    private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+
+        if (p.builtin()) {
+            Config.ENABLE_BUILTIN_QUEST_PACK.set(p.enabled());
             Config.SPEC.save();
+        } else {
+            String id = p.id() == null ? "" : p.id().trim();
+            if (id.isBlank()) return;
+            if (id.contains("/") || id.contains("\\")) return;
+            Path packRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
+            if (!packRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT) || !Files.isDirectory(packRoot)) return;
+            Config.setQuestPackApplied(id, p.enabled());
+        }
 
-            for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
-                sendConfig(player);
-            }
-        });
+        QuestData.loadServer(sp.server, true);
+        for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+            syncPlayer(player);
+        }
     }
 
-    private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
-            String id = normalizeQuestPackFolderName(p.id());
-            if (id.isBlank()) return;
-            if (p.totalParts() <= 0 || p.totalParts() > 65536) return;
-            if (p.index() < 0 || p.index() >= p.totalParts()) return;
+    private static void handleUpdateServerConfig(UpdateServerConfig p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
 
-            String key = sp.getUUID() + ":" + id + ":" + p.uploadId();
-            QuestPackUploadSession session = QUESTPACK_UPLOADS.compute(key, (ignored, existing) -> {
-                if (existing == null || existing.totalParts != p.totalParts()) {
-                    return new QuestPackUploadSession(id, p.enabled(), p.totalParts());
-                }
-                return existing;
-            });
-            if (session == null) return;
-            if (session.parts[p.index()] == null) {
-                session.parts[p.index()] = p.part() == null ? new byte[0] : p.part();
-                session.received++;
-            }
-            if (session.received < session.totalParts) return;
+        Config.PINNED_QUEST_HUD_POSITION.set(p.pinnedQuestHudPosition());
+        Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(p.hideQuestBookInInventory());
+        Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(p.questBookInventoryButtonPosition());
+        Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(p.centerInventoryWithQuestPanel());
+        Config.HIDE_CATEGORY_HEADER.set(p.hideCategoryHeader());
+        Config.FILTER_DISPLAY_MODE.set(p.filterDisplayMode());
+        Config.DISABLE_CATEGORIES.set(p.disableCategories());
+        Config.HIDE_QUEST_WIDGET_ICONS.set(p.hideQuestWidgetIcons());
+        Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questTextScale())));
+        Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
+        Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
+        Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
+        Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
+        Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
+        Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
+        Config.ENABLE_QUEST_SCROLLS.set(p.enableQuestScrolls());
+        Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
+        Config.SPAWN_WITH_QUEST_BOOK.set(p.spawnWithQuestBook());
+        Config.SPEC.save();
 
-            QUESTPACK_UPLOADS.remove(key);
-            byte[] zipBytes = session.join();
-            try {
-                writeUploadedQuestPack(id, zipBytes);
-                Config.setQuestPackApplied(id, session.enabled);
-                reloadAndSyncAll(sp);
-            } catch (IOException ignored) {
-            }
-        });
+        for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
+            sendConfig(player);
+        }
     }
 
-    private static void handleDeleteQuestPack(DeleteQuestPack p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
-            String id = normalizeQuestPackFolderName(p.id());
-            if (id.isBlank()) return;
-            try {
-                deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
-                Config.setQuestPackApplied(id, false);
-                reloadAndSyncAll(sp);
-            } catch (IOException ignored) {
+    private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+        String id = normalizeQuestPackFolderName(p.id());
+        if (id.isBlank()) return;
+        if (p.totalParts() <= 0 || p.totalParts() > 65536) return;
+        if (p.index() < 0 || p.index() >= p.totalParts()) return;
+
+        String key = sp.getUUID() + ":" + id + ":" + p.uploadId();
+        QuestPackUploadSession session = QUESTPACK_UPLOADS.compute(key, (ignored, existing) -> {
+            if (existing == null || existing.totalParts != p.totalParts()) {
+                return new QuestPackUploadSession(id, p.enabled(), p.totalParts());
             }
+            return existing;
         });
+        if (session == null) return;
+        if (session.parts[p.index()] == null) {
+            session.parts[p.index()] = p.part() == null ? new byte[0] : p.part();
+            session.received++;
+        }
+        if (session.received < session.totalParts) return;
+
+        QUESTPACK_UPLOADS.remove(key);
+        byte[] zipBytes = session.join();
+        try {
+            writeUploadedQuestPack(id, zipBytes);
+            Config.setQuestPackApplied(id, session.enabled);
+            reloadAndSyncAll(sp);
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static void handleDeleteQuestPack(DeleteQuestPack p, ServerPlayer sp) {
+        if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+        String id = normalizeQuestPackFolderName(p.id());
+        if (id.isBlank()) return;
+        try {
+            deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
+            Config.setQuestPackApplied(id, false);
+            reloadAndSyncAll(sp);
+        } catch (IOException ignored) {
+        }
     }
 
     private static void reloadAndSyncAll(ServerPlayer sp) {
@@ -1047,93 +1065,77 @@ public final class BoundlessNetwork {
         }
     }
 
-    private static void handleSyncStatus(SyncStatus p, IPayloadContext ctx) {
-        ctx.enqueueWork(() ->
-                QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()))
+    private static void handleSyncStatus(SyncStatus p) {
+        QuestTracker.clientSetStatus(p.questId(), QuestTracker.decodeStatus(p.status()));
+    }
+
+    private static void handleSyncStatuses(SyncStatuses p) {
+        for (StatusEntry e : p.entries()) {
+            QuestTracker.clientSetStatus(e.questId(), QuestTracker.decodeStatus(e.status()));
+        }
+    }
+
+    private static void handleSyncProgressMeta(SyncProgressMeta p) {
+        for (ProgressMetaEntry e : p.entries()) {
+            QuestTracker.clientSetClaimCount(e.questId(), e.claimCount());
+            QuestTracker.clientSetScrollRedeemed(e.questId(), e.scrollRedeemed());
+            QuestTracker.clientSetScrollCreated(e.questId(), e.scrollCreated());
+        }
+    }
+
+    private static void handleSyncKills(SyncKills p) {
+        for (KillEntry e : p.entries())
+            QuestTracker.clientSetKill(e.entityId(), e.count());
+    }
+
+    private static void handleSyncClear(SyncClear p) {
+        QuestTracker.clientClearAll();
+        QuestData.clearClientNetworkData();
+        ClientQuestSync.clear();
+    }
+
+    private static void handleToast(Toast p) {
+        QuestData.byId(p.questId()).ifPresent(q ->
+                QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
         );
     }
 
-    private static void handleSyncStatuses(SyncStatuses p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            for (StatusEntry e : p.entries()) {
-                QuestTracker.clientSetStatus(e.questId(), QuestTracker.decodeStatus(e.status()));
-            }
-        });
+    private static void handleOpenQuestBook(OpenQuestBook p) {
+        if (!Config.disableQuestBook()) {
+            ClientOnly.openQuestBook();
+        }
     }
 
-    private static void handleSyncProgressMeta(SyncProgressMeta p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            for (ProgressMetaEntry e : p.entries()) {
-                QuestTracker.clientSetClaimCount(e.questId(), e.claimCount());
-                QuestTracker.clientSetScrollRedeemed(e.questId(), e.scrollRedeemed());
-                QuestTracker.clientSetScrollCreated(e.questId(), e.scrollCreated());
-            }
-        });
-    }
-
-    private static void handleSyncKills(SyncKills p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            for (KillEntry e : p.entries())
-                QuestTracker.clientSetKill(e.entityId(), e.count());
-        });
-    }
-
-    private static void handleSyncClear(SyncClear p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            QuestTracker.clientClearAll();
-            QuestData.clearClientNetworkData();
-            ClientQuestSync.clear();
-        });
-    }
-
-    private static void handleToast(Toast p, IPayloadContext ctx) {
-        ctx.enqueueWork(() ->
-                QuestData.byId(p.questId()).ifPresent(q ->
-                        QuestUnlockedToast.show(q.name, q.iconItem().orElse(null))
-                )
+    private static void handleSyncConfig(SyncConfig p) {
+        Config.applySyncedFromServer(
+            p.disabledCategories(),
+            p.appliedQuestPacks(),
+            p.disabledQuestPacks(),
+            p.pinnedQuestHudPosition(),
+            p.hideQuestBookInInventory(),
+            p.questBookInventoryButtonPosition(),
+            p.centerInventoryWithQuestPanel(),
+            p.hideCategoryHeader(),
+            p.filterDisplayMode(),
+            p.disableCategories(),
+            p.enableBuiltinQuestPack(),
+            p.hideQuestWidgetIcons(),
+            p.questTextScale(),
+            p.questIconScale(),
+            p.enableQuestSearchBox(),
+            p.enableDescriptionColors(),
+            p.enableQuestToasts(),
+            p.disableQuestPinning(),
+            p.autoClaimQuestRewards(),
+            p.enableQuestScrolls(),
+            p.disableQuestBook(),
+            p.spawnWithQuestBook()
         );
+        ClientOnly.applyConfigChanges();
     }
 
-    private static void handleOpenQuestBook(OpenQuestBook p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            if (ctx.player().level().isClientSide() && !Config.disableQuestBook()) {
-                ClientOnly.openQuestBook();
-            }
-        });
-    }
-
-    private static void handleSyncConfig(SyncConfig p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            Config.applySyncedFromServer(
-                p.disabledCategories(),
-                p.appliedQuestPacks(),
-                p.disabledQuestPacks(),
-                p.pinnedQuestHudPosition(),
-                p.hideQuestBookInInventory(),
-                p.questBookInventoryButtonPosition(),
-                p.centerInventoryWithQuestPanel(),
-                p.hideCategoryHeader(),
-                p.filterDisplayMode(),
-                p.disableCategories(),
-                p.enableBuiltinQuestPack(),
-                p.hideQuestWidgetIcons(),
-                p.questTextScale(),
-                p.questIconScale(),
-                p.enableQuestSearchBox(),
-                p.enableDescriptionColors(),
-                p.enableQuestToasts(),
-                p.disableQuestPinning(),
-                p.autoClaimQuestRewards(),
-                p.enableQuestScrolls(),
-                p.disableQuestBook(),
-                p.spawnWithQuestBook()
-            );
-            ClientOnly.applyConfigChanges();
-        });
-    }
-
-    private static void handleSyncQuestsChunk(SyncQuestsChunk p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> ClientQuestSync.accept(p));
+    private static void handleSyncQuestsChunk(SyncQuestsChunk p) {
+        ClientQuestSync.accept(p);
     }
 
     private static boolean questHasSubmit(QuestData.Quest q) {
@@ -1391,7 +1393,7 @@ public final class BoundlessNetwork {
         }
     }
 
-    @OnlyIn(Dist.CLIENT)
+    @Environment(EnvType.CLIENT)
     private static final class ClientOnly {
         private static void openQuestBook() {
             net.minecraft.client.Minecraft.getInstance()
@@ -1407,7 +1409,7 @@ public final class BoundlessNetwork {
         }
     }
 
-    @OnlyIn(Dist.CLIENT)
+    @Environment(EnvType.CLIENT)
     private static final class ClientQuestSync {
         private static int activeSyncId = -1;
         private static int newestSyncIdSeen = -1;

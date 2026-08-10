@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -29,7 +30,7 @@ import java.util.Map;
 
 public final class BoundlessCommands {
     private static final Path INSTANCE_QUEST_PACKS_ROOT =
-            net.neoforged.fml.loading.FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks");
+            FabricLoader.getInstance().getGameDir().resolve("config").resolve("boundless").resolve("questpacks");
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("boundless")

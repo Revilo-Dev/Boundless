@@ -1,18 +1,40 @@
 package net.revilodev.boundless.client;
 
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.common.NeoForge;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.revilodev.boundless.network.BoundlessNetwork;
+import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestTracker;
 
-@OnlyIn(Dist.CLIENT)
-public final class BoundlessClient {
-    private BoundlessClient() {}
+@Environment(EnvType.CLIENT)
+public final class BoundlessClient implements ClientModInitializer {
+    @Override
+    public void onInitializeClient() {
+        BoundlessNetwork.bootstrapClient();
+        KeyBindingHelper.registerKeyBinding(QuestBookKeybinds.openQuestBook());
+        ClientTickEvents.END_CLIENT_TICK.register(QuestBookKeybinds::onClientTick);
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.player != null) {
+                QuestTracker.tickPlayer(client.player);
+            }
+        });
 
-    public static void init() {
-        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenInit);
-        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenClosing);
-        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
-        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onMouseScrolled);
-        NeoForge.EVENT_BUS.addListener(QuestPanelClient::onMouseButtonPressed);
+        ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) ->
+                QuestPanelClient.onScreenInit(screen));
+
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> QuestData.loadClient(false));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            QuestTracker.clientClearAll();
+            QuestData.clearClientNetworkData();
+            PinnedQuestHud.resetPinsOnLeave();
+        });
+
+        HudRenderCallback.EVENT.register((guiGraphics, tickDelta) -> PinnedQuestHud.onRenderGui(guiGraphics));
     }
 }

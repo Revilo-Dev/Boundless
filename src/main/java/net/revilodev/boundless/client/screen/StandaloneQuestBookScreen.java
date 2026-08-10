@@ -6,8 +6,8 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryTabsWidget;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
@@ -16,7 +16,7 @@ import net.revilodev.boundless.client.QuestFilterBar;
 import net.revilodev.boundless.client.QuestListWidget;
 import net.revilodev.boundless.quest.QuestData;
 
-@OnlyIn(Dist.CLIENT)
+@Environment(EnvType.CLIENT)
 public final class StandaloneQuestBookScreen extends Screen {
 
     private static final ResourceLocation PANEL_TEX =

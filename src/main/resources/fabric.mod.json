@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "boundless",
+  "version": "${version}",
+  "name": "Boundless: Quests",
+  "description": "Quests In Minecraft: A Comprehensive Questing Mod For Modpack Creators!",
+  "authors": ["ReviloDev"],
+  "license": "All Rights Reserved",
+  "icon": "icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["net.revilodev.boundless.BoundlessMod"],
+    "client": ["net.revilodev.boundless.client.BoundlessClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.10",
+    "fabric-api": "*",
+    "minecraft": "~1.21.1",
+    "java": ">=21"
+  }
+}

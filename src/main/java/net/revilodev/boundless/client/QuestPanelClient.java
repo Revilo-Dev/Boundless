@@ -11,9 +11,10 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.screen.QuestSettingsScreen;
 import net.revilodev.boundless.quest.QuestData;
@@ -23,7 +24,7 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-@OnlyIn(Dist.CLIENT)
+@Environment(EnvType.CLIENT)
 public final class QuestPanelClient {
     private static final ResourceLocation BTN_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_button.png");
@@ -47,23 +48,31 @@ public final class QuestPanelClient {
     private static final int BTN_Y_ABOVE_OFFHAND = 43;
     private static final Map<Screen, State> STATES = new WeakHashMap<>();
     private static Field LEFT_FIELD;
+    private static Field TOP_FIELD;
+    private static Field IMAGE_WIDTH_FIELD;
+    private static java.lang.reflect.Method ADD_RENDERABLE_WIDGET;
     private static boolean lastQuestOpen = false;
     private static String lastSelectedCategory = "all";
 
     private QuestPanelClient() {
     }
 
-    public static void onScreenInit(ScreenEvent.Init.Post e) {
-        Screen s = e.getScreen();
+    public static void onScreenInit(Screen s) {
         if (!(s instanceof InventoryScreen inv)) return;
+        ScreenMouseEvents.allowMouseScroll(s).register((screen, mouseX, mouseY, horizontalAmount, verticalAmount) ->
+                !onMouseScrolled(screen, mouseX, mouseY, verticalAmount));
+        ScreenMouseEvents.allowMouseClick(s).register((screen, mouseX, mouseY, button) ->
+                !onMouseButtonPressed(screen, mouseX, mouseY, button));
+        ScreenEvents.remove(s).register(screen -> onScreenClosing(screen));
+        ScreenEvents.beforeRender(s).register((screen, graphics, mouseX, mouseY, tickDelta) -> onScreenRenderPre(screen));
         QuestData.loadClient(false);
         State st = new State(inv);
         st.selectedCategory = lastSelectedCategory;
         STATES.put(s, st);
         ImageButton recipeAtInit = findRecipeButton(inv);
         if (recipeAtInit != null) {
-            st.recipeOffsetX = recipeAtInit.getX() - inv.getGuiLeft();
-            st.recipeOffsetY = recipeAtInit.getY() - inv.getGuiTop();
+            st.recipeOffsetX = recipeAtInit.getX() - getLeft(inv);
+            st.recipeOffsetY = recipeAtInit.getY() - getTop(inv);
             st.hasRecipeOffset = true;
         }
 
@@ -72,16 +81,16 @@ public final class QuestPanelClient {
             int btnY = computeQuestButtonY(inv);
             QuestToggleButton btn = new QuestToggleButton(btnX, btnY, BTN_TEX, BTN_TEX_HOVER, () -> toggle(st));
             st.btn = btn;
-            e.addListener(btn);
+            addWidget(inv, btn);
         }
 
         st.bg = new PanelBackground(0, 0, PANEL_W, PANEL_H);
-        e.addListener(st.bg);
+        addWidget(inv, st.bg);
 
         st.list = new QuestListWidget(0, 0, 127, PANEL_H - 20, q -> openDetails(st, q));
         st.list.setQuests(QuestData.all());
         st.list.setCategory(st.selectedCategory);
-        e.addListener(st.list);
+        addWidget(inv, st.list);
 
         st.searchBox = new EditBox(Minecraft.getInstance().font, 0, 0, 127, 16, Component.translatable("ui.boundless.questbook.search_quests"));
         st.searchBox.setHint(Component.translatable("ui.boundless.questbook.search"));
@@ -94,12 +103,12 @@ public final class QuestPanelClient {
         st.list.setSearchQuery(st.searchQuery);
 
         st.details = new QuestDetailsPanel(0, 0, 127, PANEL_H - 20, () -> closeDetails(st));
-        e.addListener(st.details);
-        e.addListener(st.details.backButton());
-        e.addListener(st.details.completeButton());
-        e.addListener(st.details.rejectButton());
-        e.addListener(st.details.scrollButton());
-        e.addListener(st.searchBox);
+        addWidget(inv, st.details);
+        addWidget(inv, st.details.backButton());
+        addWidget(inv, st.details.completeButton());
+        addWidget(inv, st.details.rejectButton());
+        addWidget(inv, st.details.scrollButton());
+        addWidget(inv, st.searchBox);
 
         st.tabs = new CategoryTabsWidget(0, 0, 44, PANEL_H + 34, id -> {
             if (Config.disableCategories()) return;
@@ -121,17 +130,17 @@ public final class QuestPanelClient {
             lastSelectedCategory = "all";
             if (st.list != null) st.list.setCategory("all");
         }
-        e.addListener(st.tabs);
+        addWidget(inv, st.tabs);
 
         st.header = new CategoryHeaderWidget(0, 0, PANEL_W, () -> sectionTitle(st));
-        e.addListener(st.header);
+        addWidget(inv, st.header);
 
         int filterX = computePanelX(inv) + 10;
-        int filterY = inv.getGuiTop() + PANEL_H + 6;
+        int filterY = getTop(inv) + PANEL_H + 6;
         st.filter = new QuestFilterBar(filterX, filterY, () -> openSettings(inv));
-        e.addListener(st.filter);
+        addWidget(inv, st.filter);
         st.settingsButton = new SettingsButton(0, 0, () -> openSettings(inv));
-        e.addListener(st.settingsButton);
+        addWidget(inv, st.settingsButton);
 
         reposition(inv, st);
 
@@ -145,8 +154,8 @@ public final class QuestPanelClient {
         }
     }
 
-    public static void onScreenClosing(ScreenEvent.Closing e) {
-        State st = STATES.remove(e.getScreen());
+    public static void onScreenClosing(Screen screen) {
+        State st = STATES.remove(screen);
         if (st == null) return;
         if (st.selectedCategory != null && !st.selectedCategory.isBlank()) {
             lastSelectedCategory = st.selectedCategory;
@@ -156,8 +165,7 @@ public final class QuestPanelClient {
         }
     }
 
-    public static void onScreenRenderPre(ScreenEvent.Render.Pre e) {
-        Screen s = e.getScreen();
+    public static void onScreenRenderPre(Screen s) {
         State st = STATES.get(s);
         if (st == null || !(s instanceof InventoryScreen inv)) return;
         if (!isQuestBookEnabled() && st.open) {
@@ -179,18 +187,17 @@ public final class QuestPanelClient {
         handleRecipeButtonRules(inv, st);
     }
 
-    public static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre e) {
-        Screen s = e.getScreen();
+    public static boolean onMouseScrolled(Screen s, double mouseX, double mouseY, double scrollDeltaY) {
         State st = STATES.get(s);
-        if (st == null || !(s instanceof InventoryScreen inv)) return;
-        if (!st.open) return;
+        if (st == null || !(s instanceof InventoryScreen inv)) return false;
+        if (!st.open) return false;
 
         int px = computePanelX(inv) + 10;
-        int py = inv.getGuiTop() + 10;
+        int py = getTop(inv) + 10;
         int pw = 127;
         int ph = PANEL_H - 20;
-        double mx = e.getMouseX();
-        double my = e.getMouseY();
+        double mx = mouseX;
+        double my = mouseY;
         boolean used = false;
         boolean overSearch = st.searchBox != null && st.searchBox.visible
                 && mx >= st.searchBox.getX() && mx <= st.searchBox.getX() + st.searchBox.getWidth()
@@ -198,34 +205,34 @@ public final class QuestPanelClient {
 
         if (st.list != null && st.list.visible) {
             if (!overSearch && mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
-                double dY = e.getScrollDeltaY();
+                double dY = scrollDeltaY;
                 used = st.list.mouseScrolled(mx, my, dY) || st.list.mouseScrolled(mx, my, 0.0, dY);
             }
         }
         if (st.details != null && st.details.visible) {
             if (mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
-                double dY = e.getScrollDeltaY();
+                double dY = scrollDeltaY;
                 used = st.details.mouseScrolled(mx, my, dY) || st.details.mouseScrolled(mx, my, 0.0, dY) || used;
             }
         }
-        if (used) e.setCanceled(true);
+        return used;
     }
 
-    public static void onMouseButtonPressed(ScreenEvent.MouseButtonPressed.Pre e) {
-        if (e.getButton() != 0) return;
-        Screen s = e.getScreen();
+    public static boolean onMouseButtonPressed(Screen s, double mouseX, double mouseY, int button) {
+        if (button != 0) return false;
         State st = STATES.get(s);
-        if (st == null || !(s instanceof InventoryScreen inv)) return;
-        if (!st.open) return;
+        if (st == null || !(s instanceof InventoryScreen inv)) return false;
+        if (!st.open) return false;
         ImageButton recipe = findRecipeButton(inv);
-        if (recipe == null || !recipe.visible || !recipe.active) return;
-        if (!recipe.isMouseOver(e.getMouseX(), e.getMouseY())) return;
+        if (recipe == null || !recipe.visible || !recipe.active) return false;
+        if (!recipe.isMouseOver(mouseX, mouseY)) return false;
 
         st.open = false;
         lastQuestOpen = false;
         if (st.originalLeft != null) setLeft(inv, st.originalLeft);
         reposition(inv, st);
         updateVisibility(st);
+        return false;
     }
 
     public static void applyConfigChanges() {
@@ -288,13 +295,13 @@ public final class QuestPanelClient {
 
     private static int computeCenteredLeft(InventoryScreen inv) {
         int screenW = inv.width;
-        int invW = inv.getXSize();
+        int invW = getImageWidth(inv);
         int total = PANEL_W + 2 + invW;
         return (screenW - total) / 2 + PANEL_W + 2;
     }
 
     private static int computePanelX(InventoryScreen inv) {
-        return inv.getGuiLeft() - PANEL_W - 2;
+        return getLeft(inv) - PANEL_W - 2;
     }
 
     private static int computeTabsX(InventoryScreen inv) {
@@ -303,7 +310,7 @@ public final class QuestPanelClient {
 
     private static void setPanelChildBounds(InventoryScreen inv, State st) {
         int bgx = computePanelX(inv);
-        int bgy = inv.getGuiTop();
+        int bgy = getTop(inv);
         int px = bgx + 10;
         int py = bgy + 10;
         int pw = 127;
@@ -354,7 +361,7 @@ public final class QuestPanelClient {
         }
         if (st.settingsButton != null) {
             int bgx = computePanelX(inv);
-            int bgy = inv.getGuiTop();
+            int bgy = getTop(inv);
             st.settingsButton.setPosition(bgx - 22, bgy + PANEL_H - st.settingsButton.getHeight());
         }
         setPanelChildBounds(inv, st);
@@ -381,47 +388,65 @@ public final class QuestPanelClient {
         ImageButton recipe = findRecipeButton(inv);
         if (recipe == null) return;
         if (!st.hasRecipeOffset) {
-            st.recipeOffsetX = recipe.getX() - inv.getGuiLeft();
-            st.recipeOffsetY = recipe.getY() - inv.getGuiTop();
+            st.recipeOffsetX = recipe.getX() - getLeft(inv);
+            st.recipeOffsetY = recipe.getY() - getTop(inv);
             st.hasRecipeOffset = true;
         }
-        recipe.setPosition(inv.getGuiLeft() + st.recipeOffsetX, inv.getGuiTop() + st.recipeOffsetY);
+        recipe.setPosition(getLeft(inv) + st.recipeOffsetX, getTop(inv) + st.recipeOffsetY);
     }
 
     private static boolean isRecipePanelOpen(InventoryScreen inv) {
-        int centeredLeft = (inv.width - inv.getXSize()) / 2;
-        return inv.getGuiLeft() > centeredLeft + 10;
+        int centeredLeft = (inv.width - getImageWidth(inv)) / 2;
+        return getLeft(inv) > centeredLeft + 10;
     }
 
-    private static Integer getLeft(InventoryScreen inv) {
+    private static int getLeft(InventoryScreen inv) {
         try {
-            if (LEFT_FIELD == null) LEFT_FIELD = findLeftField(inv.getClass());
-            return (Integer) LEFT_FIELD.get(inv);
+            if (LEFT_FIELD == null) LEFT_FIELD = findField(inv.getClass(), "leftPos");
+            return LEFT_FIELD.getInt(inv);
         } catch (Throwable t) {
-            return inv.getGuiLeft();
+            return (inv.width - getImageWidth(inv)) / 2;
+        }
+    }
+
+    private static int getTop(InventoryScreen inv) {
+        try {
+            if (TOP_FIELD == null) TOP_FIELD = findField(inv.getClass(), "topPos");
+            return TOP_FIELD.getInt(inv);
+        } catch (Throwable t) {
+            return (inv.height - 166) / 2;
+        }
+    }
+
+    private static int getImageWidth(InventoryScreen inv) {
+        try {
+            if (IMAGE_WIDTH_FIELD == null) IMAGE_WIDTH_FIELD = findField(inv.getClass(), "imageWidth");
+            return IMAGE_WIDTH_FIELD.getInt(inv);
+        } catch (Throwable t) {
+            return 176;
         }
     }
 
     private static void setLeft(InventoryScreen inv, int v) {
         try {
-            if (LEFT_FIELD == null) LEFT_FIELD = findLeftField(inv.getClass());
+            if (LEFT_FIELD == null) LEFT_FIELD = findField(inv.getClass(), "leftPos");
             LEFT_FIELD.setInt(inv, v);
         } catch (Throwable ignored) {
         }
     }
 
-    private static Field findLeftField(Class<?> c) throws NoSuchFieldException {
+    private static Field findField(Class<?> c, String name) throws NoSuchFieldException {
         Class<?> cur = c;
         while (cur != null) {
             try {
-                Field f = cur.getDeclaredField("leftPos");
+                Field f = cur.getDeclaredField(name);
                 f.setAccessible(true);
                 return f;
             } catch (NoSuchFieldException ignored) {
                 cur = cur.getSuperclass();
             }
         }
-        throw new NoSuchFieldException("leftPos");
+        throw new NoSuchFieldException(name);
     }
 
     private static void openDetails(State st, QuestData.Quest quest) {
@@ -506,6 +531,19 @@ public final class QuestPanelClient {
         }
     }
 
+    private static void addWidget(Screen screen, AbstractWidget widget) {
+        if (screen == null || widget == null) return;
+        try {
+            if (ADD_RENDERABLE_WIDGET == null) {
+                ADD_RENDERABLE_WIDGET = Screen.class.getDeclaredMethod("addRenderableWidget", net.minecraft.client.gui.components.events.GuiEventListener.class);
+                ADD_RENDERABLE_WIDGET.setAccessible(true);
+            }
+            ADD_RENDERABLE_WIDGET.invoke(screen, widget);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Unable to add Boundless widget to screen", e);
+        }
+    }
+
     private static boolean isQuestBookEnabled() {
         return !Config.disableQuestBook();
     }
@@ -517,13 +555,13 @@ public final class QuestPanelClient {
     private static int computeQuestButtonX(InventoryScreen inv) {
         String mode = Config.questBookInventoryButtonPosition();
         int offset = "above_offhand_slot".equals(mode) ? BTN_X_ABOVE_OFFHAND : BTN_X_BESIDE_RECIPE;
-        return inv.getGuiLeft() + offset;
+        return getLeft(inv) + offset;
     }
 
     private static int computeQuestButtonY(InventoryScreen inv) {
         String mode = Config.questBookInventoryButtonPosition();
         int offset = "above_offhand_slot".equals(mode) ? BTN_Y_ABOVE_OFFHAND : BTN_Y_BESIDE_RECIPE;
-        return inv.getGuiTop() + offset;
+        return getTop(inv) + offset;
     }
 
     private static void openSettings(InventoryScreen inv) {

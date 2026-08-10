@@ -3,14 +3,12 @@ package net.revilodev.boundless.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.revilodev.boundless.Config;
 import org.lwjgl.glfw.GLFW;
 
-@OnlyIn(Dist.CLIENT)
+@Environment(EnvType.CLIENT)
 public final class QuestBookKeybinds {
     private static final String CATEGORY = "key.categories.boundless";
     private static final String KEY_OPEN = "key.boundless.open_quest_book";
@@ -19,20 +17,17 @@ public final class QuestBookKeybinds {
 
     private QuestBookKeybinds() {}
 
-    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-        if (registered) return;
-        registered = true;
+    public static KeyMapping openQuestBook() {
         if (openQuestBook == null) {
             openQuestBook = new KeyMapping(KEY_OPEN, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_RIGHT_BRACKET, CATEGORY);
         }
-        event.register(openQuestBook);
+        return openQuestBook;
     }
 
-    public static void onClientTick(ClientTickEvent.Post event) {
+    public static void onClientTick(Minecraft mc) {
         if (openQuestBook == null) return;
         if (Config.disableQuestBook()) return;
 
-        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
 
         while (openQuestBook.consumeClick()) {

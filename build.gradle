@@ -1,113 +1,57 @@
 plugins {
-    id 'java-library'
+    id 'fabric-loom' version '1.10.1'
     id 'maven-publish'
-    id 'net.neoforged.gradle.userdev' version '7.0.192'
 }
 
-tasks.named('wrapper', Wrapper).configure {
-    distributionType = Wrapper.DistributionType.BIN
-}
-
-version = mod_version          // pulled from gradle.properties
-group = mod_group_id           // pulled from gradle.properties
+version = project.mod_version
+group = project.maven_group
 
 base {
-    archivesName = mod_id
+    archivesName = project.archives_base_name
 }
-
-// Mojang ships Java 21 for 1.21.1, so we target Java 21
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
     maven { url = 'https://maven.blamejared.com' }
-}
-
-runs {
-    configureEach {
-        systemProperty 'forge.logging.markers', 'REGISTRIES'
-        systemProperty 'forge.logging.console.level', 'debug'
-        modSource project.sourceSets.main
-    }
-
-    client {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-    }
-
-    server {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-        argument '--nogui'
-    }
-
-    gameTestServer {
-        systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
-    }
-
-    data {
-        arguments.addAll '--mod', project.mod_id, '--all',
-                '--output', file('src/generated/resources/').absolutePath,
-                '--existing', file('src/main/resources/').absolutePath
-    }
-}
-
-// Include data-generated resources in the main resource set
-sourceSets.main.resources { srcDir 'src/generated/resources' }
-
-// Optional runtime configuration
-configurations {
-    runtimeClasspath.extendsFrom localRuntime
+    mavenCentral()
 }
 
 dependencies {
-    implementation "net.neoforged:neoforge:${neo_version}"
-    compileOnly "mezz.jei:jei-1.21.1-neoforge-api:19.+"
-    localRuntime "mezz.jei:jei-1.21.1-neoforge:19.+"
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    compileOnly "mezz.jei:jei-1.21.1-common-api:19.32.0.359"
 }
 
-// Replace properties inside neoforge.mods.toml with gradle.properties values
-tasks.withType(ProcessResources).configureEach {
-    def replaceProperties = [
-            minecraft_version      : minecraft_version,
-            minecraft_version_range: minecraft_version_range,
-            neo_version            : neo_version,
-            loader_version_range   : loader_version_range,
-            mod_id                 : mod_id,
-            mod_name               : mod_name,
-            mod_logo_file          : mod_logo_file,
-            mod_license            : mod_license,
-            mod_version            : mod_version,
-            mod_authors            : mod_authors,
-            mod_description        : mod_description
-    ]
-    inputs.properties replaceProperties
-
-    filesMatching('META-INF/neoforge.mods.toml') {
-        expand replaceProperties
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand version: project.version
     }
 }
 
-// Publishing setup (local maven repo under ./repo)
-publishing {
-    publications {
-        register('mavenJava', MavenPublication) {
-            from components.java
-        }
-    }
-    repositories {
-        maven {
-            url "file://${project.projectDir}/repo"
-        }
-    }
-}
-
-// Compile settings
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    options.release = 21
 }
 
-// IntelliJ IDEA sources + javadoc download
-idea {
-    module {
-        downloadSources = true
-        downloadJavadoc = true
+// IntelliJ run configurations use this task as their Gradle before-run action.
+tasks.register('ideBeforeRun') {
+    group = 'ide'
+    description = 'Compiles the Fabric project before an IntelliJ run configuration starts.'
+    dependsOn tasks.named('classes')
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+publishing {
+    publications {
+        create('mavenJava', MavenPublication) {
+            from components.java
+        }
     }
 }

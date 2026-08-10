@@ -1,110 +1,99 @@
 package net.revilodev.boundless;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import net.fabricmc.loader.api.FabricLoader;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.event.config.ModConfigEvent;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import java.util.Locale;
+import java.util.function.Predicate;
 
 public final class Config {
-    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("boundless-common.json");
+    private static final int QUEST_PACK_BACKUP_LIMIT = 5;
+    private static boolean loading;
 
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_CATEGORIES =
-            BUILDER.comment("A list of quest category IDs to completely disable.")
-                    .defineListAllowEmpty(List.of("disabledQuestCategories"), List::of, o -> o instanceof String);
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> APPLIED_QUEST_PACKS =
-            BUILDER.comment("Instance questpack IDs explicitly enabled by the server.")
-                    .defineListAllowEmpty(List.of("appliedQuestPacks"), List::of, o -> o instanceof String);
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_QUEST_PACKS =
-            BUILDER.comment("Instance questpack IDs explicitly disabled by the server.")
-                    .defineListAllowEmpty(List.of("disabledQuestPacks"), List::of, o -> o instanceof String);
+    public static final ConfigValue<List<? extends String>> DISABLED_CATEGORIES =
+            list("disabledQuestCategories", List.of(), o -> o instanceof String);
+    public static final ConfigValue<List<? extends String>> APPLIED_QUEST_PACKS =
+            list("appliedQuestPacks", List.of(), o -> o instanceof String);
+    public static final ConfigValue<List<? extends String>> DISABLED_QUEST_PACKS =
+            list("disabledQuestPacks", List.of(), o -> o instanceof String);
+    public static final ConfigValue<String> PINNED_QUEST_HUD_POSITION =
+            value("pinnedQuestHudPosition", "bottom_left", Config::validHudPosition);
+    public static final ConfigValue<Boolean> HIDE_QUEST_BOOK_IN_INVENTORY =
+            value("hideQuestBookInInventory", false, Boolean.class::isInstance);
+    public static final ConfigValue<String> QUEST_BOOK_INVENTORY_BUTTON_POSITION =
+            value("questBookInventoryButtonPosition", "beside_recipe_book", Config::validInventoryButtonPosition);
+    public static final ConfigValue<Boolean> CENTER_INVENTORY_WITH_QUEST_PANEL =
+            value("centerInventoryWithQuestPanel", true, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> HIDE_CATEGORY_HEADER =
+            value("hideCategoryHeader", false, Boolean.class::isInstance);
+    public static final ConfigValue<String> FILTER_DISPLAY_MODE =
+            value("filterDisplayMode", "tabs", Config::validFilterDisplayMode);
+    public static final ConfigValue<Boolean> DISABLE_CATEGORIES =
+            value("disableCategories", false, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> ENABLE_BUILTIN_QUEST_PACK =
+            value("enableBuiltinQuestPack", true, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> HIDE_QUEST_WIDGET_ICONS =
+            value("hideQuestWidgetIcons", false, Boolean.class::isInstance);
+    public static final DoubleValue QUEST_TEXT_SCALE =
+            doubleValue("questTextScale", 1.0D, 0.5D, 1.0D);
+    public static final DoubleValue QUEST_ICON_SCALE =
+            doubleValue("questIconScale", 1.0D, 0.5D, 1.0D);
+    public static final ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
+            value("enableQuestSearchBox", false, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
+            value("enableDescriptionColors", true, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> ENABLE_QUEST_TOASTS =
+            value("enableQuestToasts", true, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> DISABLE_QUEST_PINNING =
+            value("disableQuestPinning", false, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> AUTO_CLAIM_QUEST_REWARDS =
+            value("autoClaimQuestRewards", false, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
+            value("enableQuestScrolls", true, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> DISABLE_QUEST_BOOK =
+            value("disableQuestBook", false, Boolean.class::isInstance);
+    public static final ConfigValue<Boolean> SPAWN_WITH_QUEST_BOOK =
+            value("spawnWithQuestBook", false, Boolean.class::isInstance);
 
-    static {
-        BUILDER.push("UI");
-    }
-    public static final ModConfigSpec.ConfigValue<String> PINNED_QUEST_HUD_POSITION =
+    public static final ConfigSpec SPEC = new ConfigSpec();
 
-            BUILDER.comment("Pin the Quest hud to the: bottom_left, bottom_right, top_left, top_right")
-                    .define("pinnedQuestHudPosition", "bottom_left", o -> {
-                if (!(o instanceof String s)) return false;
-                s = s.trim().toLowerCase();
-                return s.equals("top_left") || s.equals("top_right") || s.equals("bottom_left") || s.equals("bottom_right");
-            });
-
-    public static final ModConfigSpec.ConfigValue<Boolean> HIDE_QUEST_BOOK_IN_INVENTORY =
-            BUILDER.comment("If true, hides the quest book button in the inventory screen.")
-                    .define("hideQuestBookInInventory", false);
-    public static final ModConfigSpec.ConfigValue<String> QUEST_BOOK_INVENTORY_BUTTON_POSITION =
-            BUILDER.comment("Quest book button position in inventory: beside_recipe_book, above_offhand_slot")
-                    .define("questBookInventoryButtonPosition", "beside_recipe_book", o -> {
-                        if (!(o instanceof String s)) return false;
-                        s = s.trim().toLowerCase();
-                        return s.equals("beside_recipe_book") || s.equals("above_offhand_slot");
-                    });
-    public static final ModConfigSpec.ConfigValue<Boolean> CENTER_INVENTORY_WITH_QUEST_PANEL =
-            BUILDER.comment("If true, centers inventory and quest panel together when the quest panel is open.")
-                    .define("centerInventoryWithQuestPanel", true);
-    public static final ModConfigSpec.ConfigValue<Boolean> HIDE_CATEGORY_HEADER =
-            BUILDER.comment("If true, hides the category header bar.")
-                    .define("hideCategoryHeader", false);
-    public static final ModConfigSpec.ConfigValue<String> FILTER_DISPLAY_MODE =
-            BUILDER.comment("How quest filters are displayed: tabs, buttons, hidden.")
-                    .define("filterDisplayMode", "tabs", o -> {
-                        if (!(o instanceof String s)) return false;
-                        s = s.trim().toLowerCase();
-                        return s.equals("tabs") || s.equals("buttons") || s.equals("hidden");
-                    });
-    public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_CATEGORIES =
-            BUILDER.comment("If true, disables category tabs and category-based filtering.")
-                    .define("disableCategories", false);
-    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_BUILTIN_QUEST_PACK =
-            BUILDER.comment("If false, disables the built-in Boundless quest pack.")
-                    .define("enableBuiltinQuestPack", true);
-    public static final ModConfigSpec.ConfigValue<Boolean> HIDE_QUEST_WIDGET_ICONS =
-            BUILDER.comment("If true, hides icons in quest list widgets.")
-                    .define("hideQuestWidgetIcons", false);
-    public static final ModConfigSpec.DoubleValue QUEST_TEXT_SCALE =
-            BUILDER.comment("Scales quest list widget titles and quest detail description, task, and reward text. Range: 0.5 to 1.0.")
-                    .defineInRange("questTextScale", 1.0D, 0.5D, 1.0D);
-    public static final ModConfigSpec.DoubleValue QUEST_ICON_SCALE =
-            BUILDER.comment("Scales quest widget icons and quest detail panel icons. Range: 0.5 to 1.0.")
-                    .defineInRange("questIconScale", 1.0D, 0.5D, 1.0D);
-    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
-            BUILDER.comment("If true, shows the quest search box above the quest list.")
-                    .define("enableQuestSearchBox", false);
-    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
-            BUILDER.comment("If true, allows colored quest descriptions to render with Boundless color tokens.")
-                    .define("enableDescriptionColors", true);
-    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_TOASTS =
-            BUILDER.comment("If true, shows quest unlocked toasts.")
-                    .define("enableQuestToasts", true);
-    static {
-        BUILDER.pop();
-        BUILDER.push("Functionality");
-    }
-    public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_PINNING =
-            BUILDER.comment("If true, quest pinning and pinned HUD are disabled.")
-                    .define("disableQuestPinning", false);
-    public static final ModConfigSpec.ConfigValue<Boolean> AUTO_CLAIM_QUEST_REWARDS =
-            BUILDER.comment("If true, quest rewards are automatically claimed when a quest becomes complete.")
-                    .define("autoClaimQuestRewards", false);
-    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
-            BUILDER.comment("If true, quest completion scrolls can be created and used.")
-                    .define("enableQuestScrolls", true);
-    static {
-        BUILDER.pop();
-        BUILDER.push("Gameplay");
-    }
-    public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_BOOK =
-            BUILDER.comment("If true, quest book opening is disabled.")
-                    .define("disableQuestBook", false);
-    public static final ModConfigSpec.ConfigValue<Boolean> SPAWN_WITH_QUEST_BOOK =
-            BUILDER.comment("If true, players spawn with the quest book.")
-                    .define("spawnWithQuestBook", false);
-    static {
-        BUILDER.pop();
+    private Config() {
     }
 
-    public static final ModConfigSpec SPEC = BUILDER.build();
+    public static void init() {
+        load();
+        save();
+        BoundlessMod.LOGGER.info("[Boundless] Config loaded");
+    }
+
+    public static Path boundlessConfigRoot() {
+        return FabricLoader.getInstance().getConfigDir().resolve("boundless").normalize();
+    }
+
+    public static Path questPacksRoot() {
+        return boundlessConfigRoot().resolve("questpacks").normalize();
+    }
+
+    public static Path questPackBackupsRoot() {
+        return boundlessConfigRoot().resolve("backups").resolve("questpacks").normalize();
+    }
+
+    public static int questPackBackupLimit() {
+        return QUEST_PACK_BACKUP_LIMIT;
+    }
 
     public static List<? extends String> disabledCategories() {
         return DISABLED_CATEGORIES.get();
@@ -163,57 +152,39 @@ public final class Config {
             boolean enableQuestScrolls,
             boolean disableQuestBook,
             boolean spawnWithQuestBook) {
-        DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
-        APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : List.copyOf(appliedQuestPacks));
-        DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : List.copyOf(disabledQuestPacks));
-        PINNED_QUEST_HUD_POSITION.set(pinnedQuestHudPosition);
-        HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
-        QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
-        CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
-        HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
-        FILTER_DISPLAY_MODE.set(filterDisplayMode);
-        DISABLE_CATEGORIES.set(disableCategories);
-        ENABLE_BUILTIN_QUEST_PACK.set(enableBuiltinQuestPack);
-        HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
-        QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
-        QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
-        ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
-        ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
-        ENABLE_QUEST_TOASTS.set(enableQuestToasts);
-        DISABLE_QUEST_PINNING.set(disableQuestPinning);
-        AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
-        ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
-        DISABLE_QUEST_BOOK.set(disableQuestBook);
-        SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
-    }
-
-    private static boolean containsNormalized(List<? extends String> values, String id) {
-        if (values == null || id == null || id.isBlank()) return false;
-        for (String value : values) {
-            if (id.equals(normalizeQuestPackId(value))) return true;
+        loading = true;
+        try {
+            DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
+            APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : List.copyOf(appliedQuestPacks));
+            DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : List.copyOf(disabledQuestPacks));
+            PINNED_QUEST_HUD_POSITION.set(pinnedQuestHudPosition);
+            HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
+            QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
+            CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
+            HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
+            FILTER_DISPLAY_MODE.set(filterDisplayMode);
+            DISABLE_CATEGORIES.set(disableCategories);
+            ENABLE_BUILTIN_QUEST_PACK.set(enableBuiltinQuestPack);
+            HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
+            QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
+            QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
+            ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
+            ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
+            ENABLE_QUEST_TOASTS.set(enableQuestToasts);
+            DISABLE_QUEST_PINNING.set(disableQuestPinning);
+            AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
+            ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
+            DISABLE_QUEST_BOOK.set(disableQuestBook);
+            SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
+        } finally {
+            loading = false;
         }
-        return false;
-    }
-
-    private static List<String> normalizedCopy(List<? extends String> values) {
-        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-        if (values != null) {
-            for (String value : values) {
-                String normalized = normalizeQuestPackId(value);
-                if (!normalized.isBlank()) out.add(normalized);
-            }
-        }
-        return new java.util.ArrayList<>(out);
-    }
-
-    private static String normalizeQuestPackId(String id) {
-        return id == null ? "" : id.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     public static String pinnedQuestHudPosition() {
         String s = PINNED_QUEST_HUD_POSITION.get();
         if (s == null) return "bottom_left";
-        s = s.trim().toLowerCase();
+        s = s.trim().toLowerCase(Locale.ROOT);
         return s.isBlank() ? "bottom_left" : s;
     }
 
@@ -228,7 +199,7 @@ public final class Config {
     public static String questBookInventoryButtonPosition() {
         String s = QUEST_BOOK_INVENTORY_BUTTON_POSITION.get();
         if (s == null) return "beside_recipe_book";
-        s = s.trim().toLowerCase();
+        s = s.trim().toLowerCase(Locale.ROOT);
         return (s.equals("beside_recipe_book") || s.equals("above_offhand_slot")) ? s : "beside_recipe_book";
     }
 
@@ -243,7 +214,7 @@ public final class Config {
     public static String filterDisplayMode() {
         String s = FILTER_DISPLAY_MODE.get();
         if (s == null) return "tabs";
-        s = s.trim().toLowerCase();
+        s = s.trim().toLowerCase(Locale.ROOT);
         return (s.equals("tabs") || s.equals("buttons") || s.equals("hidden")) ? s : "tabs";
     }
 
@@ -311,60 +282,179 @@ public final class Config {
         return DISABLE_QUEST_BOOK.get();
     }
 
-    // Backward-compatible accessor used by existing callers.
     public static boolean hideQuestBookToggle() {
         return hideQuestBookInInventory();
     }
 
-    @SubscribeEvent
-    public static void onLoad(ModConfigEvent.Loading e) {
-        if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config loaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
-                    disabledCategories(),
-                    pinnedQuestHudPosition(),
-                    hideQuestBookInInventory(),
-                    questBookInventoryButtonPosition(),
-                    centerInventoryWithQuestPanel(),
-                    hideCategoryHeader(),
-                    filterDisplayMode(),
-                    disableCategories(),
-                    enableBuiltinQuestPack(),
-                    hideQuestWidgetIcons(),
-                    questTextScale(),
-                    questIconScale(),
-                    enableQuestSearchBox(),
-                    enableDescriptionColors(),
-                    enableQuestToasts(),
-                    disableQuestPinning(),
-                    autoClaimQuestRewards(),
-                    enableQuestScrolls(),
-                    disableQuestBook(),
-                    spawnWithQuestBook());
+    private static boolean containsNormalized(List<? extends String> values, String id) {
+        if (values == null || id == null || id.isBlank()) return false;
+        for (String value : values) {
+            if (id.equals(normalizeQuestPackId(value))) return true;
+        }
+        return false;
     }
 
-    @SubscribeEvent
-    public static void onReload(ModConfigEvent.Reloading e) {
-        if (e.getConfig().getSpec() == SPEC)
-            BoundlessMod.LOGGER.info("[Boundless] Config reloaded: categories={}, pos={}, hideInvBtn={}, invBtnPos={}, centerInv={}, hideHeader={}, filterMode={}, disableCategories={}, builtinPack={}, hideWidgetIcons={}, textScale={}, iconScale={}, searchBox={}, descColors={}, questToasts={}, disablePinning={}, autoClaim={}, questScrolls={}, disableBook={}, spawnBook={}",
-                    disabledCategories(),
-                    pinnedQuestHudPosition(),
-                    hideQuestBookInInventory(),
-                    questBookInventoryButtonPosition(),
-                    centerInventoryWithQuestPanel(),
-                    hideCategoryHeader(),
-                    filterDisplayMode(),
-                    disableCategories(),
-                    enableBuiltinQuestPack(),
-                    hideQuestWidgetIcons(),
-                    questTextScale(),
-                    questIconScale(),
-                    enableQuestSearchBox(),
-                    enableDescriptionColors(),
-                    enableQuestToasts(),
-                    disableQuestPinning(),
-                    autoClaimQuestRewards(),
-                    enableQuestScrolls(),
-                    disableQuestBook(),
-                    spawnWithQuestBook());
+    private static List<String> normalizedCopy(List<? extends String> values) {
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        if (values != null) {
+            for (String value : values) {
+                String normalized = normalizeQuestPackId(value);
+                if (!normalized.isBlank()) out.add(normalized);
+            }
+        }
+        return new ArrayList<>(out);
+    }
+
+    private static String normalizeQuestPackId(String id) {
+        return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean validHudPosition(Object value) {
+        if (!(value instanceof String s)) return false;
+        s = s.trim().toLowerCase(Locale.ROOT);
+        return s.equals("top_left") || s.equals("top_right") || s.equals("bottom_left") || s.equals("bottom_right");
+    }
+
+    private static boolean validInventoryButtonPosition(Object value) {
+        if (!(value instanceof String s)) return false;
+        s = s.trim().toLowerCase(Locale.ROOT);
+        return s.equals("beside_recipe_book") || s.equals("above_offhand_slot");
+    }
+
+    private static boolean validFilterDisplayMode(Object value) {
+        if (!(value instanceof String s)) return false;
+        s = s.trim().toLowerCase(Locale.ROOT);
+        return s.equals("tabs") || s.equals("buttons") || s.equals("hidden");
+    }
+
+    private static <T> ConfigValue<T> value(String key, T defaultValue, Predicate<Object> validator) {
+        return new ConfigValue<>(key, defaultValue, validator);
+    }
+
+    private static ConfigValue<List<? extends String>> list(String key, List<String> defaultValue, Predicate<Object> validator) {
+        return new ConfigValue<>(key, defaultValue, value -> {
+            if (!(value instanceof List<?> list)) return false;
+            for (Object item : list) {
+                if (!validator.test(item)) return false;
+            }
+            return true;
+        });
+    }
+
+    private static DoubleValue doubleValue(String key, double defaultValue, double min, double max) {
+        return new DoubleValue(key, defaultValue, min, max);
+    }
+
+    private static void load() {
+        if (!Files.exists(CONFIG_PATH)) return;
+        loading = true;
+        try (Reader reader = Files.newBufferedReader(CONFIG_PATH)) {
+            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+            for (ConfigValue<?> configValue : ConfigValue.VALUES) {
+                configValue.read(root);
+            }
+        } catch (Exception e) {
+            BoundlessMod.LOGGER.warn("[Boundless] Failed to load config {}, using defaults", CONFIG_PATH, e);
+        } finally {
+            loading = false;
+        }
+    }
+
+    private static void save() {
+        if (loading) return;
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            JsonObject root = new JsonObject();
+            for (ConfigValue<?> configValue : ConfigValue.VALUES) {
+                configValue.write(root);
+            }
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH)) {
+                GSON.toJson(root, writer);
+            }
+        } catch (IOException e) {
+            BoundlessMod.LOGGER.warn("[Boundless] Failed to save config {}", CONFIG_PATH, e);
+        }
+    }
+
+    public static class ConfigValue<T> {
+        private static final List<ConfigValue<?>> VALUES = new ArrayList<>();
+
+        private final String key;
+        private final T defaultValue;
+        private final Predicate<Object> validator;
+        private T value;
+
+        ConfigValue(String key, T defaultValue, Predicate<Object> validator) {
+            this.key = key;
+            this.defaultValue = defaultValue;
+            this.validator = validator;
+            this.value = copy(defaultValue);
+            VALUES.add(this);
+        }
+
+        public T get() {
+            return value;
+        }
+
+        public void set(T value) {
+            if (value == null || !validator.test(value)) {
+                this.value = copy(defaultValue);
+            } else {
+                this.value = copy(value);
+            }
+            save();
+        }
+
+        @SuppressWarnings("unchecked")
+        private void read(JsonObject root) {
+            if (!root.has(key)) return;
+            try {
+                Object decoded = GSON.fromJson(root.get(key), defaultValue.getClass());
+                if (defaultValue instanceof List<?>) {
+                    decoded = GSON.fromJson(root.get(key), List.class);
+                }
+                if (decoded != null && validator.test(decoded)) {
+                    value = copy((T) decoded);
+                }
+            } catch (Exception ignored) {
+                value = copy(defaultValue);
+            }
+        }
+
+        private void write(JsonObject root) {
+            root.add(key, GSON.toJsonTree(value));
+        }
+
+        @SuppressWarnings("unchecked")
+        private static <T> T copy(T value) {
+            if (value instanceof List<?> list) return (T) List.copyOf(list);
+            return value;
+        }
+    }
+
+    public static final class DoubleValue extends ConfigValue<Double> {
+        private final double min;
+        private final double max;
+
+        DoubleValue(String key, double defaultValue, double min, double max) {
+            super(key, defaultValue, Number.class::isInstance);
+            this.min = min;
+            this.max = max;
+        }
+
+        @Override
+        public void set(Double value) {
+            if (value == null) {
+                super.set(null);
+            } else {
+                super.set(Math.max(min, Math.min(max, value)));
+            }
+        }
+    }
+
+    public static final class ConfigSpec {
+        public void save() {
+            Config.save();
+        }
     }
 }

@@ -1,7 +1,7 @@
 package net.revilodev.boundless.compat;
 
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.fml.ModList;
+import net.fabricmc.loader.api.FabricLoader;
 
 public final class JeiCompat {
     private static Object runtime;
@@ -9,7 +9,7 @@ public final class JeiCompat {
     private JeiCompat() {}
 
     public static boolean isJeiInstalled() {
-        return ModList.get().isLoaded("jei");
+        return FabricLoader.getInstance().isModLoaded("jei");
     }
 
     public static void setRuntime(Object jeiRuntime) {

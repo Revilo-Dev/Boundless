@@ -1,14 +1,14 @@
 package net.revilodev.boundless.quest;
 
-import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.minecraft.world.entity.player.Player;
 
 public final class QuestEvents {
     private QuestEvents() {
     }
 
-    public static void onPlayerTick(PlayerTickEvent.Post e) {
-        if (e.getEntity() == null) return;
-        if (!e.getEntity().level().isClientSide) return;
-        QuestTracker.tickPlayer(e.getEntity());
+    public static void onPlayerTick(Player player) {
+        if (player == null) return;
+        if (!player.level().isClientSide) return;
+        QuestTracker.tickPlayer(player);
     }
 }

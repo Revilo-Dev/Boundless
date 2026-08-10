@@ -9,9 +9,8 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.QuestPanelClient;
@@ -22,7 +21,7 @@ import net.revilodev.boundless.quest.QuestData;
 import java.util.ArrayList;
 import java.util.List;
 
-@OnlyIn(Dist.CLIENT)
+@Environment(EnvType.CLIENT)
 public final class QuestSettingsScreen extends Screen {
     private static final ResourceLocation PANEL_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
@@ -561,7 +560,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void sendConfigToServer() {
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.UpdateServerConfig(
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.UpdateServerConfig(
                     pinnedHudPos,
                     hideQuestBookInInventory,
                     questBookInventoryButtonPosition,
