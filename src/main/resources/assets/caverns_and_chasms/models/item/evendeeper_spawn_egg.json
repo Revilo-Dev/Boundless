@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "caverns_and_chasms:item/evendeeper_spawn_egg"
-  }
-}

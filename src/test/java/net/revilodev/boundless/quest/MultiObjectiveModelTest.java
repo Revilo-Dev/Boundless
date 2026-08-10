@@ -60,4 +60,33 @@ final class MultiObjectiveModelTest {
 
         assertEquals(QuestTracker.itemProgressKey(quest, first), QuestTracker.itemProgressKey(quest, second));
     }
+
+    @Test
+    void questRetainsTreeLayout() {
+        QuestData.Quest quest = new QuestData.Quest(
+                "quest.tree",
+                "Tree Quest",
+                "minecraft:diamond",
+                "",
+                List.of(),
+                false,
+                false,
+                false,
+                false,
+                false,
+                new QuestData.Rewards(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), "", 0),
+                "collection",
+                new QuestData.Completion(List.of()),
+                "main",
+                "",
+                "",
+                96,
+                144,
+                "diamond"
+        );
+
+        assertEquals(96, quest.treeX);
+        assertEquals(144, quest.treeY);
+        assertEquals("diamond", quest.treeBackground);
+    }
 }

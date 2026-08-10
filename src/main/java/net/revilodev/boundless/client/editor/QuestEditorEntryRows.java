@@ -1,5 +1,6 @@
 package net.revilodev.boundless.client.editor;
 
+import net.minecraft.network.chat.Component;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EntryRowKind;
 import net.revilodev.boundless.client.editor.QuestEditorModels.ParsedEntry;
 import net.revilodev.boundless.quest.QuestItemSpec;
@@ -20,7 +21,9 @@ public final class QuestEditorEntryRows {
         if (parsed == null) return bodyWithoutType(rawLine);
         if ("check".equals(normalizedType)) {
             String value = safe(parsed.id).trim();
-            return value.isBlank() ? "Understand" : value;
+            return value.isBlank() || "Understand".equals(value)
+                    ? Component.translatable("ui.boundless.questbook.understand").getString()
+                    : value;
         }
         return safe(parsed.id).trim();
     }
@@ -43,7 +46,7 @@ public final class QuestEditorEntryRows {
         if (kind == EntryRowKind.COMPLETION && "levelup".equals(type)) {
             return type + ": levels " + count(box, maps);
         }
-        if (QuestEditorEntryTypes.hasRowBrowser(kind, type)) {
+        if (QuestEditorEntryTypes.usesRowSelection(kind, type)) {
             String itemId = safe(maps.selectedItemIdByBox.get(box)).trim();
             List<String> acceptedIds = selectedIds(box, maps);
             String components = safe(maps.selectedItemComponentsByBox.get(box)).trim();
@@ -111,6 +114,7 @@ public final class QuestEditorEntryRows {
         if (kind == EntryRowKind.DEPENDENCY) return true;
         return QuestEditorEntryTypes.entryTypeOptions(kind).contains(prefix)
                 || ("advancement".equals(prefix) && kind == EntryRowKind.COMPLETION)
+                || ("advancement".equals(prefix) && kind == EntryRowKind.REWARD)
                 || ("entity".equals(prefix) && kind == EntryRowKind.COMPLETION)
                 || ("item".equals(prefix) && kind == EntryRowKind.COMPLETION)
                 || ("submit".equals(prefix) && kind == EntryRowKind.REWARD)
@@ -173,7 +177,7 @@ public final class QuestEditorEntryRows {
         String normalizedItemId = QuestItemSpec.stripComponents(itemId);
         if ("kill".equals(type) || "entity".equals(type)) return QuestEditorItemIcons.mobDisplayNameForMobId(normalizedItemId).getString();
         if ("effect".equals(type)) return QuestEditorItemIcons.effectDisplayName(normalizedItemId);
-        if ("achieve".equals(type) || "advancement".equals(type)) return normalizedItemId;
+        if ("achieve".equals(type) || "advance".equals(type) || "advancement".equals(type)) return normalizedItemId;
         if ("observe".equals(type) || "biome".equals(type) || "dimension".equals(type)) return normalizedItemId;
         return QuestEditorItemIcons.displayNameForItem(normalizedItemId);
     }
@@ -199,9 +203,7 @@ public final class QuestEditorEntryRows {
 
     // should expand focused
     public static boolean shouldExpandFocused(EntryRowKind kind, ScaledMultiLineEditBox box) {
-        if (kind == EntryRowKind.DEPENDENCY || box == null || !box.isFocused()) return false;
-        String value = safe(box.getValue());
-        return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+        return kind != EntryRowKind.DEPENDENCY && box != null && box.isFocused();
     }
 
     private static String safe(String value) {

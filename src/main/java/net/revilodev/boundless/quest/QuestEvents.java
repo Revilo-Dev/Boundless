@@ -2,6 +2,7 @@ package net.revilodev.boundless.quest;
 
 import net.minecraftforge.event.TickEvent;
 
+// forwards gameplay events into quest progress tracking
 public final class QuestEvents {
     private QuestEvents() {
     }

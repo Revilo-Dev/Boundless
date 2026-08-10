@@ -1,5 +1,8 @@
 {
   "id": "end_game",
-  "icon":"minecraft:dragon_egg",
-  "name": "Late Game"
+  "category": "minecraft",
+  "icon": "minecraft:dragon_egg",
+  "name": "Late Game",
+  "order": 2,
+  "default_open": true
 }

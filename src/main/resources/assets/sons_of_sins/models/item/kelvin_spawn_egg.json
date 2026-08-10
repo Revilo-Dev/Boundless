@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "sons_of_sins:item/kelvin_spawn_egg"
-  }
-}

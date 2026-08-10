@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "ribbits:item/ribbit_fisherman_spawn_egg"
-  }
-}  

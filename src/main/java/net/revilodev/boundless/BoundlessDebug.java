@@ -14,9 +14,21 @@ public final class BoundlessDebug {
 
     //Log once per int per diagnostic
     public static void rateLimited(String category, long intervalMillis, String message, Object... arguments) {
-        if (!enabled()) return;
+        if (!enabled() || !categoryEnabled(category)) return;
         if (!takeLogSlot(category, intervalMillis)) return;
         BoundlessMod.LOGGER.info("[Boundless/Dev][{}] " + message, prepend(category, arguments));
+    }
+
+    private static boolean categoryEnabled(String category) {
+        String normalized = category == null ? "" : category.toLowerCase(java.util.Locale.ROOT);
+        if (normalized.contains("panel") || normalized.contains("render") || normalized.contains("editor")) {
+            return Config.debugUiPerformance();
+        }
+        if (normalized.contains("upload") || normalized.contains("download") || normalized.contains("transfer")
+                || normalized.contains("sync") || normalized.contains("network")) {
+            return Config.debugNetworkTransfers();
+        }
+        return Config.debugQuestLoading();
     }
 
     // this keeps repeated failures visible without filling the log

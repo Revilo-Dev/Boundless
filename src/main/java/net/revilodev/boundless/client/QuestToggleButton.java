@@ -9,6 +9,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 @OnlyIn(Dist.CLIENT)
+// shared on and off button used across quest screens
 public class QuestToggleButton extends AbstractButton {
     // image-only button reused by the inventory
     private ResourceLocation texNormal;

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "buzzier_bees:item/grizzly_bear_spawn_egg"
-  }
-}

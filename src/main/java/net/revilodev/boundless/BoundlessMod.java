@@ -54,6 +54,7 @@ public final class BoundlessMod {
         if (net.minecraftforge.fml.loading.FMLEnvironment.dist == Dist.CLIENT) {
             modBus.addListener(this::clientSetup);
             modBus.addListener(QuestBookKeybinds::onRegisterKeyMappings);
+            modBus.addListener(ClientQuestEvents::onRegisterClientReloadListeners);
             MinecraftForge.EVENT_BUS.addListener(QuestBookKeybinds::onClientTick);
         }
         BoundlessNetwork.bootstrap();
@@ -78,6 +79,9 @@ public final class BoundlessMod {
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseScrolled);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseButtonPressed);
+        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseDragged);
+        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onMouseButtonReleased);
+        MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onKeyPressed);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogin);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLogout);
         MinecraftForge.EVENT_BUS.addListener(ClientQuestEvents::onClientLevelUnload);

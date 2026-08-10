@@ -23,8 +23,11 @@ public final class QuestEditorItemIcons {
     // icon stack from id
     public static ItemStack iconStackFromId(String raw) {
         if (raw == null || raw.isBlank()) return ItemStack.EMPTY;
+        QuestItemSpec spec = QuestItemSpec.parse(raw);
+        if (spec.id.isBlank() || spec.tag) return ItemStack.EMPTY;
         try {
-            return new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(raw)));
+            Item item = spec.item();
+            return item == null ? ItemStack.EMPTY : new ItemStack(item);
         } catch (Exception ignored) {
             return ItemStack.EMPTY;
         }

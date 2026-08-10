@@ -11,6 +11,7 @@ import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+// assembles chunked questpack sync payloads
 final class QuestPackTransfer {
     static final int CHUNK_BYTES = 60_000;
     static final int MAX_UPLOAD_BYTES = 64 * 1024 * 1024;

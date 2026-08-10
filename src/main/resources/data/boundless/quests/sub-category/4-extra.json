@@ -1,5 +1,8 @@
 {
   "id": "extra",
-  "icon":"minecraft:map",
-  "name": "Extra Content"
+  "category": "minecraft",
+  "icon": "minecraft:map",
+  "name": "Extra Content",
+  "order": 3,
+  "default_open": true
 }

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "enderzoology:item/dire_wolf_spawn_egg"
-  }
-}

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "netherexp:item/false_carcass_spawn_egg"
-  }
-}

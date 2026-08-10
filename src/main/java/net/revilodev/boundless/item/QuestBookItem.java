@@ -10,6 +10,7 @@ import net.minecraft.world.level.Level;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.network.BoundlessNetwork;
 
+// opens the standalone quest book from an item
 public class QuestBookItem extends Item {
 
     public QuestBookItem(Properties props) {

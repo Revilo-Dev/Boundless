@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+// stores objective progress separately for each player
 public final class QuestObjectiveState extends SavedData {
     private final Map<String, Map<String, Integer>> itemProgressByPlayer = new HashMap<>();
     private final Map<String, Map<String, Boolean>> effectProgressByPlayer = new HashMap<>();

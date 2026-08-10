@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+// stores completed and claimed quest state for each player
 public final class QuestProgressState extends SavedData {
     private final Map<String, Map<String, QuestProgress>> byPlayer = new HashMap<>();
 

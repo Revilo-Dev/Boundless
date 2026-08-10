@@ -5,6 +5,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
 import net.revilodev.boundless.BoundlessMod;
 
+// tells the client which quest completion toast to show
 public record QuestToastPayload(String questId) {
     // Small client payload sent when a quest becomes available.
     public static final ResourceLocation ID =

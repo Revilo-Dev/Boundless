@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
+// loads questpacks into separate client and server snapshots
 public final class QuestData {
     private QuestData() {}
 
@@ -46,14 +47,47 @@ public final class QuestData {
         final Map<String, Quest> quests = new LinkedHashMap<>();
         final Map<String, Category> categories = new LinkedHashMap<>();
         final Map<String, SubCategory> subCategories = new LinkedHashMap<>();
+        final Map<String, List<Quest>> questsByCategory = new HashMap<>();
+        final Map<String, List<Quest>> incompatibleByQuestId = new HashMap<>();
         final Collection<Quest> questView = Collections.unmodifiableCollection(quests.values());
+        List<Quest> orderedQuests = List.of();
         boolean loaded;
+        boolean networkAuthoritative;
         String worldId;
+        long revision;
 
         void clear() {
             quests.clear();
             categories.clear();
             subCategories.clear();
+            questsByCategory.clear();
+            incompatibleByQuestId.clear();
+            orderedQuests = List.of();
+        }
+
+        void rebuildQuestIndex() {
+            List<Quest> ordered = new ArrayList<>(quests.values());
+            ordered.sort(Comparator.comparing(Quest::sourceSortKey));
+            orderedQuests = List.copyOf(ordered);
+
+            Map<String, List<Quest>> grouped = new HashMap<>();
+            Map<String, List<Quest>> incompatible = new HashMap<>();
+            for (Quest quest : ordered) {
+                if (quest == null) continue;
+                grouped.computeIfAbsent(categoryKey(quest.category), ignored -> new ArrayList<>()).add(quest);
+                for (String questId : quest.incompatibleDependencies) {
+                    incompatible.computeIfAbsent(questId, ignored -> new ArrayList<>()).add(quest);
+                }
+            }
+            questsByCategory.clear();
+            for (var entry : grouped.entrySet()) {
+                questsByCategory.put(entry.getKey(), List.copyOf(entry.getValue()));
+            }
+            incompatibleByQuestId.clear();
+            for (var entry : incompatible.entrySet()) {
+                incompatibleByQuestId.put(entry.getKey(), List.copyOf(entry.getValue()));
+            }
+            revision++;
         }
     }
 
@@ -65,10 +99,16 @@ public final class QuestData {
     // immutable quest definition
     public static final class Quest {
         public final String id;
-        public final String name;
+        public String name;
+        private final String fallbackName;
+        public final Map<String, String> nameTranslations;
         public final String icon;
-        public final String description;
+        public String description;
+        private final String fallbackDescription;
+        public final Map<String, String> descriptionTranslations;
+        public final String media;
         public final List<String> dependencies;
+        public final List<String> incompatibleDependencies;
         public final boolean lockAfterDependency;
         public final boolean optional;
         public final boolean repeatable;
@@ -80,6 +120,10 @@ public final class QuestData {
         public final String category;
         public final String subCategory;
         public final String sourcePath;
+        public final int treeX;
+        public final int treeY;
+        public final String treeBackground;
+        public final boolean treeOrigin;
 
         public Quest(String id, String name, String icon, String description,
                      List<String> dependencies, boolean lockAfterDependency, boolean optional, boolean repeatable,
@@ -87,12 +131,65 @@ public final class QuestData {
                      boolean hiddenUnderDependency, Rewards rewards,
                      String type, Completion completion, String category,
                      String subCategory, String sourcePath) {
+            this(id, name, icon, description, dependencies, lockAfterDependency, optional, repeatable, autoComplete,
+                    hiddenUnderDependency, rewards, type, completion, category, subCategory, sourcePath, -1, -1, "square");
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     List<String> dependencies, boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground) {
+            this(id, name, icon, description, dependencies,
+                    lockAfterDependency && dependencies != null ? dependencies : List.of(), lockAfterDependency,
+                    optional, repeatable, autoComplete, hiddenUnderDependency, rewards, type, completion,
+                    category, subCategory, sourcePath, treeX, treeY, treeBackground, false);
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     List<String> dependencies, List<String> incompatibleDependencies,
+                     boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground, boolean treeOrigin) {
+            this(id, name, icon, description, dependencies, incompatibleDependencies, lockAfterDependency, optional,
+                    repeatable, autoComplete, hiddenUnderDependency, rewards, type, completion, category, subCategory,
+                    sourcePath, treeX, treeY, treeBackground, treeOrigin, "");
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     List<String> dependencies, List<String> incompatibleDependencies,
+                     boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground, boolean treeOrigin, String media) {
+            this(id, name, icon, description, Map.of(), Map.of(), dependencies, incompatibleDependencies,
+                    lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency, rewards, type,
+                    completion, category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     Map<String, String> nameTranslations, Map<String, String> descriptionTranslations,
+                     List<String> dependencies, List<String> incompatibleDependencies,
+                     boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground, boolean treeOrigin, String media) {
 
             this.id = Objects.requireNonNull(id);
-            this.name = name == null ? id : name;
+            this.nameTranslations = immutableTranslations(nameTranslations);
+            this.descriptionTranslations = immutableTranslations(descriptionTranslations);
+            this.fallbackName = name == null || name.isBlank() ? id : name;
+            this.fallbackDescription = description == null ? "" : description;
+            this.name = localizedQuestText(this.fallbackName, this.nameTranslations, id);
             this.icon = icon == null || icon.isBlank() ? "boundless:quest_book" : icon;
-            this.description = description == null ? "" : description;
+            this.description = localizedQuestText(this.fallbackDescription, this.descriptionTranslations, "");
+            this.media = media == null ? "" : media;
             this.dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
+            this.incompatibleDependencies = lockAfterDependency
+                    && (incompatibleDependencies == null || incompatibleDependencies.isEmpty())
+                    ? this.dependencies
+                    : incompatibleDependencies == null ? List.of() : List.copyOf(incompatibleDependencies);
             this.lockAfterDependency = lockAfterDependency;
             this.optional = optional;
             this.repeatable = repeatable;
@@ -104,6 +201,63 @@ public final class QuestData {
             this.category = (category == null || category.isBlank()) ? "misc" : category;
             this.subCategory = subCategory == null ? "" : subCategory;
             this.sourcePath = sourcePath == null ? "" : sourcePath;
+            this.treeX = treeX;
+            this.treeY = treeY;
+            this.treeBackground = normalizeTreeBackground(treeBackground);
+            this.treeOrigin = treeOrigin;
+        }
+
+        private static Map<String, String> immutableTranslations(Map<String, String> translations) {
+            if (translations == null || translations.isEmpty()) return Map.of();
+            Map<String, String> normalized = new LinkedHashMap<>();
+            translations.forEach((locale, text) -> {
+                String key = normalizeLocale(locale);
+                if (!key.isBlank() && text != null && !text.isBlank()) normalized.put(key, text);
+            });
+            return normalized.isEmpty() ? Map.of() : Collections.unmodifiableMap(normalized);
+        }
+
+        private static String localizedQuestText(String fallback, Map<String, String> translations, String emptyFallback) {
+            String base = fallback == null || fallback.isBlank() ? emptyFallback : fallback;
+            if (!Config.multiLanguageQuests() || translations == null || translations.isEmpty()
+                    || FMLEnvironment.dist != Dist.CLIENT) return base;
+            String locale = normalizeLocale(Config.preferredLanguage());
+            if (locale.isBlank() || "client".equals(locale)) {
+                try {
+                    locale = normalizeLocale(Minecraft.getInstance().getLanguageManager().getSelected());
+                } catch (Throwable ignored) {
+                    locale = "en_us";
+                }
+            }
+            String translated = translatedText(translations, locale);
+            if (translated == null) translated = translatedText(translations, "en_us");
+            if (translated == null) translated = translations.get("en");
+            return translated == null || translated.isBlank() ? base : translated;
+        }
+
+        private static String translatedText(Map<String, String> translations, String locale) {
+            String translated = translations.get(locale);
+            if (translated == null && locale.contains("_")) {
+                translated = translations.get(locale.substring(0, locale.indexOf('_')));
+            }
+            return translated;
+        }
+
+        private static String normalizeLocale(String locale) {
+            return locale == null ? "" : locale.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+        }
+
+        private void relocalize() {
+            name = localizedQuestText(fallbackName, nameTranslations, id);
+            description = localizedQuestText(fallbackDescription, descriptionTranslations, "");
+        }
+
+        private static String normalizeTreeBackground(String raw) {
+            String value = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+            return switch (value) {
+                case "circle", "diamond", "rounded_square", "square" -> value;
+                default -> "square";
+            };
         }
 
         public Optional<Item> iconItem() {
@@ -312,21 +466,83 @@ public final class QuestData {
     public static final class Category {
         public final String id;
         public final String icon;
-        public final String name;
+        public final String fallbackName;
+        public final Map<String, String> nameTranslations;
+        public String name;
         public final int order;
         public final boolean excludeFromAll;
         public final String dependency;
         public final boolean autoComplete;
+        public final boolean treeLayout;
+        public final String background;
+        public final float backgroundTileScale;
+        public final boolean backgroundDarkening;
+        public final float backgroundDarkeningOpacity;
+        public final List<Sticker> stickers;
 
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, false, "");
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete, boolean treeLayout) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, "");
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, background, false, 0.45f);
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, boolean backgroundDarkening,
+                        float backgroundDarkeningOpacity) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, background,
+                    0.5f, backgroundDarkening, backgroundDarkeningOpacity, List.of());
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, boolean backgroundDarkening,
+                        float backgroundDarkeningOpacity, List<Sticker> stickers) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, background,
+                    0.5f, backgroundDarkening, backgroundDarkeningOpacity, stickers);
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, float backgroundTileScale,
+                        boolean backgroundDarkening, float backgroundDarkeningOpacity, List<Sticker> stickers) {
+            this(id, icon, name, Map.of(), order, excludeFromAll, dependency, autoComplete, treeLayout,
+                    background, backgroundTileScale, backgroundDarkening, backgroundDarkeningOpacity, stickers);
+        }
+
+        public Category(String id, String icon, String name, Map<String, String> nameTranslations, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, float backgroundTileScale,
+                        boolean backgroundDarkening, float backgroundDarkeningOpacity, List<Sticker> stickers) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
-            this.name = name == null || name.isBlank() ? id : name;
+            this.fallbackName = name == null || name.isBlank() ? id : name;
+            this.nameTranslations = Quest.immutableTranslations(nameTranslations);
+            this.name = Quest.localizedQuestText(this.fallbackName, this.nameTranslations, id);
             this.order = order;
             this.excludeFromAll = excludeFromAll;
             this.dependency = dependency == null ? "" : dependency;
             this.autoComplete = autoComplete;
+            this.treeLayout = treeLayout;
+            this.background = background == null ? "" : background;
+            this.backgroundTileScale = Math.max(0.1f, Math.min(2f, backgroundTileScale));
+            this.backgroundDarkening = backgroundDarkening;
+            this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, backgroundDarkeningOpacity));
+            this.stickers = stickers == null ? List.of() : List.copyOf(stickers);
+        }
+
+        private void relocalize() {
+            name = Quest.localizedQuestText(fallbackName, nameTranslations, id);
         }
 
         public Optional<Item> iconItem() {
@@ -356,7 +572,9 @@ public final class QuestData {
         public final String id;
         public final String category;
         public final String icon;
-        public final String name;
+        public final String fallbackName;
+        public final Map<String, String> nameTranslations;
+        public String name;
         public final int order;
         public final boolean defaultOpen;
         public final List<String> quests;
@@ -364,14 +582,26 @@ public final class QuestData {
 
         public SubCategory(String id, String category, String icon, String name,
                            int order, boolean defaultOpen, List<String> quests, String sourcePath) {
+            this(id, category, icon, name, Map.of(), order, defaultOpen, quests, sourcePath);
+        }
+
+        public SubCategory(String id, String category, String icon, String name,
+                           Map<String, String> nameTranslations, int order, boolean defaultOpen,
+                           List<String> quests, String sourcePath) {
             this.id = id == null ? "" : id;
             this.category = category == null ? "" : category;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
-            this.name = name == null || name.isBlank() ? this.id : name;
+            this.fallbackName = name == null || name.isBlank() ? this.id : name;
+            this.nameTranslations = Quest.immutableTranslations(nameTranslations);
+            this.name = Quest.localizedQuestText(this.fallbackName, this.nameTranslations, this.id);
             this.order = order;
             this.defaultOpen = defaultOpen;
             this.quests = quests == null ? List.of() : List.copyOf(quests);
             this.sourcePath = sourcePath == null ? "" : sourcePath;
+        }
+
+        private void relocalize() {
+            name = Quest.localizedQuestText(fallbackName, nameTranslations, id);
         }
 
         public Optional<Item> iconItem() {
@@ -396,7 +626,7 @@ public final class QuestData {
     }
 
     private static boolean isQuestDisabled(Quest q) {
-        return Config.disabledCategories().contains(q.category);
+        return Config.isCategoryDisabled(q.category);
     }
 
     private static boolean isBuiltinQuestNamespace(String namespace) {
@@ -453,7 +683,7 @@ public final class QuestData {
     }
 
     public static void forceReloadAll(MinecraftServer server) {
-        // Reload both resource-pack data and instance-local quest packs.
+        // reload both resource pack data and instance local questpacks
         CLIENT_DATA.loaded = false;
         SERVER_DATA.loaded = false;
         CLIENT_DATA.worldId = null;
@@ -462,7 +692,7 @@ public final class QuestData {
     }
 
     private static synchronized void load(ResourceManager rm, boolean forceReload, DataStore data) {
-        // The maps are rebuilt together so categories never point at stale quests.
+        // rebuild every map together so categories never point at stale quests
         data.clear();
 
         Map<ResourceLocation, List<Resource>> catStacks =
@@ -483,13 +713,22 @@ public final class QuestData {
 
                 String icon = optString(obj, "icon");
                 String cname = optString(obj, "name");
+                Map<String, String> nameTranslations = parseNameTranslations(obj);
                 int order = parseIntFlexible(obj, "order", 0);
                 boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
                 String dependency = optString(obj, "dependency");
                 boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                         parseBoolFlexible(obj, "autoComplete", false));
+                boolean treeLayout = "tree".equalsIgnoreCase(optString(obj, "layout"));
+                String background = optString(obj, "background");
+                float backgroundTileScale = parseFloatFlexible(obj, "background_tile_scale", 0.5f);
+                boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
+                float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
+                List<Sticker> stickers = parseStickers(obj);
 
-                data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
+                data.categories.put(id, new Category(id, icon, cname, nameTranslations, order, excludeFromAll, dependency,
+                        autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
+                        backgroundDarkeningOpacity, stickers));
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("category-parse:" + entry.getKey(), 5_000L,
                         "could not parse category {}", entry.getKey(), e);
@@ -536,6 +775,7 @@ public final class QuestData {
             data.categories.put("all", new Category("all", "minecraft:book", "All",
                     Integer.MIN_VALUE, false, "", false));
         }
+        data.rebuildQuestIndex();
     }
 
     private static void loadModQuestPacksFromInstance(DataStore data) {
@@ -560,6 +800,7 @@ public final class QuestData {
     private static boolean isInstancePackEnabled(Path packRoot) {
         if (packRoot == null) return false;
         String id = packRoot.getFileName() == null ? "" : packRoot.getFileName().toString();
+        if ("boundless".equalsIgnoreCase(id)) return Config.enableBuiltinQuestPack();
         Boolean enabledFromPackJson = readEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"));
         boolean defaultEnabled;
         if (enabledFromPackJson != null) {
@@ -667,18 +908,39 @@ public final class QuestData {
                     if (id == null || id.isBlank()) continue;
                     String icon = optString(obj, "icon");
                     String cname = optString(obj, "name");
+                    Map<String, String> nameTranslations = parseNameTranslations(obj);
                     int order = parseIntFlexible(obj, "order", 0);
                     boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
                     String dependency = optString(obj, "dependency");
                     boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                             parseBoolFlexible(obj, "autoComplete", false));
-                    data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
+                    boolean treeLayout = "tree".equalsIgnoreCase(optString(obj, "layout"));
+                    String background = optString(obj, "background");
+                    float backgroundTileScale = parseFloatFlexible(obj, "background_tile_scale", 0.5f);
+                    boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
+                    float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
+                    List<Sticker> stickers = parseStickers(obj);
+                    data.categories.put(id, new Category(id, icon, cname, nameTranslations, order, excludeFromAll, dependency,
+                            autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
+                            backgroundDarkeningOpacity, stickers));
                 } catch (Exception e) {
                     BoundlessDebug.warnRateLimited("category-file:" + file, 5_000L,
                             "could not parse category file {}", file, e);
                 }
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    public record Sticker(String type, String value, int x, int y, float scale) {
+        public Sticker(String type, String value, int x, int y) {
+            this(type, value, x, y, 1f);
+        }
+
+        public Sticker {
+            type = "icon".equalsIgnoreCase(type) ? "icon" : "text";
+            value = value == null ? "" : value;
+            scale = Math.max(0.25f, Math.min(4f, scale));
         }
     }
 
@@ -758,6 +1020,7 @@ public final class QuestData {
 
         String icon = optString(obj, "icon");
         String name = optString(obj, "name");
+        Map<String, String> nameTranslations = parseNameTranslations(obj);
         int order = parseIntFlexible(obj, "order", 0);
         boolean defaultOpen = parseBoolFlexible(obj, "default_open", true);
         if (obj.has("defaultOpen")) {
@@ -765,7 +1028,8 @@ public final class QuestData {
         }
 
         String key = subKey(cat, id);
-        data.subCategories.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, List.of(), sourcePath));
+        data.subCategories.put(key, new SubCategory(id, cat, icon, name, nameTranslations,
+                order, defaultOpen, List.of(), sourcePath));
         return true;
     }
 
@@ -788,9 +1052,12 @@ public final class QuestData {
     }
 
     public static synchronized void loadClient(boolean forceReload) {
+        // multiplayer snapshots stay authoritative; integrated quick edits may force a local refresh
         if (FMLEnvironment.dist != Dist.CLIENT) return;
 
         Minecraft mc = Minecraft.getInstance();
+        if (CLIENT_DATA.networkAuthoritative && mc.getConnection() != null
+                && (!forceReload || mc.getSingleplayerServer() == null)) return;
         String worldId = null;
 
         try {
@@ -819,6 +1086,7 @@ public final class QuestData {
     }
 
     public static synchronized void loadServer(MinecraftServer server, boolean forceReload) {
+        // reuse loaded data until the world identity changes
         String worldId;
         try {
             worldId = server.getWorldData().getLevelName() + "@" + server.getWorldData().worldGenOptions().seed();
@@ -851,9 +1119,32 @@ public final class QuestData {
         return CLIENT_DATA.questView;
     }
 
+    public static synchronized List<Quest> questsForCategory(String categoryId) {
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        if (categoryId == null || categoryId.isBlank() || "all".equalsIgnoreCase(categoryId)) {
+            return CLIENT_DATA.orderedQuests;
+        }
+        return CLIENT_DATA.questsByCategory.getOrDefault(categoryKey(categoryId), List.of());
+    }
+
+    public static synchronized long clientRevision() {
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        return CLIENT_DATA.revision;
+    }
+
     public static synchronized Collection<Quest> allServer(MinecraftServer server) {
         loadServer(server, false);
         return SERVER_DATA.questView;
+    }
+
+    public static synchronized List<Quest> incompatibleQuests(String questId) {
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        return CLIENT_DATA.incompatibleByQuestId.getOrDefault(questId, List.of());
+    }
+
+    public static synchronized List<Quest> incompatibleQuestsServer(MinecraftServer server, String questId) {
+        loadServer(server, false);
+        return SERVER_DATA.incompatibleByQuestId.getOrDefault(questId, List.of());
     }
 
     public static synchronized Optional<Quest> byId(String id) {
@@ -978,6 +1269,7 @@ public final class QuestData {
             String id = meta != null ? meta.id : qs.get(0).subCategory;
             String icon = meta != null ? meta.icon : qs.get(0).icon;
             String name = meta != null ? meta.name : prettifyId(id);
+            Map<String, String> nameTranslations = meta != null ? meta.nameTranslations : Map.of();
             int order = meta != null ? meta.order : 0;
             boolean defaultOpen = meta != null ? meta.defaultOpen : true;
             String sourcePath = meta != null ? meta.sourcePath : "";
@@ -985,7 +1277,7 @@ public final class QuestData {
             List<String> questIds = new ArrayList<>(qs.size());
             for (Quest q : qs) questIds.add(q.id);
 
-            out.add(new SubCategory(id, cat, icon, name, order, defaultOpen, questIds, sourcePath));
+            out.add(new SubCategory(id, cat, icon, name, nameTranslations, order, defaultOpen, questIds, sourcePath));
         }
 
         out.sort((a, b) -> {
@@ -1014,8 +1306,12 @@ public final class QuestData {
         String name = optString(obj, "name");
         String icon = optString(obj, "icon");
         String description = optString(obj, "description");
+        Map<String, String> nameTranslations = parseTranslations(obj, "name");
+        Map<String, String> descriptionTranslations = parseTranslations(obj, "description");
+        String media = optString(obj, "media");
 
         List<String> deps = parseDependencies(obj);
+        List<String> incompatibleDeps = parseStringList(obj, "incompatible_dependencies");
         boolean optional = parseBoolFlexible(obj, "optional", false);
         boolean repeatable = parseBoolFlexible(obj, "repeatable", false);
         boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
@@ -1037,10 +1333,61 @@ public final class QuestData {
         if (subCategory == null) subCategory = optString(obj, "subCategory");
 
         String sourcePath = src == null ? "" : src.getPath();
+        int treeX = parseIntFlexible(obj, "tree_x", -1);
+        int treeY = parseIntFlexible(obj, "tree_y", -1);
+        String treeBackground = optString(obj, "tree_background");
+        boolean treeOrigin = parseBoolFlexible(obj, "tree_origin", false);
 
-        return new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
+        return new Quest(id, name, icon, description, nameTranslations, descriptionTranslations,
+                deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                 rewards, type, completion,
-                category, subCategory, sourcePath);
+                category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
+    }
+
+    public static synchronized void relocalizeClientTranslations() {
+        for (Category category : CLIENT_DATA.categories.values()) category.relocalize();
+        for (SubCategory subCategory : CLIENT_DATA.subCategories.values()) subCategory.relocalize();
+        for (Quest quest : CLIENT_DATA.quests.values()) quest.relocalize();
+        CLIENT_DATA.revision++;
+    }
+
+    private static Map<String, String> parseTranslations(JsonObject obj, String field) {
+        if (obj == null || !obj.has("translations") || !obj.get("translations").isJsonObject()) return Map.of();
+        Map<String, String> values = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : obj.getAsJsonObject("translations").entrySet()) {
+            if (!entry.getValue().isJsonObject()) continue;
+            String value = optString(entry.getValue().getAsJsonObject(), field);
+            if (value != null && !value.isBlank()) values.put(normalizeLocale(entry.getKey()), value);
+        }
+        return values;
+    }
+
+    private static Map<String, String> parseNameTranslations(JsonObject obj) {
+        Map<String, String> values = parseTranslations(obj, "name");
+        if (!values.isEmpty() || obj == null || !obj.has("nameTranslations")
+                || !obj.get("nameTranslations").isJsonObject()) return values;
+        Map<String, String> serialized = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : obj.getAsJsonObject("nameTranslations").entrySet()) {
+            if (!entry.getValue().isJsonPrimitive()) continue;
+            String value = entry.getValue().getAsString();
+            if (value != null && !value.isBlank()) serialized.put(normalizeLocale(entry.getKey()), value);
+        }
+        return serialized;
+    }
+
+    private static String normalizeLocale(String locale) {
+        return locale == null ? "" : locale.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+    }
+
+    private static List<String> parseStringList(JsonObject obj, String key) {
+        if (obj == null || !obj.has(key) || !obj.get(key).isJsonArray()) return List.of();
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (JsonElement element : obj.getAsJsonArray(key)) {
+            if (!element.isJsonPrimitive()) continue;
+            String value = element.getAsString().trim();
+            if (!value.isBlank()) values.add(value);
+        }
+        return List.copyOf(values);
     }
 
     private static List<String> parseDependencies(JsonObject obj) {
@@ -1594,13 +1941,22 @@ public final class QuestData {
 
                     String icon = optString(o, "icon");
                     String name = optString(o, "name");
+                    Map<String, String> nameTranslations = parseNameTranslations(o);
                     int order = parseIntFlexible(o, "order", 0);
                     boolean excludeFromAll = parseBoolFlexible(o, "excludeFromAll", false);
                     String dependency = optString(o, "dependency");
                     boolean autoComplete = parseBoolFlexible(o, "auto_complete",
                             parseBoolFlexible(o, "autoComplete", false));
+                    boolean treeLayout = parseBoolFlexible(o, "treeLayout", false);
+                    String background = optString(o, "background");
+                    float backgroundTileScale = parseFloatFlexible(o, "backgroundTileScale", 0.5f);
+                    boolean backgroundDarkening = parseBoolFlexible(o, "backgroundDarkening", false);
+                    float backgroundDarkeningOpacity = parseFloatFlexible(o, "backgroundDarkeningOpacity", 0.45f);
+                    List<Sticker> stickers = parseStickers(o);
 
-                    parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency, autoComplete));
+                    parsed.categories.put(id, new Category(id, icon, name, nameTranslations, order, excludeFromAll, dependency,
+                            autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
+                            backgroundDarkeningOpacity, stickers));
                 }
             }
 
@@ -1616,6 +1972,7 @@ public final class QuestData {
                     if (cat == null) cat = "";
                     String icon = optString(o, "icon");
                     String name = optString(o, "name");
+                    Map<String, String> nameTranslations = parseNameTranslations(o);
                     int order = parseIntFlexible(o, "order", 0);
                     boolean defaultOpen = parseBoolFlexible(o, "defaultOpen", true);
                     String sourcePath = optString(o, "sourcePath");
@@ -1631,7 +1988,8 @@ public final class QuestData {
                     }
 
                     String key = subKey(cat, id);
-                    parsed.subCategories.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, questIds, sourcePath));
+                    parsed.subCategories.put(key, new SubCategory(id, cat, icon, name, nameTranslations,
+                            order, defaultOpen, questIds, sourcePath));
                 }
             }
 
@@ -1646,6 +2004,9 @@ public final class QuestData {
                     String name = optString(o, "name");
                     String icon = optString(o, "icon");
                     String description = optString(o, "description");
+                    Map<String, String> nameTranslations = parseTranslations(o, "name");
+                    Map<String, String> descriptionTranslations = parseTranslations(o, "description");
+                    String media = optString(o, "media");
 
                     List<String> deps = new ArrayList<>();
                     if (o.has("dependencies") && o.get("dependencies").isJsonArray()) {
@@ -1656,6 +2017,7 @@ public final class QuestData {
                             }
                         }
                     }
+                    List<String> incompatibleDeps = parseStringList(o, "incompatibleDependencies");
 
                     boolean optional = parseBoolFlexible(o, "optional", false);
                     boolean repeatable = parseBoolFlexible(o, "repeatable", false);
@@ -1802,10 +2164,15 @@ public final class QuestData {
                     String category = optString(o, "category");
                     String subCategory = optString(o, "subCategory");
                     String sourcePath = optString(o, "sourcePath");
+                    int treeX = parseIntFlexible(o, "treeX", -1);
+                    int treeY = parseIntFlexible(o, "treeY", -1);
+                    String treeBackground = optString(o, "treeBackground");
+                    boolean treeOrigin = parseBoolFlexible(o, "treeOrigin", false);
 
-                    Quest q = new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
+                    Quest q = new Quest(id, name, icon, description, nameTranslations, descriptionTranslations,
+                            deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                             rewards, type, completion,
-                            category, subCategory, sourcePath);
+                            category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
                     if (!isQuestDisabled(q)) parsed.quests.put(q.id, q);
                 }
             }
@@ -1836,8 +2203,10 @@ public final class QuestData {
         CLIENT_DATA.quests.putAll(snapshot.quests());
         CLIENT_DATA.categories.putAll(snapshot.categories());
         CLIENT_DATA.subCategories.putAll(snapshot.subCategories());
+        CLIENT_DATA.rebuildQuestIndex();
         // remote snapshots use the multiplayer cache key
         CLIENT_DATA.worldId = null;
+        CLIENT_DATA.networkAuthoritative = true;
         CLIENT_DATA.loaded = true;
     }
 
@@ -1849,6 +2218,8 @@ public final class QuestData {
         // Leave client loading available for the next server or world.
         if (FMLEnvironment.dist != Dist.CLIENT) return;
         CLIENT_DATA.clear();
+        CLIENT_DATA.rebuildQuestIndex();
+        CLIENT_DATA.networkAuthoritative = false;
         CLIENT_DATA.worldId = null;
         CLIENT_DATA.loaded = true;
     }
@@ -1871,6 +2242,35 @@ public final class QuestData {
         if (p == null) return def;
         if (p.isBoolean()) return p.getAsBoolean();
         try { return Boolean.parseBoolean(p.getAsString()); } catch (Exception ignored) { return def; }
+    }
+
+    private static String categoryKey(String categoryId) {
+        return categoryId == null ? "" : categoryId.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static float parseFloatFlexible(JsonObject o, String key, float def) {
+        if (o == null || !o.has(key) || o.get(key).isJsonNull()) return def;
+        try {
+            return o.get(key).getAsFloat();
+        } catch (RuntimeException ignored) {
+            return def;
+        }
+    }
+
+    private static List<Sticker> parseStickers(JsonObject object) {
+        if (object == null || !object.has("stickers") || !object.get("stickers").isJsonArray()) return List.of();
+        List<Sticker> stickers = new ArrayList<>();
+        for (JsonElement element : object.getAsJsonArray("stickers")) {
+            if (!element.isJsonObject()) continue;
+            JsonObject sticker = element.getAsJsonObject();
+            String type = optString(sticker, "type");
+            String value = optString(sticker, "value");
+            if (value == null || value.isBlank()) continue;
+            stickers.add(new Sticker(type, value,
+                    parseIntFlexible(sticker, "x", 0), parseIntFlexible(sticker, "y", 0),
+                    parseFloatFlexible(sticker, "scale", 1f)));
+        }
+        return List.copyOf(stickers);
     }
 
     private static JsonObject safeObject(Reader reader) {

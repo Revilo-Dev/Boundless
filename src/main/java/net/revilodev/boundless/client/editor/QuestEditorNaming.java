@@ -1,11 +1,13 @@
 package net.revilodev.boundless.client.editor;
 
+import net.revilodev.boundless.client.QuestTextFormatting;
 import net.revilodev.boundless.client.editor.QuestEditorModels.IndexName;
 import net.revilodev.boundless.client.editor.QuestEditorModels.NamedEntry;
 import net.revilodev.boundless.client.editor.QuestEditorModels.QuestPack;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.Normalizer;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -39,6 +41,14 @@ public final class QuestEditorNaming {
         String raw = safe(value).toLowerCase(Locale.ROOT);
         if (raw.isBlank()) return "";
         return raw.replaceAll("\\s+", "-").replaceAll("[^a-z0-9_.-]", "");
+    }
+
+    public static String idFromDisplayName(String value) {
+        return Normalizer.normalize(QuestTextFormatting.strip(value), Normalizer.Form.NFKD)
+                .replaceAll("\\p{M}+", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-+|-+$)", "");
     }
 
     // next available id

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "scguns:item/sky_carrier_spawn_egg"
-  }
-}

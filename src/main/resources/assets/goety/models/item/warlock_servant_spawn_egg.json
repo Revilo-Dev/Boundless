@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "goety:item/warlock_servant_spawn_egg"
-  }
-}

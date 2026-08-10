@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "ad_astra:item/lunarian_wandering_trader_spawn_egg"
-  }
-}

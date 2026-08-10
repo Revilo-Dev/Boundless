@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "betterend:item/spawn_egg_silk_moth"
-  }
-}

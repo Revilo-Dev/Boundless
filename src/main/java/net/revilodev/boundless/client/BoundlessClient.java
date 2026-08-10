@@ -5,6 +5,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 
 @OnlyIn(Dist.CLIENT)
+// registers client-only screens and render hooks
 public final class BoundlessClient {
     private BoundlessClient() {}
 

@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.fml.ModList;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestPackStorage;
@@ -17,7 +18,10 @@ import net.revilodev.boundless.client.editor.QuestEditorModels.QuestPack;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.net.JarURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -30,6 +34,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Enumeration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
@@ -39,6 +48,15 @@ public final class QuestEditorPackFiles {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final ResourceLocation GENERATED_PACK_ICON =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/pack.png");
+    public static final String BUILTIN_PACK_NAME = "boundless";
+    private static final long BACKUP_DEBOUNCE_MS = 300L;
+    private static final ExecutorService BACKUP_EXECUTOR = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "Boundless questpack backup");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final ConcurrentHashMap<Path, BackupRequest> PENDING_BACKUPS = new ConcurrentHashMap<>();
+    private static final Set<Path> ACTIVE_BACKUPS = ConcurrentHashMap.newKeySet();
     private static int questPackUploadId = 1;
 
     private QuestEditorPackFiles() {
@@ -105,6 +123,7 @@ public final class QuestEditorPackFiles {
 
     // collect visible quest packs
     public static List<QuestPack> listPacks() {
+        ensureBuiltinPackWorkspace();
         QuestPackStorage.cleanupStagedQuestPacks(packsRoot());
         List<QuestPack> packs = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -146,6 +165,148 @@ public final class QuestEditorPackFiles {
 
         packs.sort(Comparator.comparing(a -> a.name.toLowerCase(Locale.ROOT)));
         return packs;
+    }
+
+    public static QuestPack builtinPack() {
+        ensureBuiltinPackWorkspace();
+        Path root = packsRoot().resolve(BUILTIN_PACK_NAME);
+        return new QuestPack(BUILTIN_PACK_NAME, "boundless", root, false, Config.enableBuiltinQuestPack());
+    }
+
+    public static boolean isBuiltinPack(QuestPack pack) {
+        return pack != null && BUILTIN_PACK_NAME.equalsIgnoreCase(pack.name);
+    }
+
+    private static void ensureBuiltinPackWorkspace() {
+        Path root = packsRoot().resolve(BUILTIN_PACK_NAME);
+        Path questsRoot = root.resolve("data").resolve("boundless").resolve("quests");
+        Path materializedMarker = root.resolve(".boundless-workspace");
+        try {
+            if (!Files.exists(materializedMarker) || !containsCompleteBuiltinWorkspace(questsRoot)) {
+                copyBundledQuestFiles(questsRoot);
+                if (containsCompleteBuiltinWorkspace(questsRoot)) {
+                    Files.writeString(materializedMarker, "3\n", StandardCharsets.UTF_8);
+                }
+            }
+            if (!Files.exists(packMetaPath(root))) {
+                writePackMeta(root, BUILTIN_PACK_NAME, "Editable built-in Boundless quest pack", "boundless:quest_book",
+                        Config.enableBuiltinQuestPack());
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean containsQuestFiles(Path questsRoot) throws IOException {
+        if (!Files.isDirectory(questsRoot)) return false;
+        try (var files = Files.walk(questsRoot)) {
+            return files.anyMatch(path -> Files.isRegularFile(path)
+                    && path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".json"));
+        }
+    }
+
+    private static boolean containsDirectQuestFiles(Path questsRoot) throws IOException {
+        if (!Files.isDirectory(questsRoot)) return false;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(questsRoot, "*.json")) {
+            return files.iterator().hasNext();
+        }
+    }
+
+    private static boolean containsCompleteBuiltinWorkspace(Path questsRoot) throws IOException {
+        return containsDirectQuestFiles(questsRoot)
+                && containsQuestFiles(questsRoot.resolve("categories"))
+                && containsQuestFiles(questsRoot.resolve("sub-category"));
+    }
+
+    private static void copyBundledQuestFiles(Path questsRoot) throws Exception {
+        Files.createDirectories(questsRoot);
+        String resourceDirectory = "data/boundless/quests";
+        try {
+            var modFileInfo = ModList.get().getModFileById("boundless");
+            if (modFileInfo != null) {
+                Path modQuestDirectory = modFileInfo.getFile().findResource("data", "boundless", "quests");
+                if (Files.isDirectory(modQuestDirectory)) copyQuestDirectory(modQuestDirectory, questsRoot);
+            }
+        } catch (Exception ignored) {
+        }
+        if (containsCompleteBuiltinWorkspace(questsRoot)) return;
+        ClassLoader loader = QuestEditorPackFiles.class.getClassLoader();
+        copyBundledQuestManifest(loader, resourceDirectory, questsRoot);
+        if (containsCompleteBuiltinWorkspace(questsRoot)) return;
+        Enumeration<URL> resources = loader.getResources(resourceDirectory);
+        while (resources.hasMoreElements()) {
+            URL resource = resources.nextElement();
+            if ("file".equals(resource.getProtocol())) {
+                copyQuestDirectory(Path.of(resource.toURI()), questsRoot);
+            } else if ("jar".equals(resource.getProtocol())) {
+                JarURLConnection connection = (JarURLConnection) resource.openConnection();
+                try (JarFile jar = connection.getJarFile()) {
+                    copyQuestJarEntries(jar, resourceDirectory + "/", questsRoot);
+                }
+            }
+        }
+        if (containsCompleteBuiltinWorkspace(questsRoot)) return;
+        URL codeSource = QuestEditorPackFiles.class.getProtectionDomain().getCodeSource().getLocation();
+        if (codeSource != null && "file".equals(codeSource.getProtocol())) {
+            Path source = Path.of(codeSource.toURI());
+            if (Files.isDirectory(source)) {
+                Path directory = source.resolve(resourceDirectory);
+                if (Files.isDirectory(directory)) copyQuestDirectory(directory, questsRoot);
+            } else if (source.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                try (JarFile jar = new JarFile(source.toFile())) {
+                    copyQuestJarEntries(jar, resourceDirectory + "/", questsRoot);
+                }
+            }
+        }
+    }
+
+    private static void copyBundledQuestManifest(ClassLoader loader, String resourceDirectory, Path questsRoot) {
+        String manifestPath = resourceDirectory + "/workspace-files.txt";
+        try (InputStream manifestStream = loader.getResourceAsStream(manifestPath)) {
+            if (manifestStream == null) return;
+            List<String> files = new BufferedReader(new java.io.InputStreamReader(manifestStream, StandardCharsets.UTF_8))
+                    .lines().map(String::trim).filter(line -> !line.isBlank()).toList();
+            for (String relative : files) {
+                Path target = questsRoot.resolve(relative).normalize();
+                if (!target.startsWith(questsRoot) || Files.exists(target)) continue;
+                try (InputStream input = loader.getResourceAsStream(resourceDirectory + "/" + relative)) {
+                    if (input == null) continue;
+                    Path parent = target.getParent();
+                    if (parent != null) Files.createDirectories(parent);
+                    Files.copy(input, target);
+                }
+            }
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static void copyQuestDirectory(Path source, Path questsRoot) throws IOException {
+        try (var files = Files.walk(source)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                Path relative = source.relativize(file);
+                Path target = questsRoot.resolve(relative).normalize();
+                if (!target.startsWith(questsRoot)) continue;
+                Path parent = target.getParent();
+                if (parent != null) Files.createDirectories(parent);
+                if (!Files.exists(target)) Files.copy(file, target);
+            }
+        }
+    }
+
+    private static void copyQuestJarEntries(JarFile jar, String prefix, Path questsRoot) throws IOException {
+        var entries = jar.entries();
+        while (entries.hasMoreElements()) {
+            var entry = entries.nextElement();
+            if (entry.isDirectory() || !entry.getName().startsWith(prefix)) continue;
+            String relative = entry.getName().substring(prefix.length());
+            if (relative.isBlank()) continue;
+            Path target = questsRoot.resolve(relative).normalize();
+            if (!target.startsWith(questsRoot)) continue;
+            Path parent = target.getParent();
+            if (parent != null) Files.createDirectories(parent);
+            try (var input = jar.getInputStream(entry)) {
+                if (!Files.exists(target)) Files.copy(input, target);
+            }
+        }
     }
 
     // hide temp and staging pack folders
@@ -307,7 +468,7 @@ public final class QuestEditorPackFiles {
     // send delete quest pack to server
     public static boolean sendDeleteQuestPackToServer(String packName) {
         String normalizedName = safe(packName).trim();
-        if (normalizedName.isBlank()) return false;
+        if (normalizedName.isBlank() || BUILTIN_PACK_NAME.equalsIgnoreCase(normalizedName)) return false;
         try {
             BoundlessNetwork.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
             return true;
@@ -391,9 +552,46 @@ public final class QuestEditorPackFiles {
         QuestPackStorage.snapshotQuestPack(pack.root, pack.name, reason);
     }
 
+    public static void queueBackupPack(QuestPack pack, String reason) {
+        if (pack == null || pack.root == null || pack.name == null) return;
+        Path key = pack.root.toAbsolutePath().normalize();
+        PENDING_BACKUPS.put(key, new BackupRequest(pack.root, pack.name, reason));
+        startBackupWorker(key);
+    }
+
+    private static void startBackupWorker(Path key) {
+        if (!ACTIVE_BACKUPS.add(key)) return;
+        BACKUP_EXECUTOR.execute(() -> drainBackups(key));
+    }
+
+    private static void drainBackups(Path key) {
+        try {
+            while (true) {
+                try {
+                    Thread.sleep(BACKUP_DEBOUNCE_MS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                BackupRequest request = PENDING_BACKUPS.remove(key);
+                if (request == null) return;
+                try {
+                    QuestPackStorage.snapshotQuestPack(request.root, request.name, request.reason);
+                } catch (IOException ignored) {
+                }
+            }
+        } finally {
+            ACTIVE_BACKUPS.remove(key);
+            if (PENDING_BACKUPS.containsKey(key)) startBackupWorker(key);
+        }
+    }
+
     // pack meta path
     public static Path packMetaPath(Path root) {
         return root.resolve("boundless").resolve("pack.json");
+    }
+
+    private record BackupRequest(Path root, String name, String reason) {
     }
 
     // write pack icon
@@ -520,7 +718,7 @@ public final class QuestEditorPackFiles {
     // delete applied pack artifacts safe
     public static boolean deleteAppliedPackArtifactsSafe(String packName) {
         String normalizedName = safe(packName).trim();
-        if (normalizedName.isBlank()) return false;
+        if (normalizedName.isBlank() || BUILTIN_PACK_NAME.equalsIgnoreCase(normalizedName)) return false;
 
         boolean changed = false;
         try {
@@ -549,6 +747,11 @@ public final class QuestEditorPackFiles {
         } catch (IOException ignored) {
         }
 
+        try {
+            QuestPackStorage.deleteQuestPackBackups(normalizedName);
+        } catch (IOException ignored) {
+        }
+
         return changed;
     }
 
@@ -567,9 +770,9 @@ public final class QuestEditorPackFiles {
         if (allowTags && id.startsWith("#")) {
             String rest = id.substring(1).trim();
             if (rest.isBlank()) return "";
-            return rest.contains(":") ? "#" + rest : "#minecraft:" + rest;
+            return "#" + rest;
         }
-        return id.contains(":") ? id : "minecraft:" + id;
+        return id;
     }
 
     private static String safe(String value) {

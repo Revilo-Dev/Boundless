@@ -8,6 +8,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
 import net.revilodev.boundless.BoundlessMod;
 
+// registers boundless items
 public final class ModItems {
     // Everything Boundless adds to the item registry.
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, BoundlessMod.MOD_ID);

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "realmrpg_quests:item/trigger_zone_old_hut_spawn_egg"
-  }
-}

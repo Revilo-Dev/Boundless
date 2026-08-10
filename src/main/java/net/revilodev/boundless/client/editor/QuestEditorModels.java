@@ -30,7 +30,10 @@ public final class QuestEditorModels {
         public final String label;
         public final String subtitle;
         public final String icon;
+        public final ResourceLocation typeIcon;
         public final ResourceLocation actionIcon;
+        public final int actionIconWidth;
+        public final int actionIconHeight;
         public final ResourceLocation rowTexture;
         public final String actionTooltip;
         public final String rowTooltip;
@@ -59,17 +62,38 @@ public final class QuestEditorModels {
         }
 
         public EditorEntry(String id, String label, String subtitle, String icon, ResourceLocation actionIcon, String actionTooltip, String rowTooltip, ResourceLocation rowTexture, EditorEntryKind kind, int indent, boolean showMoveArrows) {
+            this(id, label, subtitle, icon, null, actionIcon, actionTooltip, rowTooltip, rowTexture, kind, indent, showMoveArrows);
+        }
+
+        public EditorEntry(String id, String label, String subtitle, String icon, ResourceLocation typeIcon, ResourceLocation actionIcon, String actionTooltip, String rowTooltip, ResourceLocation rowTexture, EditorEntryKind kind, int indent, boolean showMoveArrows) {
+            this(id, label, subtitle, icon, typeIcon, actionIcon, 13, 13, actionTooltip, rowTooltip,
+                    rowTexture, kind, indent, showMoveArrows);
+        }
+
+        public EditorEntry(String id, String label, String subtitle, String icon, ResourceLocation typeIcon,
+                           ResourceLocation actionIcon, int actionIconWidth, int actionIconHeight,
+                           String actionTooltip, String rowTooltip, ResourceLocation rowTexture,
+                           EditorEntryKind kind, int indent, boolean showMoveArrows) {
             this.id = id;
             this.label = label;
             this.subtitle = subtitle;
             this.icon = icon == null ? "" : icon;
+            this.typeIcon = typeIcon;
             this.actionIcon = actionIcon;
+            this.actionIconWidth = Math.max(1, actionIconWidth);
+            this.actionIconHeight = Math.max(1, actionIconHeight);
             this.rowTexture = rowTexture == null ? ROW_TEX : rowTexture;
             this.actionTooltip = actionTooltip == null ? "" : actionTooltip;
             this.rowTooltip = rowTooltip == null ? "" : rowTooltip;
             this.kind = kind == null ? EditorEntryKind.NORMAL : kind;
             this.indent = Math.max(0, indent);
             this.showMoveArrows = showMoveArrows;
+        }
+
+        public static EditorEntry pack(String id, String label, String icon, ResourceLocation typeIcon,
+                                       ResourceLocation actionIcon, String actionTooltip, String rowTooltip, ResourceLocation rowTexture) {
+            return new EditorEntry(id, label, "", icon, typeIcon, actionIcon, actionTooltip, rowTooltip, rowTexture,
+                    EditorEntryKind.NORMAL, 0, false);
         }
 
         // movable
@@ -90,6 +114,13 @@ public final class QuestEditorModels {
         // quest
         public static EditorEntry quest(String id, String label, String subtitle, String icon, ResourceLocation rowTexture, String rowTooltip) {
             return new EditorEntry(id, label, subtitle, icon, null, "", rowTooltip, rowTexture, EditorEntryKind.QUEST, 0, true);
+        }
+
+        public static EditorEntry questWarning(String id, String label, String subtitle, String icon,
+                                               ResourceLocation warningIcon, String warningTooltip,
+                                               ResourceLocation rowTexture, String rowTooltip) {
+            return new EditorEntry(id, label, subtitle, icon, null, warningIcon, 4, 11,
+                    warningTooltip, rowTooltip, rowTexture, EditorEntryKind.QUEST, 0, true);
         }
 
         // category header
@@ -151,11 +182,15 @@ public final class QuestEditorModels {
 
         public final Map<String, String> categoryNames = new HashMap<>();
         public final Map<String, String> subCategoryNames = new HashMap<>();
+        public final Map<String, CategoryData> categoryDataById = new HashMap<>();
+        public final Map<String, SubCategoryData> subCategoryDataById = new HashMap<>();
+        public final Map<String, List<SubCategoryData>> subCategoriesByCategory = new HashMap<>();
         public final Set<String> categoryIds = new HashSet<>();
         public final Set<String> subCategoryIds = new HashSet<>();
         public final Set<String> questIds = new HashSet<>();
         public final Set<String> duplicateQuestIds = new HashSet<>();
         public final Map<String, QuestEntryData> questDataByEntryId = new HashMap<>();
+        public final Map<String, List<QuestListItem>> questsByCategory = new HashMap<>();
         public final List<QuestListItem> items = new ArrayList<>();
     }
 
@@ -226,10 +261,16 @@ public final class QuestEditorModels {
         public Path path;
         public String id = "";
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String order = "";
         public String dependency = "";
         public String autoComplete = "";
+        public String layout = "list";
+        public String background = "";
+        public String backgroundTileScale = "";
+        public String backgroundDarkening = "";
+        public String backgroundDarkeningOpacity = "";
     }
 
     // sub category data
@@ -238,6 +279,7 @@ public final class QuestEditorModels {
         public String id = "";
         public String category = "";
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String order = "";
         public String defaultOpen = "";
@@ -248,11 +290,15 @@ public final class QuestEditorModels {
         public Path path;
         public String id = "";
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String description = "";
+        public Map<String, String> descriptionTranslations = Map.of();
+        public String media = "";
         public String category = "";
         public String subCategory = "";
         public String dependencies = "";
+        public String incompatibleDependencies = "";
         public String lockAfterDependency = "";
         public String optional = "";
         public String repeatable = "";
@@ -261,6 +307,11 @@ public final class QuestEditorModels {
         public String type = "";
         public String completionJson = "";
         public String rewardJson = "";
+        public String treeX = "";
+        public String treeY = "";
+        public String treeBackground = "square";
+        public String treeOrigin = "";
+        public List<String> importWarnings = List.of();
     }
 
     // index name
@@ -436,6 +487,8 @@ public final class QuestEditorModels {
 
         public float leftScroll = 0f;
 
+        public QuestEditorTreeWidget.ViewState treeView;
+
         public String statusMessage = "";
 
         public int statusColor = 0xA0A0A0;
@@ -450,6 +503,10 @@ public final class QuestEditorModels {
 
         public String questSearchQuery = "";
 
+        public String categorySearchQuery = "";
+
+        public String subCategorySearchQuery = "";
+
         public String packName = "";
 
         public String packNamespace = "";
@@ -458,11 +515,22 @@ public final class QuestEditorModels {
 
         public String packDescription = "";
 
+        public boolean categoryTreeLayout = false;
+
         public String catId = "";
 
         public String catName = "";
+        public Map<String, String> catNameTranslations = Map.of();
 
         public String catIcon = "";
+
+        public String catBackground = "";
+
+        public float catBackgroundTileScale = 0.5f;
+
+        public boolean catBackgroundDarkening = false;
+
+        public float catBackgroundDarkeningOpacity = 0.45f;
 
         public String catDependency = "";
 
@@ -473,6 +541,7 @@ public final class QuestEditorModels {
         public String subCategory = "";
 
         public String subName = "";
+        public Map<String, String> subNameTranslations = Map.of();
 
         public String subIcon = "";
 
@@ -481,10 +550,13 @@ public final class QuestEditorModels {
         public String questId = "";
 
         public String questName = "";
+        public Map<String, String> questNameTranslations = Map.of();
 
         public String questIcon = "";
 
         public String questDescription = "";
+        public Map<String, String> questDescriptionTranslations = Map.of();
+        public String questMedia = "";
 
         public String questCategory = "";
 
@@ -493,6 +565,8 @@ public final class QuestEditorModels {
         public String questDependencies = "";
 
         public boolean questLockAfterDependency = false;
+        public String questIncompatibleDependencies = "";
+        public boolean questTreeOrigin = false;
 
         public boolean questOptional = false;
 
@@ -505,6 +579,8 @@ public final class QuestEditorModels {
         public String questCompletion = "";
 
         public String questReward = "";
+
+        public List<String> questImportWarnings = List.of();
 
     }
 
@@ -526,7 +602,15 @@ public final class QuestEditorModels {
 
         QUEST_CATEGORY,
 
-        QUEST_SUBCATEGORY
+        QUEST_SUBCATEGORY,
+
+        QUEST_DEPENDENCY,
+
+        QUEST_NAME_LANGUAGE,
+
+        QUEST_DESCRIPTION_LANGUAGE,
+
+        PREFERRED_LANGUAGE
 
     }
 

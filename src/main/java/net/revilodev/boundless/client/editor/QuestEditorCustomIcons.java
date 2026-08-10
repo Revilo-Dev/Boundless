@@ -17,9 +17,11 @@ import java.util.Locale;
 import java.util.Map;
 
 /** Loads PNG quest icons from config/boundless/assets into the client texture manager. */
+// resolves custom editor icons and their cached textures
 public final class QuestEditorCustomIcons {
     public static final String PREFIX = "boundless:custom_assets/";
     private static final Map<String, ResourceLocation> TEXTURES = new LinkedHashMap<>();
+    private static boolean loaded;
 
     private QuestEditorCustomIcons() {}
 
@@ -28,17 +30,29 @@ public final class QuestEditorCustomIcons {
     }
 
     public static List<String> ids() {
-        reload();
+        ensureLoaded();
         return List.copyOf(TEXTURES.keySet());
     }
 
     public static ResourceLocation texture(String iconId) {
         if (iconId == null || !iconId.startsWith(PREFIX)) return null;
-        reload();
+        ensureLoaded();
         return TEXTURES.get(iconId);
     }
 
+    public static void clear() {
+        Minecraft minecraft = Minecraft.getInstance();
+        for (ResourceLocation texture : TEXTURES.values()) minecraft.getTextureManager().release(texture);
+        TEXTURES.clear();
+        loaded = false;
+    }
+
+    private static void ensureLoaded() {
+        if (!loaded) reload();
+    }
+
     public static void reload() {
+        loaded = true;
         try {
             Files.createDirectories(directory());
             Map<String, ResourceLocation> found = new LinkedHashMap<>();
@@ -61,12 +75,13 @@ public final class QuestEditorCustomIcons {
             String id = PREFIX + relative.substring(0, relative.length() - 4).toLowerCase(Locale.ROOT);
             ResourceLocation texture = TEXTURES.get(id);
             if (texture == null) {
-                texture = Minecraft.getInstance().getTextureManager().register("boundless_custom/" + relative, new DynamicTexture(image));
+                String key = Integer.toUnsignedString(path.toAbsolutePath().normalize().toString().hashCode(), 16);
+                texture = Minecraft.getInstance().getTextureManager().register("boundless_custom/" + key, new DynamicTexture(image));
             } else {
                 image.close();
             }
             found.put(id, texture);
-        } catch (IOException ignored) {
+        } catch (Exception ignored) {
         }
     }
 }

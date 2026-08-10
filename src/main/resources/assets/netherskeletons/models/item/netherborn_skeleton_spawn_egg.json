@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "netherskeletons:item/netherborn_skeleton_spawn_egg"
-  }
-}

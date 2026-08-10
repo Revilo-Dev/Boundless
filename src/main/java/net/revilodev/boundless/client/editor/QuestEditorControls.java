@@ -19,42 +19,48 @@ import java.util.function.Function;
 import net.minecraft.world.item.ItemStack;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EditorEntry;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EditorEntryKind;
+import net.revilodev.boundless.client.QuestSubCategoryHeaderRenderer;
+import net.revilodev.boundless.client.QuestTextFormatting;
+import net.revilodev.boundless.client.LegacyGuiSprites;
 import net.revilodev.boundless.client.editor.QuestEditorModels.MoveDirection;
 
 // shared editor button controls
 public final class QuestEditorControls {
-    private static final ResourceLocation BTN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
-    private static final ResourceLocation BTN_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
-    private static final ResourceLocation BTN_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
+    private static final ResourceLocation VANILLA_BUTTON_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button");
+    private static final ResourceLocation VANILLA_BUTTON_HOVER_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_highlighted");
+    private static final ResourceLocation VANILLA_BUTTON_DISABLED_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_disabled");
+    private static final ResourceLocation COMPLETE_ICON =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/complete.png");
     private static final ResourceLocation CREATE_BTN_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button.png");
     private static final int CREATE_BTN_TEX_W = 130;
     private static final int CREATE_BTN_TEX_H = 20;
     private static final ResourceLocation TOGGLE_TEX_OFF =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/x_button.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off.png");
     private static final ResourceLocation TOGGLE_TEX_OFF_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/x_button-hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off-hovered.png");
     private static final ResourceLocation TOGGLE_TEX_ON =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on.png");
+    private static final ResourceLocation TOGGLE_TEX_ON_HOVER =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on-hovered.png");
     private static final ResourceLocation LOCK_TEX_ENABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked.png");
     private static final ResourceLocation LOCK_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_disabled.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked_disabled.png");
     private static final ResourceLocation LOCK_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked_hovered.png");
     private static final ResourceLocation BACK_TAB_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
     private static final ResourceLocation BACK_TAB_HOVER_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
-    private static final int TOGGLE_SIZE = 20;
+    private static final int TOGGLE_WIDTH = 20;
+    private static final int TOGGLE_HEIGHT = 11;
     private static final int BACK_TAB_W = 27;
     private static final int BACK_TAB_H = 17;
     private static final int FORMAT_BAR_H = 9;
-    private static final ResourceLocation VANILLA_WIDGETS_TEX =
-            ResourceLocation.withDefaultNamespace("textures/gui/widgets.png");
     private static final ResourceLocation MOVE_UP_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_up.png");
     private static final ResourceLocation MOVE_DOWN_TEX =
@@ -101,17 +107,20 @@ public final class QuestEditorControls {
         @Override
         public void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
-            ResourceLocation tex = !this.active ? BTN_TEX_DISABLED : (hovered ? BTN_TEX_HOVER : BTN_TEX);
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            ResourceLocation sprite = !this.active ? VANILLA_BUTTON_DISABLED_SPRITE
+                    : hovered ? VANILLA_BUTTON_HOVER_SPRITE : VANILLA_BUTTON_SPRITE;
+            LegacyGuiSprites.drawButton(gg, sprite, getX(), getY(), this.width, this.height);
 
             var font = Minecraft.getInstance().font;
             int textW = font.width(getMessage());
-            int textX = getX() + (this.width - textW) / 2 + 2;
+            int textX = getX() + (this.width - textW) / 2;
+            int iconX = textX - 15;
             int textY = getY() + (this.height - font.lineHeight) / 2 + 1;
             int color = this.active ? 0xFFFFFF : 0x808080;
+            gg.blit(COMPLETE_ICON, iconX, getY() + (this.height - 9) / 2, 0, 0, 9, 9, 9, 9);
             gg.drawString(font, getMessage(), textX, textY, color, false);
             if (hovered && !tooltip.isEmpty()) {
-                gg.renderComponentTooltip(font, tooltip, mouseX, mouseY);
+                QuestEditorTooltips.renderComponents(gg, font, tooltip, mouseX, mouseY);
             }
         }
 
@@ -327,8 +336,13 @@ public final class QuestEditorControls {
 
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-            ResourceLocation tex = on ? TOGGLE_TEX_ON : (this.isMouseOver(mouseX, mouseY) ? TOGGLE_TEX_OFF_HOVER : TOGGLE_TEX_OFF);
-            gg.blit(tex, getX(), getY(), 0, 0, TOGGLE_SIZE, TOGGLE_SIZE, TOGGLE_SIZE, TOGGLE_SIZE);
+            boolean hovered = this.isMouseOver(mouseX, mouseY);
+            ResourceLocation tex = on
+                    ? hovered ? TOGGLE_TEX_ON_HOVER : TOGGLE_TEX_ON
+                    : hovered ? TOGGLE_TEX_OFF_HOVER : TOGGLE_TEX_OFF;
+            int renderX = getX() + (width - TOGGLE_WIDTH) / 2;
+            int renderY = getY() + (height - TOGGLE_HEIGHT) / 2;
+            gg.blit(tex, renderX, renderY, 0, 0, TOGGLE_WIDTH, TOGGLE_HEIGHT, TOGGLE_WIDTH, TOGGLE_HEIGHT);
         }
 
         @Override
@@ -371,7 +385,7 @@ public final class QuestEditorControls {
             } else {
                 tex = on ? LOCK_TEX_ENABLED : LOCK_TEX_DISABLED;
             }
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            gg.blit(tex, getX(), getY(), this.width, this.height, 0, 0, 20, 20, 20, 20);
         }
 
         @Override
@@ -412,20 +426,24 @@ public final class QuestEditorControls {
         private final Consumer<EditorEntry> onActionClick;
         private final Consumer<EditorEntry> onSecondaryClick;
         private final BiConsumer<EditorEntry, MoveDirection> onMoveClick;
-            private final Function<String, ItemStack> iconResolver;
+        private final Runnable onBackgroundClick;
+        private final Function<String, ItemStack> iconResolver;
         private float scrollY = 0f;
+        private int[] entryOffsets = new int[0];
+        private int contentHeight;
         private String selectedId = "";
         private List<Component> pendingTooltip = List.of();
         private int pendingTooltipX;
         private int pendingTooltipY;
 
-        public EditorListWidget(int x, int y, int w, int h, Consumer<EditorEntry> onClick, Consumer<EditorEntry> onActionClick, Consumer<EditorEntry> onSecondaryClick, BiConsumer<EditorEntry, MoveDirection> onMoveClick, Function<String, ItemStack> iconResolver) {
+        public EditorListWidget(int x, int y, int w, int h, Consumer<EditorEntry> onClick, Consumer<EditorEntry> onActionClick, Consumer<EditorEntry> onSecondaryClick, BiConsumer<EditorEntry, MoveDirection> onMoveClick, Runnable onBackgroundClick, Function<String, ItemStack> iconResolver) {
             super(x, y, w, h, Component.empty());
             this.onClick = onClick;
             this.onActionClick = onActionClick;
             this.onSecondaryClick = onSecondaryClick;
             this.onMoveClick = onMoveClick;
-                this.iconResolver = iconResolver;
+            this.onBackgroundClick = onBackgroundClick;
+            this.iconResolver = iconResolver;
         }
 
         public void setBounds(int x, int y, int w, int h) {
@@ -438,6 +456,16 @@ public final class QuestEditorControls {
         public void setEntries(List<EditorEntry> list) {
             entries.clear();
             entries.addAll(list);
+            entryOffsets = new int[entries.size()];
+            contentHeight = 0;
+            for (int index = 0; index < entries.size(); index++) {
+                entryOffsets[index] = contentHeight;
+                EditorEntry entry = entries.get(index);
+                boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER
+                        || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
+                contentHeight += (headerEntry ? EDITOR_SUBHEADER_H : ROW_H)
+                        + (headerEntry ? EDITOR_SUBHEADER_GAP : ROW_PAD);
+            }
             scrollY = 0f;
         }
 
@@ -458,7 +486,6 @@ public final class QuestEditorControls {
         }
 
         public void setScrollY(float value) {
-            int contentHeight = entries.size() * (ROW_H + ROW_PAD);
             float max = Math.max(0f, contentHeight - height);
             scrollY = Math.max(0f, Math.min(value, max));
         }
@@ -470,8 +497,8 @@ public final class QuestEditorControls {
         public void renderHoverTooltipOnTop(GuiGraphics gg) {
             if (pendingTooltip == null || pendingTooltip.isEmpty()) return;
             gg.pose().pushPose();
-            gg.pose().translate(0.0F, 0.0F, 500.0F);
-            gg.renderComponentTooltip(Minecraft.getInstance().font, pendingTooltip, pendingTooltipX, pendingTooltipY);
+            gg.pose().translate(0.0F, 0.0F, 2000.0F);
+            QuestEditorTooltips.renderComponents(gg, Minecraft.getInstance().font, pendingTooltip, pendingTooltipX, pendingTooltipY);
             gg.pose().popPose();
             pendingTooltip = List.of();
         }
@@ -482,8 +509,10 @@ public final class QuestEditorControls {
             pendingTooltip = List.of();
             gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
 
-            int yCursor = getY() - (int) scrollY;
-            for (EditorEntry entry : entries) {
+            int startIndex = firstVisibleEntryIndex();
+            int yCursor = getY() + (startIndex < entryOffsets.length ? entryOffsets[startIndex] : 0) - (int) scrollY;
+            for (int entryIndex = startIndex; entryIndex < entries.size(); entryIndex++) {
+                EditorEntry entry = entries.get(entryIndex);
                 boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
                 int top = yCursor;
                 int rowH = headerEntry ? EDITOR_SUBHEADER_H : ROW_H;
@@ -506,8 +535,7 @@ public final class QuestEditorControls {
                     int buttonY = top + (rowH - buttonHeight) / 2;
                     boolean hovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth
                             && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
-                    gg.blit(VANILLA_WIDGETS_TEX, buttonX, buttonY, 0, hovered ? 86 : 66,
-                            buttonWidth, buttonHeight, 256, 256);
+                    LegacyGuiSprites.drawButton(gg, hovered ? VANILLA_BUTTON_HOVER_SPRITE : VANILLA_BUTTON_SPRITE, buttonX, buttonY, buttonWidth, buttonHeight);
                     Font font = Minecraft.getInstance().font;
                     gg.drawCenteredString(font, entry.label, buttonX + buttonWidth / 2, buttonY + (buttonHeight - font.lineHeight) / 2 + 1, 0xFFFFFF);
                 } else {
@@ -522,6 +550,11 @@ public final class QuestEditorControls {
                             gg.fill(getX() + 1, top + 1, getX() + width - 1, top + ROW_H - 1, 0x20FFFFFF);
                         }
                     } else {
+                        gg.pose().pushPose();
+                        gg.pose().translate(0, 0, 200);
+                        if (entry.kind == EditorEntryKind.CATEGORY_HEADER) {
+                            QuestSubCategoryHeaderRenderer.renderBackground(gg, getX(), top, width, rowH);
+                        }
                         float iconScale = 0.45f;
                         int iconSize = (int) (16 * iconScale);
                         int iconX = getX() + 2;
@@ -538,7 +571,7 @@ public final class QuestEditorControls {
 
                         float textScale = 0.66f;
                         boolean collapsed = entry.label != null && entry.label.startsWith("+ ");
-                        String marker = collapsed ? "+" : "=";
+                        String marker = collapsed ? "+" : "-";
                         String name = entry.label == null ? "" : entry.label.substring(Math.min(2, entry.label.length()));
                         textX = iconX + textIconSize + 2;
                         int textH = (int) (Minecraft.getInstance().font.lineHeight * textScale);
@@ -546,15 +579,14 @@ public final class QuestEditorControls {
                         int markerX = getX() + width - 7;
                         int maxW = markerX - textX - 3;
                         int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
-                        if (Minecraft.getInstance().font.width(name) > maxWUnscaled) {
-                            name = Minecraft.getInstance().font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - Minecraft.getInstance().font.width("..."))) + "...";
-                        }
-                        if (entry.kind == EditorEntryKind.CATEGORY_HEADER) {
-                            drawScaledComponent(gg, Component.literal(name).withStyle(style -> style.withBold(true)), textScale, textX, textY, 0xFFFFFF);
-                        } else {
-                            drawScaledString(gg, name, textScale, textX, textY, 0xD0D0D0);
-                        }
-                        drawScaledString(gg, marker, textScale, markerX, textY, 0xD0D0D0);
+                        int headerColor = entry.kind == EditorEntryKind.CATEGORY_HEADER ? 0xFFFFFF : 0xD0D0D0;
+                        Component formattedName = QuestTextFormatting.componentByWidth(
+                                name, headerColor, Minecraft.getInstance().font, maxWUnscaled);
+                        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, Minecraft.getInstance().font,
+                                formattedName, textScale, textX, textY, headerColor);
+                        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, Minecraft.getInstance().font,
+                                marker, textScale, markerX, textY, headerColor);
+                        gg.pose().popPose();
                         yCursor += rowH + rowGap;
                         continue;
                     }
@@ -567,10 +599,12 @@ public final class QuestEditorControls {
                         textX = getX() + 25 + entry.indent;
                     }
                     int labelColor = 0xFFFFFF;
-                    gg.drawString(Minecraft.getInstance().font, entry.label, textX, top + 7, labelColor, false);
+                    Component formattedLabel = QuestTextFormatting.componentByWidth(entry.label, labelColor,
+                            Minecraft.getInstance().font, Math.max(0, getX() + width - textX - 24));
+                    gg.drawString(Minecraft.getInstance().font, formattedLabel, textX, top + 7, labelColor, false);
 
                     if (entry.kind == EditorEntryKind.NORMAL && entry.subtitle != null && !entry.subtitle.isBlank()) {
-                        drawScaledString(gg, entry.subtitle, 0.65f, textX, top + 17, 0xB0B0B0);
+                        drawScaledString(gg, entry.subtitle, 0.55f, textX, top + 18, 0xB0B0B0);
                     }
 
                     if (entry.showMoveArrows) {
@@ -592,16 +626,27 @@ public final class QuestEditorControls {
                     }
 
                     if (entry.actionIcon != null) {
-                        int iconX = getX() + width - 17;
-                        int iconY = top + 7;
-                        gg.blit(entry.actionIcon, iconX, iconY, 0, 0, 13, 13, 13, 13);
-                        boolean hoverAction = mouseX >= iconX && mouseX <= iconX + 13
-                                && mouseY >= iconY && mouseY <= iconY + 13;
+                        int actionWidth = actionIconWidth(entry);
+                        int actionHeight = actionIconHeight(entry);
+                        int actionRightInset = entry.showMoveArrows
+                                ? MOVE_ICON_SIZE + MOVE_ICON_INSET_RIGHT + 4 : 8;
+                        int iconX = getX() + width - actionWidth - actionRightInset;
+                        int iconY = top + (ROW_H - actionHeight) / 2;
+                        boolean hoverAction = mouseX >= iconX && mouseX <= iconX + actionWidth
+                                && mouseY >= iconY && mouseY <= iconY + actionHeight;
+                        ResourceLocation actionTexture = actionIconTexture(entry.actionIcon, hoverAction);
+                        gg.blit(actionTexture, iconX, iconY, 0, 0,
+                                actionWidth, actionHeight, actionWidth, actionHeight);
                         if (hoverAction && entry.actionTooltip != null && !entry.actionTooltip.isBlank()) {
                             pendingTooltip = List.of(Component.literal(entry.actionTooltip));
                             pendingTooltipX = mouseX;
                             pendingTooltipY = mouseY;
                         }
+                    }
+                    if (entry.typeIcon != null) {
+                        int iconX = getX() + width - 35;
+                        int iconY = top + 6;
+                        gg.blit(entry.typeIcon, iconX, iconY, 0, 0, 16, 16, 16, 16);
                     }
                 }
 
@@ -610,11 +655,6 @@ public final class QuestEditorControls {
 
             gg.disableScissor();
 
-            int contentHeight = 0;
-            for (EditorEntry entry : entries) {
-                boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
-                contentHeight += (headerEntry ? EDITOR_SUBHEADER_H : ROW_H) + (headerEntry ? EDITOR_SUBHEADER_GAP : ROW_PAD);
-            }
             if (contentHeight > height) {
                 float ratio = (float) height / (float) contentHeight;
                 int barH = Math.max(12, (int) (height * ratio));
@@ -663,9 +703,14 @@ public final class QuestEditorControls {
                     }
                 }
                 if (entry.actionIcon != null) {
-                    int iconX = getX() + width - 17;
-                    int iconY = top + 7;
-                    if (button == 0 && mouseX >= iconX && mouseX <= iconX + 13 && mouseY >= iconY && mouseY <= iconY + 13) {
+                    int actionWidth = actionIconWidth(entry);
+                    int actionHeight = actionIconHeight(entry);
+                    int actionRightInset = entry.showMoveArrows
+                            ? MOVE_ICON_SIZE + MOVE_ICON_INSET_RIGHT + 4 : 8;
+                    int iconX = getX() + width - actionWidth - actionRightInset;
+                    int iconY = top + (ROW_H - actionHeight) / 2;
+                    if (button == 0 && mouseX >= iconX && mouseX <= iconX + actionWidth
+                            && mouseY >= iconY && mouseY <= iconY + actionHeight) {
                         if (onActionClick != null) onActionClick.accept(entry);
                         return true;
                     }
@@ -677,20 +722,52 @@ public final class QuestEditorControls {
                 if (onClick != null) onClick.accept(entry);
                 return true;
             }
+            if (button == 0 && onBackgroundClick != null) {
+                onBackgroundClick.run();
+                return true;
+            }
             return false;
         }
 
         public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
             if (!visible || !active) return false;
-            int contentHeight = 0;
-            for (EditorEntry entry : entries) {
-                boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
-                contentHeight += (headerEntry ? EDITOR_SUBHEADER_H : ROW_H) + (headerEntry ? EDITOR_SUBHEADER_GAP : ROW_PAD);
-            }
             if (contentHeight <= height) return false;
             scrollY = Math.max(0f, Math.min(scrollY - (float) (delta * 12), contentHeight - height));
             return true;
         }
+
+        private int firstVisibleEntryIndex() {
+            if (entryOffsets.length == 0 || scrollY <= 0f) return 0;
+            int target = (int) scrollY;
+            int low = 0;
+            int high = entryOffsets.length - 1;
+            while (low <= high) {
+                int middle = (low + high) >>> 1;
+                if (entryOffsets[middle] <= target) low = middle + 1;
+                else high = middle - 1;
+            }
+            return Math.max(0, high);
+        }
+
+        private int actionIconWidth(EditorEntry entry) {
+            return isToggleTexture(entry.actionIcon) ? TOGGLE_WIDTH : entry.actionIconWidth;
+        }
+
+        private int actionIconHeight(EditorEntry entry) {
+            return isToggleTexture(entry.actionIcon) ? TOGGLE_HEIGHT : entry.actionIconHeight;
+        }
+
+        private boolean isToggleTexture(ResourceLocation texture) {
+            return TOGGLE_TEX_ON.equals(texture) || TOGGLE_TEX_OFF.equals(texture);
+        }
+
+        private ResourceLocation actionIconTexture(ResourceLocation texture, boolean hovered) {
+            if (!hovered) return texture;
+            if (TOGGLE_TEX_ON.equals(texture)) return TOGGLE_TEX_ON_HOVER;
+            if (TOGGLE_TEX_OFF.equals(texture)) return TOGGLE_TEX_OFF_HOVER;
+            return texture;
+        }
+
 
         @Override
         protected void updateWidgetNarration(NarrationElementOutput narration) {
@@ -705,13 +782,5 @@ public final class QuestEditorControls {
             gg.pose().popPose();
         }
 
-        private void drawScaledComponent(GuiGraphics gg, Component text, float scale, int x, int y, int color) {
-            if (text == null) return;
-            gg.pose().pushPose();
-            gg.pose().scale(scale, scale, 1f);
-            float inv = 1f / scale;
-            gg.drawString(Minecraft.getInstance().font, text, (int) (x * inv), (int) (y * inv), color, false);
-            gg.pose().popPose();
-        }
     }
 }

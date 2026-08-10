@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "savage_and_ravage:item/trickster_spawn_egg"
-  }
-}

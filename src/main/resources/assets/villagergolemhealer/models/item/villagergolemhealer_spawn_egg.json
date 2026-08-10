@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "villagergolemhealer:item/villagergolemhealer_spawn_egg"
-  }
-}

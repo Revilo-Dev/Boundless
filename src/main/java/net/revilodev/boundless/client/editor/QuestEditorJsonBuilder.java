@@ -2,8 +2,12 @@ package net.revilodev.boundless.client.editor;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 // editor json builders
@@ -12,33 +16,45 @@ public final class QuestEditorJsonBuilder {
     }
 
     // build category
-    public static JsonObject buildCategory(String id, String name, String icon, int order, String dependency, boolean autoComplete, Consumer<String> onError) {
+    public static JsonObject buildCategory(String id, String name, Map<String, String> nameTranslations,
+                                           String icon, int order, String dependency,
+                                           boolean autoComplete, String background, float backgroundTileScale,
+                                           boolean backgroundDarkening,
+                                           float backgroundDarkeningOpacity, Consumer<String> onError) {
         String categoryId = safe(id).trim();
         if (categoryId.isBlank()) {
-            setError(onError, "Category id required");
+            setError(onError, "category_id_required");
             return null;
         }
         JsonObject obj = new JsonObject();
         obj.addProperty("id", categoryId);
         addOptional(obj, "name", name);
+        addTranslations(obj, nameTranslations, Map.of());
         addOptional(obj, "icon", icon);
         obj.addProperty("order", order);
         addOptional(obj, "dependency", dependency);
         obj.addProperty("auto_complete", autoComplete);
+        addOptional(obj, "background", background);
+        obj.addProperty("background_tile_scale", Math.max(0.1f, Math.min(2f, backgroundTileScale)));
+        obj.addProperty("background_darkening", backgroundDarkening);
+        obj.addProperty("background_darkening_opacity", Math.max(0f, Math.min(1f, backgroundDarkeningOpacity)));
         return obj;
     }
 
     // build sub category
-    public static JsonObject buildSubCategory(String id, String category, String name, String icon, int order, boolean defaultOpen, Consumer<String> onError) {
+    public static JsonObject buildSubCategory(String id, String category, String name,
+                                              Map<String, String> nameTranslations, String icon, int order,
+                                              boolean defaultOpen, Consumer<String> onError) {
         String subId = safe(id).trim();
         if (subId.isBlank()) {
-            setError(onError, "Sub-category id required");
+            setError(onError, "subcategory_id_required");
             return null;
         }
         JsonObject obj = new JsonObject();
         obj.addProperty("id", subId);
         addOptional(obj, "category", category);
         addOptional(obj, "name", name);
+        addTranslations(obj, nameTranslations, Map.of());
         addOptional(obj, "icon", icon);
         obj.addProperty("order", order);
         obj.addProperty("default_open", defaultOpen);
@@ -50,21 +66,21 @@ public final class QuestEditorJsonBuilder {
         if (fields == null) return null;
         String questId = safe(fields.id).trim();
         if (questId.isBlank()) {
-            setError(onError, "Quest id required");
+            setError(onError, "quest_id_required");
             return null;
         }
         if (fields.duplicateQuestId) {
-            setError(onError, "Quest id already exists");
+            setError(onError, "quest_id_exists");
             return null;
         }
         String nameRaw = safe(fields.name).trim();
         if (nameRaw.isBlank()) {
-            setError(onError, "Quest name required");
+            setError(onError, "quest_name_required");
             return null;
         }
         String categoryRaw = safe(fields.category).trim();
         if (categoryRaw.isBlank()) {
-            setError(onError, "Quest category required");
+            setError(onError, "quest_category_required");
             return null;
         }
 
@@ -73,6 +89,8 @@ public final class QuestEditorJsonBuilder {
         addOptional(obj, "name", nameRaw);
         addOptional(obj, "icon", fields.icon);
         addOptional(obj, "description", fields.description);
+        addTranslations(obj, fields.nameTranslations, fields.descriptionTranslations);
+        addOptional(obj, "media", fields.media);
         addOptional(obj, "category", categoryRaw);
         addOptional(obj, "sub-category", fields.subCategory);
         obj.addProperty("optional", fields.optional);
@@ -80,8 +98,19 @@ public final class QuestEditorJsonBuilder {
         obj.addProperty("auto_complete", fields.autoComplete);
         obj.addProperty("hiddenUnderDependency", fields.hiddenUnderDependency);
         obj.addProperty("lock_after_dependency", fields.lockAfterDependency);
+        if (fields.treeX != -1) obj.addProperty("tree_x", fields.treeX);
+        if (fields.treeY != -1) obj.addProperty("tree_y", fields.treeY);
+        obj.addProperty("tree_background", normalizeTreeBackground(fields.treeBackground));
+        if (fields.treeOrigin) obj.addProperty("tree_origin", true);
         if (!safe(fields.loadedQuestType).isBlank()) {
             obj.addProperty("type", fields.loadedQuestType);
+        }
+        if (fields.importWarnings != null && !fields.importWarnings.isEmpty()) {
+            JsonArray warnings = new JsonArray();
+            for (String warning : fields.importWarnings) {
+                if (warning != null && !warning.isBlank()) warnings.add(warning);
+            }
+            if (!warnings.isEmpty()) obj.add("import_warnings", warnings);
         }
 
         if (fields.dependencies != null && fields.dependencies.size() == 1) {
@@ -90,6 +119,11 @@ public final class QuestEditorJsonBuilder {
             JsonArray arr = new JsonArray();
             for (String dependency : fields.dependencies) arr.add(dependency);
             obj.add("dependencies", arr);
+        }
+        if (fields.incompatibleDependencies != null && !fields.incompatibleDependencies.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (String dependency : fields.incompatibleDependencies) arr.add(dependency);
+            obj.add("incompatible_dependencies", arr);
         }
 
         String completionRaw = safe(fields.completionRaw).trim();
@@ -109,17 +143,48 @@ public final class QuestEditorJsonBuilder {
         return obj;
     }
 
+    public static void preserveCategoryStickers(JsonObject category, JsonObject existing) {
+        if (category == null || existing == null || !existing.has("stickers") || !existing.get("stickers").isJsonArray()) return;
+        category.add("stickers", existing.getAsJsonArray("stickers").deepCopy());
+    }
+
+    private static void addTranslations(JsonObject obj, Map<String, String> names, Map<String, String> descriptions) {
+        Set<String> locales = new LinkedHashSet<>();
+        if (names != null) locales.addAll(names.keySet());
+        if (descriptions != null) locales.addAll(descriptions.keySet());
+        JsonObject translations = new JsonObject();
+        for (String rawLocale : locales) {
+            String locale = safe(rawLocale).trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+            if (locale.isBlank()) continue;
+            JsonObject translation = new JsonObject();
+            String name = names == null ? "" : safe(names.get(rawLocale)).trim();
+            String description = descriptions == null ? "" : safe(descriptions.get(rawLocale)).trim();
+            if (!name.isBlank()) translation.addProperty("name", name);
+            if (!description.isBlank()) translation.addProperty("description", description);
+            if (translation.size() > 0) translations.add(locale, translation);
+        }
+        if (translations.size() > 0) obj.add("translations", translations);
+    }
+
     private static void addOptional(JsonObject obj, String key, String value) {
         String v = safe(value).trim();
         if (!v.isBlank()) obj.addProperty(key, v);
     }
 
-    private static void setError(Consumer<String> onError, String message) {
-        if (onError != null) onError.accept(message);
+    private static void setError(Consumer<String> onError, String key) {
+        if (onError != null) onError.accept(Component.translatable("ui.boundless.editor.error." + key).getString());
     }
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String normalizeTreeBackground(String raw) {
+        String value = safe(raw).trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (value) {
+            case "circle", "diamond", "rounded_square", "square" -> value;
+            default -> "square";
+        };
     }
 
     // quest build fields
@@ -127,8 +192,11 @@ public final class QuestEditorJsonBuilder {
         public String id = "";
         public boolean duplicateQuestId;
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String description = "";
+        public Map<String, String> descriptionTranslations = Map.of();
+        public String media = "";
         public String category = "";
         public String subCategory = "";
         public boolean optional;
@@ -138,7 +206,13 @@ public final class QuestEditorJsonBuilder {
         public boolean lockAfterDependency;
         public String loadedQuestType = "";
         public List<String> dependencies = List.of();
+        public List<String> incompatibleDependencies = List.of();
         public String completionRaw = "";
         public String rewardRaw = "";
+        public int treeX = -1;
+        public int treeY = -1;
+        public String treeBackground = "square";
+        public boolean treeOrigin;
+        public List<String> importWarnings = List.of();
     }
 }

@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,12 +63,14 @@ public final class BoundlessNetwork {
     private static final String VERSION = "3";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             CHANNEL_NAME, () -> VERSION, VERSION::equals, VERSION::equals);
+    private static final String BUILTIN_QUEST_PACK_ID = "boundless";
     private static boolean REGISTERED = false;
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
     // redemption guard blocks duplicate clicks before a server reply
     private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, QuestPackUploadSession> QUESTPACK_UPLOADS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Object> QUESTPACK_UPLOAD_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<java.util.UUID, ObjectiveProgressSnapshot> LAST_OBJECTIVE_SYNC = new ConcurrentHashMap<>();
 
     // sync ids join large quest snapshots sent in chunks
@@ -259,6 +262,7 @@ public final class BoundlessNetwork {
             double questTextScale,
             double questIconScale,
             boolean enableQuestSearchBox,
+            boolean customBackgrounds,
             boolean enableDescriptionColors,
             String questWidgetTextColor,
             String descriptionTextColor,
@@ -268,7 +272,9 @@ public final class BoundlessNetwork {
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
+            boolean enableQuestRejecting,
             boolean enableQuestScrolls,
+            boolean quickEdit,
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<UpdateServerConfig> TYPE =
@@ -286,6 +292,7 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questTextScale);
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.customBackgrounds);
                     buf.writeBoolean(p.enableDescriptionColors);
                     buf.writeUtf(p.questWidgetTextColor == null ? "" : p.questWidgetTextColor);
                     buf.writeUtf(p.descriptionTextColor == null ? "" : p.descriptionTextColor);
@@ -295,7 +302,9 @@ public final class BoundlessNetwork {
                     buf.writeBoolean(p.enableQuestToasts);
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestRejecting);
                     buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.quickEdit);
                     buf.writeBoolean(p.disableQuestBook);
                     buf.writeBoolean(p.spawnWithQuestBook);
                 },
@@ -312,11 +321,14 @@ public final class BoundlessNetwork {
                         buf.readDouble(),
                         buf.readBoolean(),
                         buf.readBoolean(),
+                        buf.readBoolean(),
                         buf.readUtf(),
                         buf.readUtf(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -590,6 +602,7 @@ public final class BoundlessNetwork {
             double questTextScale,
             double questIconScale,
             boolean enableQuestSearchBox,
+            boolean customBackgrounds,
             boolean enableDescriptionColors,
             String questWidgetTextColor,
             String descriptionTextColor,
@@ -599,7 +612,9 @@ public final class BoundlessNetwork {
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
+            boolean enableQuestRejecting,
             boolean enableQuestScrolls,
+            boolean quickEdit,
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<SyncConfig> TYPE =
@@ -621,6 +636,7 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questTextScale);
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.customBackgrounds);
                     buf.writeBoolean(p.enableDescriptionColors);
                     buf.writeUtf(p.questWidgetTextColor == null ? "" : p.questWidgetTextColor);
                     buf.writeUtf(p.descriptionTextColor == null ? "" : p.descriptionTextColor);
@@ -630,7 +646,9 @@ public final class BoundlessNetwork {
                     buf.writeBoolean(p.enableQuestToasts);
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestRejecting);
                     buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.quickEdit);
                     buf.writeBoolean(p.disableQuestBook);
                     buf.writeBoolean(p.spawnWithQuestBook);
                 },
@@ -651,11 +669,14 @@ public final class BoundlessNetwork {
                         buf.readDouble(),
                         buf.readBoolean(),
                         buf.readBoolean(),
+                        buf.readBoolean(),
                         buf.readUtf(),
                         buf.readUtf(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
+                        buf.readBoolean(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -816,6 +837,7 @@ public final class BoundlessNetwork {
                 Config.questTextScale(),
                 Config.questIconScale(),
                 Config.enableQuestSearchBox(),
+                Config.customBackgrounds(),
                 Config.enableDescriptionColors(),
                 String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor()),
                 String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor()),
@@ -825,7 +847,9 @@ public final class BoundlessNetwork {
                 Config.enableQuestToasts(),
                 Config.disableQuestPinning(),
                 Config.autoClaimQuestRewards(),
+                Config.enableQuestRejecting(),
                 Config.enableQuestScrolls(),
+                Config.quickEdit(),
                 Config.disableQuestBook(),
                 Config.spawnWithQuestBook()
         ));
@@ -921,6 +945,22 @@ public final class BoundlessNetwork {
             o.addProperty("excludeFromAll", c.excludeFromAll);
             o.addProperty("dependency", c.dependency);
             o.addProperty("autoComplete", c.autoComplete);
+            o.addProperty("treeLayout", c.treeLayout);
+            o.addProperty("background", c.background);
+            o.addProperty("backgroundTileScale", c.backgroundTileScale);
+            o.addProperty("backgroundDarkening", c.backgroundDarkening);
+            o.addProperty("backgroundDarkeningOpacity", c.backgroundDarkeningOpacity);
+            JsonArray stickers = new JsonArray();
+            for (QuestData.Sticker sticker : c.stickers) {
+                JsonObject stickerJson = new JsonObject();
+                stickerJson.addProperty("type", sticker.type());
+                stickerJson.addProperty("value", sticker.value());
+                stickerJson.addProperty("x", sticker.x());
+                stickerJson.addProperty("y", sticker.y());
+                stickerJson.addProperty("scale", sticker.scale());
+                stickers.add(stickerJson);
+            }
+            o.add("stickers", stickers);
             cats.add(o);
         }
         root.add("categories", cats);
@@ -953,14 +993,32 @@ public final class BoundlessNetwork {
             o.addProperty("name", q.name);
             o.addProperty("icon", q.icon);
             o.addProperty("description", q.description);
+            JsonObject translations = new JsonObject();
+            LinkedHashSet<String> translationLocales = new LinkedHashSet<>(q.nameTranslations.keySet());
+            translationLocales.addAll(q.descriptionTranslations.keySet());
+            for (String locale : translationLocales) {
+                JsonObject translation = new JsonObject();
+                String translatedName = q.nameTranslations.get(locale);
+                String translatedDescription = q.descriptionTranslations.get(locale);
+                if (translatedName != null && !translatedName.isBlank()) translation.addProperty("name", translatedName);
+                if (translatedDescription != null && !translatedDescription.isBlank()) translation.addProperty("description", translatedDescription);
+                if (translation.size() > 0) translations.add(locale, translation);
+            }
+            if (translations.size() > 0) o.add("translations", translations);
+            if (q.media != null && !q.media.isBlank()) o.addProperty("media", q.media);
 
             JsonArray deps = new JsonArray();
             for (String d : q.dependencies) deps.add(d);
             o.add("dependencies", deps);
 
+            JsonArray incompatibleDeps = new JsonArray();
+            for (String d : q.incompatibleDependencies) incompatibleDeps.add(d);
+            o.add("incompatibleDependencies", incompatibleDeps);
+
             o.addProperty("optional", q.optional);
             o.addProperty("repeatable", q.repeatable);
             o.addProperty("hiddenUnderDependency", q.hiddenUnderDependency);
+            o.addProperty("lockAfterDependency", q.lockAfterDependency);
 
             if (q.rewards != null) {
                 JsonObject ro = new JsonObject();
@@ -1075,6 +1133,10 @@ public final class BoundlessNetwork {
             if (q.sourcePath != null && !q.sourcePath.isBlank()) {
                 o.addProperty("sourcePath", q.sourcePath);
             }
+            if (q.treeX != -1) o.addProperty("treeX", q.treeX);
+            if (q.treeY != -1) o.addProperty("treeY", q.treeY);
+            o.addProperty("treeBackground", q.treeBackground);
+            o.addProperty("treeOrigin", q.treeOrigin);
 
             qs.add(o);
         }
@@ -1154,6 +1216,7 @@ public final class BoundlessNetwork {
     private static void handleReject(Reject p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
+            if (!Config.enableQuestRejecting()) return;
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
                 if (QuestTracker.serverReject(q, sp)) {
                     QuestTracker.setServerStatus(sp, q.id, QuestTracker.Status.REJECTED);
@@ -1230,12 +1293,12 @@ public final class BoundlessNetwork {
     // toggle quest packs on the current authority
     private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
 
             if (p.builtin()) {
                 Config.ENABLE_BUILTIN_QUEST_PACK.set(p.enabled());
-                Config.SPEC.save();
+                Config.saveLater();
             } else {
                 String id = p.id() == null ? "" : p.id().trim();
                 if (id.isBlank()) return;
@@ -1252,33 +1315,19 @@ public final class BoundlessNetwork {
     // apply synced config edits on the server authority
     private static void handleUpdateServerConfig(UpdateServerConfig p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
 
-            Config.PINNED_QUEST_HUD_POSITION.set(p.pinnedQuestHudPosition());
-            Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(p.hideQuestBookInInventory());
-            Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(p.questBookInventoryButtonPosition());
-            Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(p.centerInventoryWithQuestPanel());
-            Config.HIDE_CATEGORY_HEADER.set(p.hideCategoryHeader());
-            Config.FILTER_DISPLAY_MODE.set(p.filterDisplayMode());
             Config.DISABLE_CATEGORIES.set(p.disableCategories());
-            Config.HIDE_QUEST_WIDGET_ICONS.set(p.hideQuestWidgetIcons());
-            Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questTextScale())));
-            Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
-            Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
-            Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
-            Config.QUEST_WIDGET_TEXT_COLOR.set(p.questWidgetTextColor());
-            Config.DESCRIPTION_TEXT_COLOR.set(p.descriptionTextColor());
-            Config.ENABLE_DESCRIPTION_READ_MORE.set(p.enableDescriptionReadMore());
-            Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(p.enableDescriptionTextWrapping());
-            Config.DESCRIPTION_TEXT_ALIGNMENT.set(p.descriptionTextAlignment());
-            Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
+            Config.CUSTOM_BACKGROUNDS.set(p.customBackgrounds());
             Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
             Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
+            Config.ENABLE_QUEST_REJECTING.set(p.enableQuestRejecting());
             Config.ENABLE_QUEST_SCROLLS.set(p.enableQuestScrolls());
+            Config.QUICK_EDIT.set(p.quickEdit());
             Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
             Config.SPAWN_WITH_QUEST_BOOK.set(p.spawnWithQuestBook());
-            Config.SPEC.save();
+            Config.saveLater();
 
             for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
                 sendConfig(player);
@@ -1290,8 +1339,8 @@ public final class BoundlessNetwork {
     private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, PayloadContext ctx) {
         // chunks are assembled before unpacking into a pack folder
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
             String id = normalizeQuestPackFolderName(p.id());
             if (id.isBlank()) return;
             pruneUploadSessions();
@@ -1345,14 +1394,15 @@ public final class BoundlessNetwork {
     // delete quest packs on the server authority
     private static void handleDeleteQuestPack(DeleteQuestPack p, PayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
             String id = normalizeQuestPackFolderName(p.id());
-            if (id.isBlank()) return;
+            if (id.isBlank() || BUILTIN_QUEST_PACK_ID.equalsIgnoreCase(id)) return;
             MinecraftServer server = sp.server;
             CompletableFuture.runAsync(() -> {
                 try {
                     deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
+                    QuestPackStorage.deleteQuestPackBackups(id);
                 } catch (IOException e) {
                     throw new CompletionException(e);
                 }
@@ -1366,6 +1416,11 @@ public final class BoundlessNetwork {
                 reloadAndSyncAll(server);
             }));
         });
+    }
+
+    private static ServerPlayer operator(PayloadContext ctx) {
+        if (!(ctx.player() instanceof ServerPlayer player)) return null;
+        return player.createCommandSourceStack().hasPermission(2) ? player : null;
     }
 
     // mark observe targets on the server authority
@@ -1572,6 +1627,7 @@ public final class BoundlessNetwork {
                 p.questTextScale(),
                 p.questIconScale(),
                 p.enableQuestSearchBox(),
+                p.customBackgrounds(),
                 p.enableDescriptionColors(),
                 p.questWidgetTextColor(),
                 p.descriptionTextColor(),
@@ -1581,7 +1637,9 @@ public final class BoundlessNetwork {
                 p.enableQuestToasts(),
                 p.disableQuestPinning(),
                 p.autoClaimQuestRewards(),
+                p.enableQuestRejecting(),
                 p.enableQuestScrolls(),
+                p.quickEdit(),
                 p.disableQuestBook(),
                 p.spawnWithQuestBook()
             );

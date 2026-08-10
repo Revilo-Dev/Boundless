@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "realmrpg_demons:item/demon_spawn_egg"
-  }
-}

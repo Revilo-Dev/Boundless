@@ -18,23 +18,33 @@ public final class QuestEditorStateSignatures {
                     + "|" + safe(fields.packDescription);
             case CATEGORY -> "category|" + safe(fields.categoryId)
                     + "|" + safe(fields.categoryName)
+                    + "|" + safe(fields.categoryNameTranslations)
                     + "|" + safe(fields.categoryIcon)
+                    + "|" + fields.categoryTreeLayout
+                    + "|" + safe(fields.categoryBackground)
+                    + "|" + fields.categoryBackgroundTileScale
+                    + "|" + fields.categoryBackgroundDarkening
+                    + "|" + fields.categoryBackgroundDarkeningOpacity
                     + "|" + safe(fields.categoryDependency)
                     + "|" + fields.categoryAutoComplete;
             case SUBCATEGORY -> "subcategory|" + safe(fields.subCategoryId)
                     + "|" + safe(fields.subCategoryParent)
                     + "|" + safe(fields.subCategoryName)
+                    + "|" + safe(fields.subCategoryNameTranslations)
                     + "|" + safe(fields.subCategoryIcon)
                     + "|" + fields.subCategoryDefaultOpen;
             case QUEST -> "quest|" + safe(fields.questId)
                     + "|" + safe(fields.questOrderToken)
                     + "|" + safe(fields.questName)
+                    + "|" + safe(fields.questNameTranslations)
                     + "|" + safe(fields.questIcon)
                     + "|" + safe(fields.questDescription)
+                    + "|" + safe(fields.questDescriptionTranslations)
+                    + "|" + safe(fields.questMedia)
                     + "|" + safe(fields.questCategory)
                     + "|" + safe(fields.questSubCategory)
                     + "|" + safe(fields.questDependencies)
-                    + "|" + fields.questDependencyLock
+                    + "|" + safe(fields.questIncompatibleDependencies)
                     + "|" + fields.questOptional
                     + "|" + fields.questRepeatable
                     + "|" + fields.questAutoComplete
@@ -58,23 +68,33 @@ public final class QuestEditorStateSignatures {
         public String packDescription = "";
         public String categoryId = "";
         public String categoryName = "";
+        public String categoryNameTranslations = "";
         public String categoryIcon = "";
+        public boolean categoryTreeLayout;
+        public String categoryBackground = "";
+        public float categoryBackgroundTileScale = 0.5f;
+        public boolean categoryBackgroundDarkening;
+        public float categoryBackgroundDarkeningOpacity = 0.45f;
         public String categoryDependency = "";
         public boolean categoryAutoComplete;
         public String subCategoryId = "";
         public String subCategoryParent = "";
         public String subCategoryName = "";
+        public String subCategoryNameTranslations = "";
         public String subCategoryIcon = "";
         public boolean subCategoryDefaultOpen;
         public String questId = "";
         public String questOrderToken = "";
         public String questName = "";
+        public String questNameTranslations = "";
         public String questIcon = "";
         public String questDescription = "";
+        public String questDescriptionTranslations = "";
+        public String questMedia = "";
         public String questCategory = "";
         public String questSubCategory = "";
         public String questDependencies = "";
-        public boolean questDependencyLock;
+        public String questIncompatibleDependencies = "";
         public boolean questOptional;
         public boolean questRepeatable;
         public boolean questAutoComplete;

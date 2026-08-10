@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "eternalnether:item/wither_skeleton_knight_spawn_egg"
-  }
-}

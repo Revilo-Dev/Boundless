@@ -28,6 +28,8 @@ public final class QuestPackStorage {
 
     private QuestPackStorage() {}
 
+    public record Snapshot(Path path, LocalDateTime createdAt, String reason) {}
+
     public static void writeJsonAtomically(Gson gson, JsonElement element, Path target) throws IOException {
         if (gson == null) throw new IOException("Gson unavailable");
         if (element == null) throw new IOException("JSON payload unavailable");
@@ -89,6 +91,31 @@ public final class QuestPackStorage {
                     "could not list backups for {}", packName, e);
         }
         return List.copyOf(snapshots);
+    }
+
+    public static List<Snapshot> listSnapshotDetails(String packName) throws IOException {
+        List<Snapshot> snapshots = new ArrayList<>();
+        for (BackupSnapshot backup : listSnapshots(packName)) {
+            LocalDateTime createdAt;
+            String folderName = backup.root().getFileName() == null ? "" : backup.root().getFileName().toString();
+            String rawTimestamp = folderName.length() >= 19 ? folderName.substring(0, 19) : folderName;
+            try {
+                createdAt = LocalDateTime.parse(rawTimestamp, BACKUP_TIMESTAMP);
+            } catch (DateTimeParseException ignored) {
+                createdAt = LocalDateTime.MIN;
+            }
+            snapshots.add(new Snapshot(backup.root(), createdAt, backup.reason()));
+        }
+        return List.copyOf(snapshots);
+    }
+
+    public static void deleteQuestPackBackups(String packName) throws IOException {
+        String normalized = sanitizeSegment(packName);
+        if (normalized.isBlank()) return;
+        Path backupsRoot = Config.questPackBackupsRoot().toAbsolutePath().normalize();
+        Path packRoot = backupsRoot.resolve(normalized).normalize();
+        if (!packRoot.startsWith(backupsRoot)) throw new IOException("Invalid questpack backup path");
+        deleteDirectory(packRoot);
     }
 
     // this replaces a pack with one of its own backups

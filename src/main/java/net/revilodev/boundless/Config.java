@@ -1,7 +1,11 @@
 package net.revilodev.boundless;
 
-import java.util.List;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.loading.FMLPaths;
@@ -10,6 +14,13 @@ import net.minecraftforge.common.ForgeConfigSpec;
 public final class Config {
     // questPackBackupLimit keeps backup history per pack
     private static final int QUEST_PACK_BACKUP_LIMIT = 5;
+    private static final long CONFIG_SAVE_DELAY_MILLIS = 250L;
+    private static final AtomicLong CONFIG_SAVE_GENERATION = new AtomicLong();
+    private static final ScheduledExecutorService CONFIG_WRITER = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "Boundless Config Writer");
+        thread.setDaemon(true);
+        return thread;
+    });
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
 
     // disabledQuestCategories hides matching category ids everywhere
@@ -95,6 +106,18 @@ public final class Config {
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
                     .define("enableQuestSearchBox", false);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> EXPAND_TREE_TOGGLE =
+            BUILDER.comment("If true, shows the expand panel button on tree quest views.")
+                    .define("expandTreeToggle", true);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> CUSTOM_BACKGROUNDS =
+            BUILDER.comment("If true, renders custom category backgrounds in quest lists and trees.")
+                    .define("customBackgrounds", true);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_BACKGROUND_THEMES =
+            BUILDER.comment("If true, allows category background themes on this client.")
+                    .define("enableBackgroundThemes", true);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> STICKY_DESCRIPTION_HEADERS =
+            BUILDER.comment("If true, keeps the quest details header fixed above the description.")
+                    .define("stickyDescriptionHeaders", true);
     // enableDescriptionColors enables inline color tokens in quest text
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
             BUILDER.comment("If true, allows colored quest descriptions to render with Boundless color tokens.")
@@ -107,6 +130,34 @@ public final class Config {
     public static final ForgeConfigSpec.ConfigValue<String> DESCRIPTION_TEXT_COLOR =
             BUILDER.comment("Hex color used for quest description text when no inline color token overrides it. Example: CFCFCF")
                     .define("descriptionTextColor", "CFCFCF", Config::isHexColor);
+    public static final ForgeConfigSpec.ConfigValue<String> DESCRIPTION_TITLE_COLOR = colorConfig(
+            "descriptionTitleColor", "FFFFFF", "quest description titles");
+    public static final ForgeConfigSpec.ConfigValue<String> REQUIRES_TEXT_COLOR = colorConfig(
+            "requiresTextColor", "FF9F0F", "requirement headings");
+    public static final ForgeConfigSpec.ConfigValue<String> SUBMIT_TEXT_COLOR = colorConfig(
+            "submitTextColor", "1D9633", "submit and input headings");
+    public static final ForgeConfigSpec.ConfigValue<String> COLLECT_TEXT_COLOR = colorConfig(
+            "collectTextColor", "1D9633", "collect headings");
+    public static final ForgeConfigSpec.ConfigValue<String> KILL_TEXT_COLOR = colorConfig(
+            "killTextColor", "FF5555", "kill headings");
+    public static final ForgeConfigSpec.ConfigValue<String> EFFECT_TEXT_COLOR = colorConfig(
+            "effectTextColor", "55FFFF", "effect headings");
+    public static final ForgeConfigSpec.ConfigValue<String> ACHIEVE_TEXT_COLOR = colorConfig(
+            "achieveTextColor", "55FFFF", "advancement headings");
+    public static final ForgeConfigSpec.ConfigValue<String> OBSERVE_TEXT_COLOR = colorConfig(
+            "observeTextColor", "B46CFF", "observation headings");
+    public static final ForgeConfigSpec.ConfigValue<String> BIOME_TEXT_COLOR = colorConfig(
+            "biomeTextColor", "55CC55", "biome headings");
+    public static final ForgeConfigSpec.ConfigValue<String> DIMENSION_TEXT_COLOR = colorConfig(
+            "dimensionTextColor", "FF5555", "dimension headings");
+    public static final ForgeConfigSpec.ConfigValue<String> REWARD_TEXT_COLOR = colorConfig(
+            "rewardTextColor", "A8FFA8", "reward headings and entries");
+    public static final ForgeConfigSpec.ConfigValue<String> COMPLETED_TEXT_COLOR = colorConfig(
+            "completedTextColor", "55FF55", "completed objective text");
+    public static final ForgeConfigSpec.ConfigValue<String> INCOMPLETE_TEXT_COLOR = colorConfig(
+            "incompleteTextColor", "FF5555", "incomplete and invalid objective text");
+    public static final ForgeConfigSpec.ConfigValue<String> UNLOCK_TEXT_COLOR = colorConfig(
+            "unlockTextColor", "FFD700", "category unlock text");
     // enableDescriptionReadMore collapses long descriptions
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_READ_MORE =
             BUILDER.comment("If true, long quest descriptions collapse behind a read-more toggle.")
@@ -140,10 +191,22 @@ public final class Config {
     public static final ForgeConfigSpec.ConfigValue<Boolean> AUTO_CLAIM_QUEST_REWARDS =
             BUILDER.comment("If true, quest rewards are automatically claimed when a quest becomes complete.")
                     .define("autoClaimQuestRewards", false);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_REJECTING =
+            BUILDER.comment("If true, optional quests can be rejected from the quest book.")
+                    .define("enableQuestRejecting", true);
     // enableQuestScrolls allows creating and redeeming quest scrolls
     public static final ForgeConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
             BUILDER.comment("If true, quest completion scrolls can be created and used.")
                     .define("enableQuestScrolls", true);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> QUICK_EDIT =
+            BUILDER.comment("If true, operators can open a quest directly in the editor from its quest-book page.")
+                    .define("quickEdit", false);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> MULTI_LANGUAGE_QUESTS =
+            BUILDER.comment("If true, quest titles and descriptions use the translation matching the client's language when available.")
+                    .define("multiLanguageQuests", true);
+    public static final ForgeConfigSpec.ConfigValue<String> PREFERRED_LANGUAGE =
+            BUILDER.comment("Preferred quest translation language. Use client to follow the client's selected language.")
+                    .define("preferredLanguage", "client", Config::isPreferredLanguage);
     // questPackBackupInterval controls automatic full pack backups
     public static final ForgeConfigSpec.ConfigValue<String> QUEST_PACK_BACKUP_INTERVAL =
             BUILDER.comment("Automatic questpack backup interval: 1m, 5m, 10m, 30m, off.")
@@ -155,7 +218,7 @@ public final class Config {
     }
     // disableQuestBook blocks the quest book item and keybind
     public static final ForgeConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_BOOK =
-            BUILDER.comment("If true, quest book opening is disabled.")
+            BUILDER.comment("If true, disables the quest book item and keybind while keeping the inventory panel available.")
                     .define("disableQuestBook", false);
     // spawnWithQuestBook gives new players the quest book
     public static final ForgeConfigSpec.ConfigValue<Boolean> SPAWN_WITH_QUEST_BOOK =
@@ -171,6 +234,15 @@ public final class Config {
     public static final ForgeConfigSpec.ConfigValue<Boolean> DEV_MODE =
             BUILDER.comment("Enables Boundless development performance diagnostics. Keep false during normal play.")
                     .define("devMode", false);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> DEBUG_QUEST_LOADING =
+            BUILDER.comment("Logs questpack discovery, parsing, reload, and evaluation timings while devMode is enabled.")
+                    .define("debugQuestLoading", true);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> DEBUG_UI_PERFORMANCE =
+            BUILDER.comment("Logs slow quest book and editor UI frames while devMode is enabled.")
+                    .define("debugUiPerformance", true);
+    public static final ForgeConfigSpec.ConfigValue<Boolean> DEBUG_NETWORK_TRANSFERS =
+            BUILDER.comment("Logs questpack upload, download, and synchronization diagnostics while devMode is enabled.")
+                    .define("debugNetworkTransfers", true);
     static {
         BUILDER.pop();
     }
@@ -211,8 +283,51 @@ public final class Config {
         return DEV_MODE.get();
     }
 
+    public static boolean debugQuestLoading() {
+        return DEBUG_QUEST_LOADING.get();
+    }
+
+    public static boolean debugUiPerformance() {
+        return DEBUG_UI_PERFORMANCE.get();
+    }
+
+    public static boolean debugNetworkTransfers() {
+        return DEBUG_NETWORK_TRANSFERS.get();
+    }
+
+    public static boolean multiLanguageQuests() {
+        try {
+            return Boolean.TRUE.equals(MULTI_LANGUAGE_QUESTS.get());
+        } catch (RuntimeException ignored) {
+            return true;
+        }
+    }
+
+    public static String preferredLanguage() {
+        try {
+            String value = PREFERRED_LANGUAGE.get();
+            return value == null || value.isBlank() ? "client" : value.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+        } catch (RuntimeException ignored) {
+            return "client";
+        }
+    }
+
+    private static boolean isPreferredLanguage(Object value) {
+        if (!(value instanceof String language)) return false;
+        String normalized = language.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+        return "client".equals(normalized) || normalized.matches("[a-z]{2,3}(_[a-z0-9]{2,8})*");
+    }
+
     public static List<? extends String> disabledCategories() {
         return DISABLED_CATEGORIES.get();
+    }
+
+    public static boolean isCategoryDisabled(String categoryId) {
+        if (categoryId == null || categoryId.isBlank()) return false;
+        for (String disabled : DISABLED_CATEGORIES.get()) {
+            if (disabled != null && disabled.trim().equalsIgnoreCase(categoryId.trim())) return true;
+        }
+        return false;
     }
 
     public static List<? extends String> appliedQuestPacks() {
@@ -234,6 +349,27 @@ public final class Config {
 
     // write the enabled state for one quest pack id
     public static void setQuestPackApplied(String id, boolean enabled) {
+        setQuestPackAppliedValue(id, enabled);
+        saveLater();
+    }
+
+    public static void saveLater() {
+        long generation = CONFIG_SAVE_GENERATION.incrementAndGet();
+        CONFIG_WRITER.schedule(() -> {
+            if (generation != CONFIG_SAVE_GENERATION.get()) return;
+            try {
+                SPEC.save();
+            } catch (Throwable error) {
+                BoundlessMod.LOGGER.error("could not save boundless config", error);
+            }
+        }, CONFIG_SAVE_DELAY_MILLIS, TimeUnit.MILLISECONDS);
+    }
+
+    public static void setSyncedQuestPackApplied(String id, boolean enabled) {
+        setQuestPackAppliedValue(id, enabled);
+    }
+
+    private static void setQuestPackAppliedValue(String id, boolean enabled) {
         String normalized = normalizeQuestPackId(id);
         if (normalized.isBlank()) return;
         List<String> applied = normalizedCopy(APPLIED_QUEST_PACKS.get());
@@ -244,7 +380,6 @@ public final class Config {
         else disabled.add(normalized);
         APPLIED_QUEST_PACKS.set(applied);
         DISABLED_QUEST_PACKS.set(disabled);
-        SPEC.save();
     }
 
     // apply the current authority config snapshot on clients
@@ -264,6 +399,7 @@ public final class Config {
             double questTextScale,
             double questIconScale,
             boolean enableQuestSearchBox,
+            boolean customBackgrounds,
             boolean enableDescriptionColors,
             String questWidgetTextColor,
             String descriptionTextColor,
@@ -273,35 +409,22 @@ public final class Config {
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
+            boolean enableQuestRejecting,
             boolean enableQuestScrolls,
+            boolean quickEdit,
             boolean disableQuestBook,
             boolean spawnWithQuestBook) {
         DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
-        // this keeps pack toggles matched to the current server
-        APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : List.copyOf(appliedQuestPacks));
-        DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : List.copyOf(disabledQuestPacks));
-        PINNED_QUEST_HUD_POSITION.set(pinnedQuestHudPosition);
-        HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
-        QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
-        CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
-        HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
-        FILTER_DISPLAY_MODE.set(filterDisplayMode);
+        APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : normalizedCopy(appliedQuestPacks));
+        DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : normalizedCopy(disabledQuestPacks));
         DISABLE_CATEGORIES.set(disableCategories);
         ENABLE_BUILTIN_QUEST_PACK.set(enableBuiltinQuestPack);
-        HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
-        QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
-        QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
-        ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
-        ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
-        QUEST_WIDGET_TEXT_COLOR.set(normalizeHexColor(questWidgetTextColor, "FFFFFF"));
-        DESCRIPTION_TEXT_COLOR.set(normalizeHexColor(descriptionTextColor, "CFCFCF"));
-        ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
-        ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
-        DESCRIPTION_TEXT_ALIGNMENT.set(descriptionTextAlignment);
-        ENABLE_QUEST_TOASTS.set(enableQuestToasts);
+        CUSTOM_BACKGROUNDS.set(customBackgrounds);
         DISABLE_QUEST_PINNING.set(disableQuestPinning);
         AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
+        ENABLE_QUEST_REJECTING.set(enableQuestRejecting);
         ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
+        QUICK_EDIT.set(quickEdit);
         DISABLE_QUEST_BOOK.set(disableQuestBook);
         SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
     }
@@ -409,6 +532,14 @@ public final class Config {
         return (float) Math.max(0.5D, Math.min(1.0D, value));
     }
 
+    public static Path questMediaRoot() {
+        return boundlessConfigRoot().resolve("media").normalize();
+    }
+
+    public static Path emojiRoot() {
+        return boundlessConfigRoot().resolve("emoji").normalize();
+    }
+
     public static boolean enableBuiltinQuestPack() {
         return ENABLE_BUILTIN_QUEST_PACK.get();
     }
@@ -421,8 +552,24 @@ public final class Config {
         return ENABLE_QUEST_SEARCH_BOX.get();
     }
 
+    public static boolean expandTreeToggle() {
+        return EXPAND_TREE_TOGGLE.get();
+    }
+
+    public static boolean customBackgrounds() {
+        return CUSTOM_BACKGROUNDS.get();
+    }
+
+    public static boolean enableBackgroundThemes() {
+        return ENABLE_BACKGROUND_THEMES.get();
+    }
+
     public static boolean enableDescriptionColors() {
         return ENABLE_DESCRIPTION_COLORS.get();
+    }
+
+    public static boolean stickyDescriptionHeaders() {
+        return STICKY_DESCRIPTION_HEADERS.get();
     }
 
     public static int questWidgetTextColor() {
@@ -432,6 +579,21 @@ public final class Config {
     public static int descriptionTextColor() {
         return parseHexColor(DESCRIPTION_TEXT_COLOR.get(), 0xCFCFCF);
     }
+
+    public static int descriptionTitleColor() { return parseHexColor(DESCRIPTION_TITLE_COLOR.get(), 0xFFFFFF); }
+    public static int requiresTextColor() { return parseHexColor(REQUIRES_TEXT_COLOR.get(), 0xFF9F0F); }
+    public static int submitTextColor() { return parseHexColor(SUBMIT_TEXT_COLOR.get(), 0x1D9633); }
+    public static int collectTextColor() { return parseHexColor(COLLECT_TEXT_COLOR.get(), 0x1D9633); }
+    public static int killTextColor() { return parseHexColor(KILL_TEXT_COLOR.get(), 0xFF5555); }
+    public static int effectTextColor() { return parseHexColor(EFFECT_TEXT_COLOR.get(), 0x55FFFF); }
+    public static int achieveTextColor() { return parseHexColor(ACHIEVE_TEXT_COLOR.get(), 0x55FFFF); }
+    public static int observeTextColor() { return parseHexColor(OBSERVE_TEXT_COLOR.get(), 0xB46CFF); }
+    public static int biomeTextColor() { return parseHexColor(BIOME_TEXT_COLOR.get(), 0x55CC55); }
+    public static int dimensionTextColor() { return parseHexColor(DIMENSION_TEXT_COLOR.get(), 0xFF5555); }
+    public static int rewardTextColor() { return parseHexColor(REWARD_TEXT_COLOR.get(), 0xA8FFA8); }
+    public static int completedTextColor() { return parseHexColor(COMPLETED_TEXT_COLOR.get(), 0x55FF55); }
+    public static int incompleteTextColor() { return parseHexColor(INCOMPLETE_TEXT_COLOR.get(), 0xFF5555); }
+    public static int unlockTextColor() { return parseHexColor(UNLOCK_TEXT_COLOR.get(), 0xFFD700); }
 
     public static boolean enableDescriptionReadMore() {
         return ENABLE_DESCRIPTION_READ_MORE.get();
@@ -460,8 +622,16 @@ public final class Config {
         return AUTO_CLAIM_QUEST_REWARDS.get();
     }
 
+    public static boolean enableQuestRejecting() {
+        return ENABLE_QUEST_REJECTING.get();
+    }
+
     public static boolean enableQuestScrolls() {
         return ENABLE_QUEST_SCROLLS.get();
+    }
+
+    public static boolean quickEdit() {
+        return QUICK_EDIT.get();
     }
 
     public static boolean disableQuestBook() {
@@ -543,6 +713,11 @@ public final class Config {
         String value = s.trim();
         if (value.startsWith("#")) value = value.substring(1);
         return value.matches("(?i)[0-9a-f]{6}");
+    }
+
+    private static ForgeConfigSpec.ConfigValue<String> colorConfig(String key, String defaultColor, String usage) {
+        return BUILDER.comment("Hex color used for " + usage + ". Example: " + defaultColor)
+                .define(key, defaultColor, Config::isHexColor);
     }
 
     // normalize config colors into uppercase hex

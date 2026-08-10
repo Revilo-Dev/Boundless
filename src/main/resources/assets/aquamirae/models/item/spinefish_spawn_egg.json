@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "aquamirae:item/spinefish_spawn_egg"
-  }
-}

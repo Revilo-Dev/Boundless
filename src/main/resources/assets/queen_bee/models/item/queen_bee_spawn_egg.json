@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "queen_bee:item/queen_bee_spawn_egg"
-  }
-}

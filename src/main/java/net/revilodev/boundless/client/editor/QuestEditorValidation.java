@@ -47,7 +47,9 @@ public final class QuestEditorValidation {
                 request.dependencyRaw,
                 request.completionRaw,
                 request.rewardRaw,
-                computeInvalidQuestId(request.editorType, request.questId, request.hasCurrentPack, request.questEntries, request.editingPath),
+                request.invalidQuestIdOverride != null
+                        ? request.invalidQuestIdOverride
+                        : computeInvalidQuestId(request.editorType, request.questId, request.hasCurrentPack, request.questEntries, request.editingPath),
                 computeInvalidQuestName(request.editorType, request.questName),
                 isMissingQuestId(request.categoryDependency, request.hasCurrentPack, request.questIdCache),
                 isMissingCategoryId(request.parentCategory, request.hasCurrentPack, request.categoryIdCache),
@@ -118,12 +120,17 @@ public final class QuestEditorValidation {
         for (NamedEntry entry : questEntries) {
             if (entry == null || entry.id == null || !questId.equals(entry.id)) continue;
             matches++;
-            if (editingPath != null && entry.path != null && editingPath.equals(entry.path)) {
+            if (samePath(editingPath, entry.path)) {
                 matchedEditingPath = true;
             }
         }
         if (editingPath != null && matchedEditingPath) return matches > 1;
         return matches > 0;
+    }
+
+    public static boolean samePath(Path first, Path second) {
+        if (first == null || second == null) return false;
+        return first.toAbsolutePath().normalize().equals(second.toAbsolutePath().normalize());
     }
 
     // is duplicate quest id across pack
@@ -167,6 +174,7 @@ public final class QuestEditorValidation {
         public Set<String> questIdCache = Set.of();
         public Collection<String> questPackDependencySuggestionCache = Set.of();
         public Iterable<NamedEntry> questEntries = Set.of();
+        public Boolean invalidQuestIdOverride;
         public Consumer<String> errorHandler;
     }
 }

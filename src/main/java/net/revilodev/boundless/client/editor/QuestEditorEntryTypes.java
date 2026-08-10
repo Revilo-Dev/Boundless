@@ -15,24 +15,8 @@ public final class QuestEditorEntryTypes {
     // label
     public static String label(String type) {
         return switch (safe(type)) {
-            case "collect" -> "COL";
-            case "submit" -> "SUB";
-            case "kill" -> "KIL";
-            case "achieve" -> "ADV";
-            case "effect" -> "EFF";
-            case "observe" -> "OBS";
-            case "check" -> "CHK";
-            case "biome" -> "BIO";
-            case "dimension" -> "DIM";
-            case "xp" -> "XP";
-            case "levelup" -> "LVL";
-            case "field" -> "FLD";
-            case "item" -> "ITM";
-            case "command" -> "CMD";
-            case "loot" -> "LOT";
-            case "advancement" -> "ADV";
-            case "toast" -> "TST";
-            default -> safe(type).isBlank() ? "?" : safe(type).substring(0, Math.min(3, safe(type).length())).toUpperCase(Locale.ROOT);
+            case "achieve", "advance", "advancement" -> "advance";
+            default -> safe(type).isBlank() ? "?" : safe(type).toLowerCase(Locale.ROOT);
         };
     }
 
@@ -42,7 +26,7 @@ public final class QuestEditorEntryTypes {
         return switch (safe(type)) {
             case "collect", "submit", "item" -> "minecraft:diamond";
             case "kill" -> "minecraft:zombie";
-            case "achieve", "advancement" -> "minecraft:story/mine_stone";
+            case "achieve", "advance", "advancement" -> "minecraft:story/mine_stone";
             case "check" -> "Understand";
             case "xp" -> "points 10";
             case "levelup" -> "levels 1";
@@ -56,6 +40,17 @@ public final class QuestEditorEntryTypes {
             case "dimension" -> "minecraft:overworld";
             default -> "";
         };
+    }
+
+    public static String placeholderKey(EntryRowKind kind, String type) {
+        String key = kind == EntryRowKind.DEPENDENCY ? "dependency" : switch (safe(type)) {
+            case "collect", "submit", "item" -> "item";
+            case "achieve", "advance", "advancement" -> "advance";
+            case "kill", "check", "xp", "levelup", "command", "loot", "toast", "effect", "observe",
+                    "field", "biome", "dimension" -> safe(type);
+            default -> "";
+        };
+        return key.isBlank() ? "" : "ui.boundless.editor.placeholder." + key;
     }
 
     // normalize
@@ -77,6 +72,7 @@ public final class QuestEditorEntryTypes {
                 case "submit" -> "item";
                 case "exp" -> "xp";
                 case "loottable" -> "loot";
+                case "advancement" -> "advance";
                 default -> entryTypeOptions(kind).contains(type) ? type : "item";
             };
         }
@@ -85,7 +81,10 @@ public final class QuestEditorEntryTypes {
 
     // picker mode for type
     public static PickerMode pickerModeForType(EntryRowKind kind, String type) {
-        if (kind == EntryRowKind.REWARD && "item".equals(type)) return PickerMode.ITEMS;
+        if (kind == EntryRowKind.REWARD
+                && ("item".equals(type) || "command".equals(type) || "toast".equals(type))) {
+            return PickerMode.ITEMS;
+        }
         if (kind != EntryRowKind.COMPLETION) return PickerMode.NONE;
         return switch (type) {
             case "collect", "submit" -> PickerMode.ITEMS;
@@ -100,11 +99,22 @@ public final class QuestEditorEntryTypes {
         return pickerModeForType(kind, type) != PickerMode.NONE;
     }
 
+    public static boolean usesRowSelection(EntryRowKind kind, String type) {
+        return !(kind == EntryRowKind.REWARD && ("command".equals(type) || "toast".equals(type)))
+                && hasRowBrowser(kind, type);
+    }
+
     // row has count
     public static boolean rowHasCount(EntryRowKind kind, String type) {
         if (kind == EntryRowKind.REWARD) return "item".equals(type) || "xp".equals(type) || "levelup".equals(type);
         if (kind != EntryRowKind.COMPLETION) return false;
         return "collect".equals(type) || "submit".equals(type) || "kill".equals(type) || "xp".equals(type) || "levelup".equals(type);
+    }
+
+    public static List<String> valueOptions(EntryRowKind kind, String type) {
+        if ("xp".equals(type)) return List.of("points", "levels");
+        if (!"levelup".equals(type)) return List.of();
+        return kind == EntryRowKind.REWARD ? List.of("xp", "levels") : List.of("levels");
     }
 
     // entry type options
@@ -116,8 +126,8 @@ public final class QuestEditorEntryTypes {
         }
         if (kind == EntryRowKind.REWARD) {
             return LevelUpCompat.isAvailable()
-                    ? List.of("item", "xp", "levelup", "command", "loot", "advancement", "toast")
-                    : List.of("item", "xp", "command", "loot", "advancement", "toast");
+                    ? List.of("item", "xp", "levelup", "command", "loot", "advance", "toast")
+                    : List.of("item", "xp", "command", "loot", "advance", "toast");
         }
         return List.of();
     }

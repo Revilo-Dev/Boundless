@@ -12,10 +12,16 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.common.ForgeConfigSpec;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
+import net.revilodev.boundless.client.BoundlessPermissions;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.client.QuestListWidget;
+import net.revilodev.boundless.client.LegacyGuiSprites;
+import net.revilodev.boundless.client.editor.QuestEditorModels.DropdownMenuTarget;
+import net.revilodev.boundless.client.editor.QuestEditorPopupMenus;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 
@@ -27,42 +33,66 @@ public final class QuestSettingsScreen extends Screen {
 
     // shared panel and button textures
     private static final ResourceLocation PANEL_TEX =
-            new ResourceLocation("boundless", "textures/gui/quest_panel.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
     private static final int PANEL_W = 147;
     private static final int PANEL_H = 166;
 
     private static final ResourceLocation ROW_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/quest_widget.png");
-    private static final ResourceLocation BTN_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button.png");
-    private static final ResourceLocation BTN_TEX_HOVER =
-            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
-    private static final ResourceLocation BTN_TEX_DISABLED =
-            new ResourceLocation("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget.png");
+    private static final ResourceLocation VANILLA_BUTTON_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button");
+    private static final ResourceLocation VANILLA_BUTTON_HOVER_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_highlighted");
+    private static final ResourceLocation VANILLA_BUTTON_DISABLED_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_disabled");
+    private static final ResourceLocation TOGGLE_OFF_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off.png");
+    private static final ResourceLocation TOGGLE_OFF_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off-hovered.png");
+    private static final ResourceLocation TOGGLE_ON_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on.png");
+    private static final ResourceLocation TOGGLE_ON_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on-hovered.png");
+    private static final int TOGGLE_WIDTH = 20;
+    private static final int TOGGLE_HEIGHT = 11;
     private static final ResourceLocation BACK_TAB_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/back_tab.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
     private static final ResourceLocation BACK_TAB_HOVER_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
     private static final ResourceLocation HEADER_TEX =
-            new ResourceLocation("boundless", "textures/gui/3-slice-header.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
     private static final ResourceLocation TAB_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/tab.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/tab_selected.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
     private static final ResourceLocation CONFIG_TAB_ALL_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/search.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/search.png");
     private static final ResourceLocation CONFIG_TAB_STYLE_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/style-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/style-icon.png");
     private static final ResourceLocation CONFIG_TAB_UI_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/ui-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/ui.png");
     private static final ResourceLocation CONFIG_TAB_FEATURES_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/features-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/features.png");
+    private static final ResourceLocation SCOPE_TAB_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab.png");
+    private static final ResourceLocation SCOPE_TAB_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-pulled.png");
+    private static final ResourceLocation SCOPE_TAB_SELECTED_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-select.png");
+    private static final ResourceLocation CLIENT_SCOPE_ICON =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/client.png");
+    private static final ResourceLocation SERVER_SCOPE_ICON =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/server.png");
     private static final ResourceLocation MENU_CONFIG_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/style-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/style-icon.png");
     private static final ResourceLocation MENU_EDITOR_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/editor-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/editor-icon.png");
     private static final ResourceLocation MENU_DISCORD_TEX =
-            new ResourceLocation("boundless", "textures/gui/sprites/editor/discord-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/discord.png");
+    private static final ResourceLocation DEBUG_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/debug.png");
+    private static final ResourceLocation UNDEBUG_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/un-debug.png");
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
     private static final int TAB_GAP = 3;
@@ -77,7 +107,8 @@ public final class QuestSettingsScreen extends Screen {
 
     private static final String MENU_ID_CONFIG = "01_settings_config";
     private static final String MENU_ID_EDITOR = "02_settings_editor";
-    private static final String MENU_ID_DISCORD = "03_settings_discord";
+    private static final String MENU_ID_ASSETS = "03_settings_assets";
+    private static final String MENU_ID_DISCORD = "04_settings_discord";
     private static final List<String> HUD_POSITIONS = List.of(
             "bottom_left",
             "bottom_right",
@@ -112,24 +143,37 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
     private ConfigRow uiEnableSearchBoxRow;
+    private ConfigRow uiExpandTreeToggleRow;
+    private ConfigRow uiCustomBackgroundsRow;
+    private ConfigRow uiBackgroundThemesRow;
+    private ConfigRow uiStickyDescriptionHeadersRow;
     private ConfigRow uiEnableDescriptionColorsRow;
     private ConfigRow uiQuestWidgetTextColorRow;
     private ConfigRow uiDescriptionTextColorRow;
     private EditBox questWidgetTextColorField;
     private EditBox descriptionTextColorField;
+    private EditBox configSearchField;
+    private String configSearchQuery = "";
+    private final List<ColorConfigControl> detailColorControls = new ArrayList<>();
     private ConfigRow uiEnableDescriptionReadMoreRow;
     private ConfigRow uiEnableDescriptionWrappingRow;
     private ConfigRow uiDescriptionAlignmentRow;
     private ConfigRow uiEnableQuestToastsRow;
     private ConfigRow functionalityDisablePinningRow;
     private ConfigRow functionalityAutoClaimRow;
+    private ConfigRow functionalityQuestRejectingRow;
     private ConfigRow functionalityQuestScrollsRow;
+    private ConfigRow functionalityQuickEditRow;
+    private ConfigRow functionalityMultiLanguageRow;
+    private ConfigRow functionalityPreferredLanguageRow;
     private ConfigRow gameplayDisableQuestBookRow;
     private ConfigRow gameplaySpawnWithBookRow;
 
     private BackButton backButton;
     private HoldResetButton resetConfigButton;
+    private DebugButton debugButton;
     private final List<ConfigTabButton> configTabButtons = new ArrayList<>();
+    private final List<ConfigScopeButton> configScopeButtons = new ArrayList<>();
     private final List<ConfigRow> configRows = new ArrayList<>();
     private List<Component> pendingTooltip = List.of();
     private int pendingTooltipX;
@@ -161,7 +205,9 @@ public final class QuestSettingsScreen extends Screen {
     private int uiEnableQuestToastsBaseY;
     private int functionalityDisablePinningBaseY;
     private int functionalityAutoClaimBaseY;
+    private int functionalityQuestRejectingBaseY;
     private int functionalityQuestScrollsBaseY;
+    private int functionalityQuickEditBaseY;
     private int gameplayDisableQuestBookBaseY;
     private int gameplaySpawnWithBookBaseY;
 
@@ -177,6 +223,10 @@ public final class QuestSettingsScreen extends Screen {
     private double questTextScale;
     private double questIconScale;
     private boolean enableQuestSearchBox;
+    private boolean expandTreeToggle;
+    private boolean customBackgrounds;
+    private boolean enableBackgroundThemes;
+    private boolean stickyDescriptionHeaders;
     private boolean enableDescriptionColors;
     private String questWidgetTextColor;
     private String descriptionTextColor;
@@ -186,21 +236,35 @@ public final class QuestSettingsScreen extends Screen {
     private boolean enableQuestToasts;
     private boolean disableQuestPinning;
     private boolean autoClaimQuestRewards;
+    private boolean enableQuestRejecting;
     private boolean enableQuestScrolls;
+    private boolean quickEdit;
+    private boolean multiLanguageQuests;
+    private String preferredLanguage;
     private boolean disableQuestBook;
     private boolean spawnWithQuestBook;
     private ConfigTab configTab = ConfigTab.ALL;
+    private boolean showClientSettings = true;
+    private boolean showServerSettings = true;
+    private boolean configDirty;
+    private boolean serverConfigDirty;
+    private boolean operatorAccess;
+    private final QuestEditorPopupMenus popupMenus = new QuestEditorPopupMenus();
 
     public QuestSettingsScreen(Screen parent) {
         super(tr("title"));
         this.parent = parent;
     }
 
+    private boolean canManageServerSettings() {
+        return BoundlessPermissions.canManageQuests();
+    }
+
     @Override
     protected void init() {
-        // Settings are server-managed, so only operators can open this screen.
+        // Every player can manage client settings; authority-only rows are filtered below.
         var mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.hasPermissions(2)) {
+        if (mc.player == null) {
             mc.setScreen(parent);
             return;
         }
@@ -217,7 +281,25 @@ public final class QuestSettingsScreen extends Screen {
         initNavButtons();
         initHeader();
 
+        operatorAccess = canManageServerSettings();
         setPage(Page.MENU);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        boolean nextOperatorAccess = canManageServerSettings();
+        if (operatorAccess == nextOperatorAccess) return;
+        operatorAccess = nextOperatorAccess;
+        if (menuList != null) menuList.setQuests(buildMenuQuests());
+        if (operatorAccess) {
+            showClientSettings = true;
+            showServerSettings = true;
+        } else {
+            showClientSettings = true;
+            showServerSettings = false;
+        }
+        setPage(page);
     }
 
     private void initMenu() {
@@ -234,6 +316,7 @@ public final class QuestSettingsScreen extends Screen {
         // Rows are laid out again when active tab or scroll position changes
         configRows.clear();
         configTabButtons.clear();
+        configScopeButtons.clear();
         int uiHeaderY = py + 2;
         int uiRow1 = uiHeaderY + 10;
         int rowGap = 21;
@@ -261,8 +344,10 @@ public final class QuestSettingsScreen extends Screen {
         functionalityHeaderBaseY = uiRow1 + rowGap * 19 + 4;
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
-        functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
-        gameplayHeaderBaseY = functionalityQuestScrollsBaseY + rowGap + 2;
+        functionalityQuestRejectingBaseY = functionalityAutoClaimBaseY + rowGap;
+        functionalityQuestScrollsBaseY = functionalityQuestRejectingBaseY + rowGap;
+        functionalityQuickEditBaseY = functionalityQuestScrollsBaseY + rowGap;
+        gameplayHeaderBaseY = functionalityQuickEditBaseY + rowGap + 2;
         gameplayDisableQuestBookBaseY = gameplayHeaderBaseY + 10;
         gameplaySpawnWithBookBaseY = gameplayDisableQuestBookBaseY + rowGap;
 
@@ -316,6 +401,22 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.search_widget.subtitle"),
                 () -> trs(enableQuestSearchBox ? "state.on" : "state.off"),
                 () -> enableQuestSearchBox = !enableQuestSearchBox);
+        uiExpandTreeToggleRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.expand_tree_toggle"),
+                trs("row.expand_tree_toggle.subtitle"),
+                () -> trs(expandTreeToggle ? "state.on" : "state.off"),
+                () -> expandTreeToggle = !expandTreeToggle);
+        uiCustomBackgroundsRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.custom_backgrounds"),
+                trs("row.custom_backgrounds.subtitle"),
+                () -> trs(customBackgrounds ? "state.on" : "state.off"),
+                () -> customBackgrounds = !customBackgrounds);
+        uiBackgroundThemesRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw,
+                trs("row.background_themes"), trs("row.background_themes.subtitle"),
+                () -> trs(enableBackgroundThemes ? "state.on" : "state.off"),
+                () -> enableBackgroundThemes = !enableBackgroundThemes);
+        uiStickyDescriptionHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.sticky_description_headers"),
+                trs("row.sticky_description_headers.subtitle"),
+                () -> trs(stickyDescriptionHeaders ? "state.on" : "state.off"),
+                () -> stickyDescriptionHeaders = !stickyDescriptionHeaders);
         uiEnableDescriptionColorsRow = new ConfigRow(px, uiEnableDescriptionColorsBaseY, pw, trs("row.text_coloring"),
                 trs("row.text_coloring.subtitle"),
                 () -> trs(enableDescriptionColors ? "state.on" : "state.off"),
@@ -351,10 +452,25 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.auto_claim_rewards.subtitle"),
                 () -> trs(autoClaimQuestRewards ? "state.on" : "state.off"),
                 () -> autoClaimQuestRewards = !autoClaimQuestRewards);
+        functionalityQuestRejectingRow = new ConfigRow(px, functionalityQuestRejectingBaseY, pw, trs("row.quest_rejecting"),
+                trs("row.quest_rejecting.subtitle"),
+                () -> trs(enableQuestRejecting ? "state.on" : "state.off"),
+                () -> enableQuestRejecting = !enableQuestRejecting);
         functionalityQuestScrollsRow = new ConfigRow(px, functionalityQuestScrollsBaseY, pw, trs("row.quest_scrolls"),
                 trs("row.quest_scrolls.subtitle"),
                 () -> trs(enableQuestScrolls ? "state.on" : "state.off"),
                 () -> enableQuestScrolls = !enableQuestScrolls);
+        functionalityQuickEditRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, trs("row.quick_edit"),
+                trs("row.quick_edit.subtitle"),
+                () -> trs(quickEdit ? "state.on" : "state.off"),
+                () -> quickEdit = !quickEdit);
+        functionalityMultiLanguageRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, trs("row.multi_language"),
+                trs("row.multi_language.subtitle"),
+                () -> trs(multiLanguageQuests ? "state.on" : "state.off"),
+                () -> multiLanguageQuests = !multiLanguageQuests);
+        functionalityPreferredLanguageRow = new ConfigRow(px, functionalityQuickEditBaseY, pw,
+                trs("row.preferred_language"), trs("row.preferred_language.subtitle"),
+                this::formatPreferredLanguage, this::openPreferredLanguageDropdown);
 
         gameplayDisableQuestBookRow = new ConfigRow(px, gameplayDisableQuestBookBaseY, pw, trs("row.quest_book"),
                 trs("row.quest_book.subtitle"),
@@ -368,16 +484,29 @@ public final class QuestSettingsScreen extends Screen {
                 () -> trs(spawnWithQuestBook ? "state.on" : "state.off"),
                 () -> spawnWithQuestBook = !spawnWithQuestBook);
 
+        uiDisableCategoriesRow.serverOnly = true;
+        uiCustomBackgroundsRow.serverOnly = true;
+        functionalityDisablePinningRow.serverOnly = true;
+        functionalityAutoClaimRow.serverOnly = true;
+        functionalityQuestRejectingRow.serverOnly = true;
+        functionalityQuestScrollsRow.serverOnly = true;
+        functionalityQuickEditRow.serverOnly = true;
+        gameplayDisableQuestBookRow.serverOnly = true;
+        gameplaySpawnWithBookRow.serverOnly = true;
+
         addConfigRow(uiHideQuestWidgetIconsRow, ConfigTab.STYLE);
         addConfigRow(uiQuestTextScaleRow, ConfigTab.STYLE);
         addConfigRow(uiQuestIconScaleRow, ConfigTab.STYLE);
         addConfigRow(uiEnableDescriptionColorsRow, ConfigTab.STYLE);
         addConfigRow(uiQuestWidgetTextColorRow, ConfigTab.STYLE);
         addConfigRow(uiDescriptionTextColorRow, ConfigTab.STYLE);
+        initDetailColorControls();
         addConfigRow(uiEnableDescriptionReadMoreRow, ConfigTab.STYLE);
         addConfigRow(uiEnableDescriptionWrappingRow, ConfigTab.STYLE);
         addConfigRow(uiDescriptionAlignmentRow, ConfigTab.STYLE);
         addConfigRow(uiHideHeaderRow, ConfigTab.STYLE);
+        addConfigRow(uiCustomBackgroundsRow, ConfigTab.STYLE);
+        addConfigRow(uiBackgroundThemesRow, ConfigTab.STYLE);
 
         addConfigRow(uiPinnedRow, ConfigTab.UI);
         addConfigRow(uiHideInventoryRow, ConfigTab.UI);
@@ -387,11 +516,17 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiDisableCategoriesRow, ConfigTab.UI);
         addConfigRow(uiShowIdFieldRow, ConfigTab.UI);
         addConfigRow(uiEnableSearchBoxRow, ConfigTab.UI);
+        addConfigRow(uiExpandTreeToggleRow, ConfigTab.UI);
+        addConfigRow(uiStickyDescriptionHeadersRow, ConfigTab.STYLE);
 
         addConfigRow(uiEnableQuestToastsRow, ConfigTab.FEATURES);
         addConfigRow(functionalityDisablePinningRow, ConfigTab.FEATURES);
         addConfigRow(functionalityAutoClaimRow, ConfigTab.FEATURES);
+        addConfigRow(functionalityQuestRejectingRow, ConfigTab.FEATURES);
         addConfigRow(functionalityQuestScrollsRow, ConfigTab.FEATURES);
+        addConfigRow(functionalityQuickEditRow, ConfigTab.FEATURES);
+        addConfigRow(functionalityMultiLanguageRow, ConfigTab.FEATURES);
+        addConfigRow(functionalityPreferredLanguageRow, ConfigTab.FEATURES);
         addConfigRow(gameplayDisableQuestBookRow, ConfigTab.FEATURES);
         addConfigRow(gameplaySpawnWithBookRow, ConfigTab.FEATURES);
 
@@ -399,8 +534,25 @@ public final class QuestSettingsScreen extends Screen {
         addConfigTabButton(ConfigTab.STYLE, CONFIG_TAB_STYLE_TEX, trs("tab.style"));
         addConfigTabButton(ConfigTab.UI, CONFIG_TAB_UI_TEX, trs("tab.ui"));
         addConfigTabButton(ConfigTab.FEATURES, CONFIG_TAB_FEATURES_TEX, trs("tab.features"));
+        addConfigScopeButton(ConfigScope.CLIENT, CLIENT_SCOPE_ICON, trs("scope.client"));
+        addConfigScopeButton(ConfigScope.SERVER, SERVER_SCOPE_ICON, trs("scope.server"));
         initColorFields();
+        initConfigSearch();
         applyConfigScrollLayout();
+    }
+
+    private void initConfigSearch() {
+        configSearchField = new EditBox(font, px + 2, configViewportTop() + 2, pw - 4, 16,
+                tr("search"));
+        configSearchField.setHint(tr("search"));
+        configSearchField.setMaxLength(64);
+        configSearchField.setValue(configSearchQuery);
+        configSearchField.setResponder(value -> {
+            configSearchQuery = value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
+            configScrollY = 0f;
+            applyConfigScrollLayout();
+        });
+        addRenderableWidget(configSearchField);
     }
 
     private void initColorFields() {
@@ -415,10 +567,13 @@ public final class QuestSettingsScreen extends Screen {
 
     private void configureColorField(EditBox field, boolean widgetColor) {
         field.setMaxLength(7);
+        field.setEditable(true);
         field.setFilter(value -> value.matches("#?[0-9a-fA-F]{0,6}"));
         field.setResponder(value -> {
             if (widgetColor) questWidgetTextColor = value;
             else descriptionTextColor = value;
+            if (field.isFocused()) configDirty = true;
+            updateColorFieldText(field, value, widgetColor ? "FFFFFF" : "CFCFCF");
         });
     }
 
@@ -434,20 +589,29 @@ public final class QuestSettingsScreen extends Screen {
         addRenderableWidget(button);
     }
 
+    private void addConfigScopeButton(ConfigScope scope, ResourceLocation icon, String tooltip) {
+        ConfigScopeButton button = new ConfigScopeButton(scope, icon, tooltip);
+        configScopeButtons.add(button);
+        addRenderableWidget(button);
+    }
+
     private void initNavButtons() {
         // Back stays outside the scrolling content; reset scrolls with the rows
         int btnY = py + ph - 20;
         backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
         resetConfigButton = new HoldResetButton(px + 2, btnY, pw - 4, 20, () -> tr(configTab == ConfigTab.ALL ? "reset.all" : "reset.current"), this::resetCurrentConfigTab);
+        debugButton = new DebugButton(leftX + PANEL_W - 24, topY + PANEL_H - 36);
 
         addRenderableWidget(backButton);
         addRenderableWidget(resetConfigButton);
+        addRenderableWidget(debugButton);
     }
 
     private void goBack() {
         if (page == Page.MENU) {
             Minecraft.getInstance().setScreen(parent);
         } else {
+            saveConfig(false);
             setPage(Page.MENU);
         }
     }
@@ -462,8 +626,10 @@ public final class QuestSettingsScreen extends Screen {
         if (q == null) return;
         if (MENU_ID_CONFIG.equals(q.id)) {
             setPage(Page.CONFIG);
-        } else if (MENU_ID_EDITOR.equals(q.id)) {
+        } else if (MENU_ID_EDITOR.equals(q.id) && canManageServerSettings()) {
             Minecraft.getInstance().setScreen(new QuestEditorScreen(this));
+        } else if (MENU_ID_ASSETS.equals(q.id) && canManageServerSettings()) {
+            Minecraft.getInstance().setScreen(new QuestAssetManagerScreen(this));
         } else if (MENU_ID_DISCORD.equals(q.id)) {
             Util.getPlatform().openUri("https://discord.gg/DARzByw6VW");
         }
@@ -471,6 +637,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void setPage(Page next) {
         // Both pages share one widget list, so visibility does the page switching
+        popupMenus.close();
         page = next;
 
         boolean menu = page == Page.MENU;
@@ -486,60 +653,37 @@ public final class QuestSettingsScreen extends Screen {
             descriptionTextColorField.visible = false;
             descriptionTextColorField.active = false;
         }
-        uiPinnedRow.visible = config;
-        uiPinnedRow.active = config;
-        uiHideInventoryRow.visible = config;
-        uiHideInventoryRow.active = config;
-        uiInventoryButtonPositionRow.visible = config;
-        uiInventoryButtonPositionRow.active = config;
-        uiCenterInventoryWithPanelRow.visible = config;
-        uiCenterInventoryWithPanelRow.active = config;
-        uiHideHeaderRow.visible = config;
-        uiHideHeaderRow.active = config;
-        uiFilterDisplayRow.visible = config;
-        uiFilterDisplayRow.active = config;
-        uiDisableCategoriesRow.visible = config;
-        uiDisableCategoriesRow.active = config;
-        uiShowIdFieldRow.visible = config;
-        uiShowIdFieldRow.active = config;
-        uiHideQuestWidgetIconsRow.visible = config;
-        uiHideQuestWidgetIconsRow.active = config;
-        uiQuestTextScaleRow.visible = config;
-        uiQuestTextScaleRow.active = config;
-        uiQuestIconScaleRow.visible = config;
-        uiQuestIconScaleRow.active = config;
-        uiEnableSearchBoxRow.visible = config;
-        uiEnableSearchBoxRow.active = config;
-        uiEnableDescriptionColorsRow.visible = config;
-        uiEnableDescriptionColorsRow.active = config;
-        uiQuestWidgetTextColorRow.visible = config;
-        uiQuestWidgetTextColorRow.active = config;
-        uiDescriptionTextColorRow.visible = config;
-        uiDescriptionTextColorRow.active = config;
-        uiEnableDescriptionReadMoreRow.visible = config;
-        uiEnableDescriptionReadMoreRow.active = config;
-        uiEnableDescriptionWrappingRow.visible = config;
-        uiEnableDescriptionWrappingRow.active = config;
-        uiDescriptionAlignmentRow.visible = config;
-        uiDescriptionAlignmentRow.active = config;
-        uiEnableQuestToastsRow.visible = config;
-        uiEnableQuestToastsRow.active = config;
-        functionalityDisablePinningRow.visible = config;
-        functionalityDisablePinningRow.active = config;
-        functionalityAutoClaimRow.visible = config;
-        functionalityAutoClaimRow.active = config;
-        functionalityQuestScrollsRow.visible = config;
-        functionalityQuestScrollsRow.active = config;
-        gameplayDisableQuestBookRow.visible = config;
-        gameplayDisableQuestBookRow.active = config;
-        gameplaySpawnWithBookRow.visible = config;
-        gameplaySpawnWithBookRow.active = config;
+        if (configSearchField != null) {
+            configSearchField.visible = false;
+            configSearchField.active = false;
+        }
+        for (ColorConfigControl control : detailColorControls) {
+            if (control.field == null) continue;
+            control.field.visible = false;
+            control.field.active = false;
+        }
+        for (ConfigRow row : configRows) {
+            boolean show = config && (!row.serverOnly || canManageServerSettings());
+            row.visible = show;
+            row.active = show;
+        }
         for (ConfigTabButton button : configTabButtons) {
             button.visible = config;
             button.active = config;
         }
+        boolean showScopeFilters = config && canManageServerSettings();
+        if (!canManageServerSettings()) {
+            showClientSettings = true;
+            showServerSettings = false;
+        }
+        for (ConfigScopeButton button : configScopeButtons) {
+            button.visible = showScopeFilters;
+            button.active = showScopeFilters;
+        }
         resetConfigButton.visible = config;
         resetConfigButton.active = config;
+        debugButton.visible = menu;
+        debugButton.active = menu;
 
         backButton.visible = true;
         backButton.active = true;
@@ -568,18 +712,30 @@ public final class QuestSettingsScreen extends Screen {
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
         enableQuestSearchBox = Config.enableQuestSearchBox();
+        expandTreeToggle = Config.expandTreeToggle();
+        customBackgrounds = Config.customBackgrounds();
+        enableBackgroundThemes = Config.enableBackgroundThemes();
+        stickyDescriptionHeaders = Config.stickyDescriptionHeaders();
         enableDescriptionColors = Config.enableDescriptionColors();
         questWidgetTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor());
         descriptionTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor());
         if (questWidgetTextColorField != null) questWidgetTextColorField.setValue(questWidgetTextColor);
         if (descriptionTextColorField != null) descriptionTextColorField.setValue(descriptionTextColor);
+        for (ColorConfigControl control : detailColorControls) {
+            control.value = normalizeThemeColor(control.config.get(), control.fallback);
+            if (control.field != null) control.field.setValue(control.value);
+        }
         enableDescriptionReadMore = Config.enableDescriptionReadMore();
         enableDescriptionTextWrapping = Config.enableDescriptionTextWrapping();
         descriptionTextAlignment = normalizeDescriptionTextAlignment(Config.descriptionTextAlignment());
         enableQuestToasts = Config.enableQuestToasts();
         disableQuestPinning = Config.disableQuestPinning();
         autoClaimQuestRewards = Config.autoClaimQuestRewards();
+        enableQuestRejecting = Config.enableQuestRejecting();
         enableQuestScrolls = Config.enableQuestScrolls();
+        quickEdit = Config.quickEdit();
+        multiLanguageQuests = Config.multiLanguageQuests();
+        preferredLanguage = Config.preferredLanguage();
         disableQuestBook = Config.disableQuestBook();
         spawnWithQuestBook = Config.spawnWithQuestBook();
     }
@@ -636,6 +792,42 @@ public final class QuestSettingsScreen extends Screen {
         return String.format(java.util.Locale.ROOT, "%.1fx", Math.max(0.5D, Math.min(1.0D, questIconScale)));
     }
 
+    private void initDetailColorControls() {
+        detailColorControls.clear();
+        addDetailColorControl(trs("color.description_title"), trs("color.description_title.subtitle"), Config.DESCRIPTION_TITLE_COLOR, "FFFFFF");
+        addDetailColorControl(trs("color.requires"), trs("color.requires.subtitle"), Config.REQUIRES_TEXT_COLOR, "FF9F0F");
+        addDetailColorControl(trs("color.submit"), trs("color.submit.subtitle"), Config.SUBMIT_TEXT_COLOR, "1D9633");
+        addDetailColorControl(trs("color.collect"), trs("color.collect.subtitle"), Config.COLLECT_TEXT_COLOR, "1D9633");
+        addDetailColorControl(trs("color.kill"), trs("color.kill.subtitle"), Config.KILL_TEXT_COLOR, "FF5555");
+        addDetailColorControl(trs("color.effect"), trs("color.effect.subtitle"), Config.EFFECT_TEXT_COLOR, "55FFFF");
+        addDetailColorControl(trs("color.achieve"), trs("color.achieve.subtitle"), Config.ACHIEVE_TEXT_COLOR, "55FFFF");
+        addDetailColorControl(trs("color.observe"), trs("color.observe.subtitle"), Config.OBSERVE_TEXT_COLOR, "B46CFF");
+        addDetailColorControl(trs("color.biome"), trs("color.biome.subtitle"), Config.BIOME_TEXT_COLOR, "55CC55");
+        addDetailColorControl(trs("color.dimension"), trs("color.dimension.subtitle"), Config.DIMENSION_TEXT_COLOR, "FF5555");
+        addDetailColorControl(trs("color.reward"), trs("color.reward.subtitle"), Config.REWARD_TEXT_COLOR, "A8FFA8");
+        addDetailColorControl(trs("color.completed"), trs("color.completed.subtitle"), Config.COMPLETED_TEXT_COLOR, "55FF55");
+        addDetailColorControl(trs("color.incomplete"), trs("color.incomplete.subtitle"), Config.INCOMPLETE_TEXT_COLOR, "FF5555");
+        addDetailColorControl(trs("color.unlock"), trs("color.unlock.subtitle"), Config.UNLOCK_TEXT_COLOR, "FFD700");
+    }
+
+    private void addDetailColorControl(String label, String subtitle,
+                                       ForgeConfigSpec.ConfigValue<String> config, String fallback) {
+        ColorConfigControl control = new ColorConfigControl(config, fallback);
+        control.row = new ConfigRow(px, uiDescriptionTextColorBaseY, pw, label, subtitle, () -> "", null);
+        addConfigRow(control.row, ConfigTab.STYLE);
+        control.field = new EditBox(font, px + pw - 45, uiDescriptionTextColorBaseY + 3, 39, 14, Component.empty());
+        control.field.setMaxLength(7);
+        control.field.setEditable(true);
+        control.field.setFilter(value -> value.matches("#?[0-9a-fA-F]{0,6}"));
+        control.field.setResponder(value -> {
+            control.value = value;
+            if (control.field.isFocused()) configDirty = true;
+            updateColorFieldText(control.field, value, control.fallback);
+        });
+        detailColorControls.add(control);
+        addRenderableWidget(control.field);
+    }
+
     private void cycleQuestWidgetTextColor() {
         questWidgetTextColor = nextThemeColor(questWidgetTextColor, "FFFFFF");
     }
@@ -670,11 +862,60 @@ public final class QuestSettingsScreen extends Screen {
         };
     }
 
+    private void openPreferredLanguageDropdown() {
+        popupMenus.openDropdownMenu(DropdownMenuTarget.PREFERRED_LANGUAGE, functionalityPreferredLanguageRow,
+                configViewportTop(), configViewportBottom() - configViewportTop(), this::preferredLanguageOptions);
+    }
+
+    private List<String> preferredLanguageOptions(DropdownMenuTarget target) {
+        if (target != DropdownMenuTarget.PREFERRED_LANGUAGE) return List.of();
+        List<String> options = new ArrayList<>();
+        options.add("client");
+        try {
+            options.addAll(Minecraft.getInstance().getLanguageManager().getLanguages().keySet());
+        } catch (Throwable ignored) {
+            options.add("en_us");
+        }
+        return options.stream().distinct().toList();
+    }
+
+    private String formatPreferredLanguage() {
+        String normalized = normalizePreferredLanguage(preferredLanguage);
+        if ("client".equals(normalized)) return trs("language.client");
+        try {
+            var language = Minecraft.getInstance().getLanguageManager().getLanguage(normalized);
+            if (language != null) return language.toComponent().getString();
+        } catch (Throwable ignored) {
+        }
+        return normalized;
+    }
+
+    private String normalizePreferredLanguage(String language) {
+        if (language == null || language.isBlank()) return "client";
+        return language.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+    }
+
+    private void applyPreferredLanguage(DropdownMenuTarget target, String language) {
+        if (target != DropdownMenuTarget.PREFERRED_LANGUAGE) return;
+        preferredLanguage = normalizePreferredLanguage(language);
+        configDirty = true;
+        saveConfig(false);
+        applyConfigScrollLayout();
+    }
+
     private void saveConfig() {
         saveConfig(false);
     }
 
     private void saveConfig(boolean close) {
+        if (!configDirty) {
+            if (close) Minecraft.getInstance().setScreen(parent);
+            return;
+        }
+        boolean languageChanged = Config.multiLanguageQuests() != multiLanguageQuests
+                || !Config.preferredLanguage().equals(normalizePreferredLanguage(preferredLanguage));
+        boolean syncServer = serverConfigDirty && canManageServerSettings();
+
         // These two options would otherwise hide every inventory way to open the book.
         if (disableQuestBook && hideQuestBookInInventory) {
             hideQuestBookInInventory = false;
@@ -686,27 +927,43 @@ public final class QuestSettingsScreen extends Screen {
         Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
         Config.HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
         Config.FILTER_DISPLAY_MODE.set(filterDisplayMode);
-        Config.DISABLE_CATEGORIES.set(disableCategories);
         Config.SHOW_ID_FIELD.set(showIdField);
         Config.HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
+        Config.EXPAND_TREE_TOGGLE.set(expandTreeToggle);
+        Config.ENABLE_BACKGROUND_THEMES.set(enableBackgroundThemes);
+        Config.STICKY_DESCRIPTION_HEADERS.set(stickyDescriptionHeaders);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
         Config.QUEST_WIDGET_TEXT_COLOR.set(normalizeThemeColor(questWidgetTextColor, "FFFFFF"));
         Config.DESCRIPTION_TEXT_COLOR.set(normalizeThemeColor(descriptionTextColor, "CFCFCF"));
+        for (ColorConfigControl control : detailColorControls) {
+            control.config.set(normalizeThemeColor(control.value, control.fallback));
+        }
         Config.ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
         Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
         Config.DESCRIPTION_TEXT_ALIGNMENT.set(normalizeDescriptionTextAlignment(descriptionTextAlignment));
         Config.ENABLE_QUEST_TOASTS.set(enableQuestToasts);
-        Config.DISABLE_QUEST_PINNING.set(disableQuestPinning);
-        Config.AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
-        Config.ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
-        Config.DISABLE_QUEST_BOOK.set(disableQuestBook);
-        Config.SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
-        Config.SPEC.save();
-        sendConfigToServer();
+        Config.MULTI_LANGUAGE_QUESTS.set(multiLanguageQuests);
+        Config.PREFERRED_LANGUAGE.set(normalizePreferredLanguage(preferredLanguage));
+        if (canManageServerSettings()) {
+            Config.DISABLE_CATEGORIES.set(disableCategories);
+            Config.CUSTOM_BACKGROUNDS.set(customBackgrounds);
+            Config.DISABLE_QUEST_PINNING.set(disableQuestPinning);
+            Config.AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
+            Config.ENABLE_QUEST_REJECTING.set(enableQuestRejecting);
+            Config.ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
+            Config.QUICK_EDIT.set(quickEdit);
+            Config.DISABLE_QUEST_BOOK.set(disableQuestBook);
+            Config.SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
+        }
+        Config.saveLater();
+        if (syncServer) sendConfigToServer();
+        if (languageChanged) QuestData.relocalizeClientTranslations();
         QuestPanelClient.applyConfigChanges();
+        configDirty = false;
+        serverConfigDirty = false;
         if (close) {
             Minecraft.getInstance().setScreen(parent);
         }
@@ -727,6 +984,7 @@ public final class QuestSettingsScreen extends Screen {
                     questTextScale,
                     questIconScale,
                     enableQuestSearchBox,
+                    customBackgrounds,
                     enableDescriptionColors,
                     normalizeThemeColor(questWidgetTextColor, "FFFFFF"),
                     normalizeThemeColor(descriptionTextColor, "CFCFCF"),
@@ -736,7 +994,9 @@ public final class QuestSettingsScreen extends Screen {
                     enableQuestToasts,
                     disableQuestPinning,
                     autoClaimQuestRewards,
+                    enableQuestRejecting,
                     enableQuestScrolls,
+                    quickEdit,
                     disableQuestBook,
                     spawnWithQuestBook
             ));
@@ -746,6 +1006,8 @@ public final class QuestSettingsScreen extends Screen {
 
     private void resetCurrentConfigTab() {
         resetConfigTab(configTab);
+        configDirty = true;
+        serverConfigDirty = canManageServerSettings();
         saveConfig(false);
         refreshConfigFields();
         applyConfigScrollLayout();
@@ -758,9 +1020,10 @@ public final class QuestSettingsScreen extends Screen {
             questBookInventoryButtonPosition = "beside_recipe_book";
             centerInventoryWithQuestPanel = true;
             filterDisplayMode = "tabs";
-            disableCategories = false;
+            if (canManageServerSettings()) disableCategories = false;
             showIdField = false;
             enableQuestSearchBox = false;
+            expandTreeToggle = true;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.STYLE) {
             hideQuestWidgetIcons = false;
@@ -769,18 +1032,28 @@ public final class QuestSettingsScreen extends Screen {
             enableDescriptionColors = true;
             questWidgetTextColor = "FFFFFF";
             descriptionTextColor = "CFCFCF";
+            for (ColorConfigControl control : detailColorControls) control.value = control.fallback;
             enableDescriptionReadMore = true;
             enableDescriptionTextWrapping = true;
             descriptionTextAlignment = "left";
             hideCategoryHeader = false;
+            stickyDescriptionHeaders = true;
+            customBackgrounds = true;
+            enableBackgroundThemes = true;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
             enableQuestToasts = true;
-            disableQuestPinning = false;
-            autoClaimQuestRewards = false;
-            enableQuestScrolls = true;
-            disableQuestBook = false;
-            spawnWithQuestBook = false;
+            multiLanguageQuests = true;
+            preferredLanguage = "client";
+            if (canManageServerSettings()) {
+                disableQuestPinning = false;
+                autoClaimQuestRewards = false;
+                enableQuestRejecting = true;
+                enableQuestScrolls = true;
+                quickEdit = false;
+                disableQuestBook = false;
+                spawnWithQuestBook = false;
+            }
         }
     }
 
@@ -788,7 +1061,10 @@ public final class QuestSettingsScreen extends Screen {
         // Menu items use lightweight quest records so they render like the rest of the UI.
         List<QuestData.Quest> out = new ArrayList<>();
         out.add(buildMenuQuest(MENU_ID_CONFIG, trs("menu.config"), MENU_CONFIG_TEX.toString()));
-        out.add(buildMenuQuest(MENU_ID_EDITOR, trs("menu.editor"), MENU_EDITOR_TEX.toString()));
+        if (canManageServerSettings()) {
+            out.add(buildMenuQuest(MENU_ID_EDITOR, trs("menu.editor"), MENU_EDITOR_TEX.toString()));
+            out.add(buildMenuQuest(MENU_ID_ASSETS, trs("menu.assets"), "minecraft:painting"));
+        }
         out.add(buildMenuQuest("settings_spacer_1", "", "minecraft:air"));
         out.add(buildMenuQuest("settings_spacer_2", "", "minecraft:air"));
         out.add(buildMenuQuest(MENU_ID_DISCORD, trs("menu.discord"), MENU_DISCORD_TEX.toString()));
@@ -845,6 +1121,11 @@ public final class QuestSettingsScreen extends Screen {
         return value.matches("[0-9A-F]{6}") ? value : fallback;
     }
 
+    private void updateColorFieldText(EditBox field, String raw, String fallback) {
+        if (field == null) return;
+        field.setTextColor(Integer.parseInt(normalizeThemeColor(raw, fallback), 16));
+    }
+
     private String nextThemeColor(String current, String fallback) {
         List<String> palette = List.of("FFFFFF", "CFCFCF", "FFD166", "55CCFF", "A8FFA8", "FFAA55");
         String normalized = normalizeThemeColor(current, fallback);
@@ -852,8 +1133,7 @@ public final class QuestSettingsScreen extends Screen {
         return palette.get(index < 0 ? 0 : (index + 1) % palette.size());
     }
 
-    @Override
-    public void renderBackground(GuiGraphics gg) {
+    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
@@ -866,6 +1146,8 @@ public final class QuestSettingsScreen extends Screen {
             // Render rows inside the panel only. Tabs and navigation stay above the scissor.
             boolean backVisible = backButton != null && backButton.visible;
             boolean resetVisible = resetConfigButton != null && resetConfigButton.visible;
+            boolean debugVisible = debugButton != null && debugButton.visible;
+            boolean searchVisible = configSearchField != null && configSearchField.visible;
             List<Boolean> tabVisible = new ArrayList<>();
             for (ConfigTabButton button : configTabButtons) {
                 tabVisible.add(button.visible);
@@ -873,10 +1155,12 @@ public final class QuestSettingsScreen extends Screen {
             }
             if (backButton != null) backButton.visible = false;
             if (resetConfigButton != null) resetConfigButton.visible = false;
+            if (debugButton != null) debugButton.visible = false;
+            if (configSearchField != null) configSearchField.visible = false;
 
             renderConfigPageHeader(gg);
 
-            int top = configViewportTop();
+            int top = configScrollViewportTop();
             int bottom = configViewportBottom();
             gg.enableScissor(px, top, px + pw, bottom);
             super.render(gg, mouseX, mouseY, partialTick);
@@ -887,18 +1171,50 @@ public final class QuestSettingsScreen extends Screen {
                 button.visible = i < tabVisible.size() ? tabVisible.get(i) : true;
                 if (button.visible) button.render(gg, mouseX, mouseY, partialTick);
             }
+            for (ConfigScopeButton button : configScopeButtons) {
+                if (button.visible) button.render(gg, mouseX, mouseY, partialTick);
+            }
             if (backButton != null) backButton.visible = backVisible;
             if (resetConfigButton != null) resetConfigButton.visible = resetVisible;
+            if (debugButton != null) debugButton.visible = debugVisible;
+            if (configSearchField != null) configSearchField.visible = searchVisible;
+            if (configSearchField != null && configSearchField.visible) {
+                configSearchField.render(gg, mouseX, mouseY, partialTick);
+            }
             if (backButton != null && backButton.visible) backButton.render(gg, mouseX, mouseY, partialTick);
             if (resetConfigButton != null && resetConfigButton.visible) resetConfigButton.render(gg, mouseX, mouseY, partialTick);
+            if (debugButton != null && debugButton.visible) debugButton.render(gg, mouseX, mouseY, partialTick);
 
             renderConfigScrollbar(gg);
-            renderPendingTooltipOnTop(gg);
+            popupMenus.renderDropdownMenu(gg, font, mouseX, mouseY, this::preferredLanguageOptions);
+            if (!popupMenus.hasOpenMenu()) renderPendingTooltipOnTop(gg);
             return;
         }
 
         super.render(gg, mouseX, mouseY, partialTick);
+        renderVersionFooter(gg);
         renderPendingTooltipOnTop(gg);
+    }
+
+    private void renderVersionFooter(GuiGraphics graphics) {
+        String label = versionLabel();
+        int availableWidth = PANEL_W - 22;
+        float scale = Math.min(1f, availableWidth / (float) Math.max(1, font.width(label)));
+        int scaledWidth = Math.round(font.width(label) * scale);
+        graphics.pose().pushPose();
+        graphics.pose().translate(leftX + (PANEL_W - scaledWidth) / 2f,
+                topY + PANEL_H - font.lineHeight * scale - 13, 0);
+        graphics.pose().scale(scale, scale, 1f);
+        graphics.drawString(font, label, 0, 0, 0xFFAAAAAA, false);
+        graphics.pose().popPose();
+    }
+
+    private String versionLabel() {
+        String modVersion = ModList.get().getModContainerById("boundless")
+                .map(container -> container.getModInfo().getVersion().toString()).orElse("unknown");
+        String loaderVersion = ModList.get().getModContainerById("forge")
+                .map(container -> container.getModInfo().getVersion().toString()).orElse("unknown");
+        return "Boundless " + modVersion + " | Forge " + loaderVersion;
     }
 
     private void queueTooltip(List<Component> tooltip, int mouseX, int mouseY) {
@@ -920,7 +1236,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void renderSectionHeader(GuiGraphics gg, String text, int x, int y, int color) {
         if (text == null || text.isBlank()) return;
-        int top = configViewportTop();
+        int top = configScrollViewportTop();
         int bottom = configViewportBottom();
         if (y < top || y > bottom - 8) return;
         float scale = 0.72f;
@@ -958,8 +1274,12 @@ public final class QuestSettingsScreen extends Screen {
         return topY + 157;
     }
 
-    private int configViewportHeight() {
-        return Math.max(0, configViewportBottom() - configViewportTop());
+    private int configScrollViewportTop() {
+        return configViewportTop() + (configTab == ConfigTab.ALL ? 20 : 0);
+    }
+
+    private int configScrollViewportHeight() {
+        return Math.max(0, configViewportBottom() - configScrollViewportTop());
     }
 
     private int configContentHeight() {
@@ -968,7 +1288,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private int maxConfigScroll() {
-        return Math.max(0, configContentHeight() - configViewportHeight());
+        return Math.max(0, configContentHeight() - configScrollViewportHeight());
     }
 
     private int scrolledY(int baseY) {
@@ -982,7 +1302,7 @@ public final class QuestSettingsScreen extends Screen {
         if (configScrollY > max) configScrollY = max;
         layoutBackButton();
 
-        int top = configViewportTop();
+        int top = configScrollViewportTop();
         int bottom = configViewportBottom();
         int baseY = top + 2;
         int rowGap = 21;
@@ -996,6 +1316,15 @@ public final class QuestSettingsScreen extends Screen {
         }
         layoutColorField(questWidgetTextColorField, uiQuestWidgetTextColorRow, top, bottom);
         layoutColorField(descriptionTextColorField, uiDescriptionTextColorRow, top, bottom);
+        for (ColorConfigControl control : detailColorControls) {
+            layoutColorField(control.field, control.row, top, bottom);
+        }
+        if (configSearchField != null) {
+            configSearchField.setPosition(px + 2, configViewportTop() + 2);
+            configSearchField.setWidth(pw - 4);
+            configSearchField.visible = page == Page.CONFIG && configTab == ConfigTab.ALL;
+            configSearchField.active = configSearchField.visible;
+        }
         if (resetConfigButton != null) {
             resetConfigButton.setX(px + 2);
             resetConfigButton.setWidth(pw - 4);
@@ -1005,13 +1334,18 @@ public final class QuestSettingsScreen extends Screen {
             resetConfigButton.active = page == Page.CONFIG && inView;
         }
         layoutConfigTabButtons();
+        layoutConfigScopeButtons();
     }
 
     private List<ConfigRow> visibleConfigRows() {
-        if (configTab == ConfigTab.ALL) return new ArrayList<>(configRows);
         List<ConfigRow> out = new ArrayList<>();
         for (ConfigRow row : configRows) {
-            if (row.group == configTab) out.add(row);
+            if (row.serverOnly && !canManageServerSettings()) continue;
+            if (row.serverOnly && !showServerSettings) continue;
+            if (!row.serverOnly && !showClientSettings) continue;
+            if (configTab != ConfigTab.ALL && row.group != configTab) continue;
+            if (configTab == ConfigTab.ALL && !configSearchQuery.isBlank() && !row.matches(configSearchQuery)) continue;
+            out.add(row);
         }
         return out;
     }
@@ -1028,6 +1362,16 @@ public final class QuestSettingsScreen extends Screen {
         }
     }
 
+    private void layoutConfigScopeButtons() {
+        int startX = leftX + 10;
+        int y = topY + PANEL_H - 35 + 29;
+        for (int index = 0; index < configScopeButtons.size(); index++) {
+            ConfigScopeButton button = configScopeButtons.get(index);
+            button.setX(startX + index * 30);
+            button.setY(y);
+        }
+    }
+
     private void layoutBackButton() {
         if (backButton == null) return;
         backButton.setX(leftX - TAB_W + BACK_TAB_X_OFFSET);
@@ -1039,8 +1383,8 @@ public final class QuestSettingsScreen extends Screen {
         int y = scrolledY(baseY);
         row.setY(y);
         boolean inView = (y + row.getHeight()) > top && y < bottom;
-        row.visible = page == Page.CONFIG;
-        row.active = page == Page.CONFIG && inView;
+        row.visible = page == Page.CONFIG && inView;
+        row.active = row.visible;
     }
 
     private void layoutColorField(EditBox field, ConfigRow row, int top, int bottom) {
@@ -1056,8 +1400,8 @@ public final class QuestSettingsScreen extends Screen {
         if (max <= 0) return;
         int trackX1 = px + pw + 4;
         int trackX2 = px + pw + 6;
-        int top = configViewportTop();
-        int vh = configViewportHeight();
+        int top = configScrollViewportTop();
+        int vh = configScrollViewportHeight();
         int content = configContentHeight();
         if (vh <= 0 || content <= 0) return;
         int thumbH = Math.max(12, (int) ((vh * (float) vh) / (float) content));
@@ -1070,6 +1414,7 @@ public final class QuestSettingsScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         // Keep wheel input in the panel so background widgets do not consume it.
         if (page == Page.CONFIG) {
+            if (popupMenus.scrollDropdownMenu(mouseX, mouseY, scrollY, this::preferredLanguageOptions)) return true;
             int top = configViewportTop();
             int bottom = configViewportBottom();
             if (mouseX < px || mouseX > px + pw || mouseY < top || mouseY > bottom) {
@@ -1088,6 +1433,29 @@ public final class QuestSettingsScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (page == Page.CONFIG && button == 0) {
+            if (popupMenus.hasOpenMenu()) {
+                popupMenus.clickDropdownMenu(mouseX, mouseY, this::preferredLanguageOptions, this::applyPreferredLanguage);
+                return true;
+            }
+            if (questWidgetTextColorField != null && questWidgetTextColorField.visible
+                    && questWidgetTextColorField.isMouseOver(mouseX, mouseY)) {
+                questWidgetTextColorField.setFocused(true);
+                setFocused(questWidgetTextColorField);
+                return true;
+            }
+            if (descriptionTextColorField != null && descriptionTextColorField.visible
+                    && descriptionTextColorField.isMouseOver(mouseX, mouseY)) {
+                descriptionTextColorField.setFocused(true);
+                setFocused(descriptionTextColorField);
+                return true;
+            }
+            for (ColorConfigControl control : detailColorControls) {
+                if (control.field != null && control.field.visible && control.field.isMouseOver(mouseX, mouseY)) {
+                    control.field.setFocused(true);
+                    setFocused(control.field);
+                    return true;
+                }
+            }
             if (backButton != null && backButton.visible && backButton.active && backButton.isMouseOver(mouseX, mouseY)) {
                 backButton.onPress();
                 return true;
@@ -1102,6 +1470,18 @@ public final class QuestSettingsScreen extends Screen {
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (page == Page.CONFIG && popupMenus.keyPressed(keyCode, this::preferredLanguageOptions)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (page == Page.CONFIG && popupMenus.charTyped(codePoint, this::preferredLanguageOptions)) return true;
+        return super.charTyped(codePoint, modifiers);
     }
 
     @Override
@@ -1123,7 +1503,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private boolean isOverConfigScrollbar(double mouseX, double mouseY) {
-        int top = configViewportTop();
+        int top = configScrollViewportTop();
         int bottom = configViewportBottom();
         return mouseX >= px + pw + 2 && mouseX <= px + pw + 8 && mouseY >= top && mouseY <= bottom;
     }
@@ -1131,17 +1511,18 @@ public final class QuestSettingsScreen extends Screen {
     private void setConfigScrollFromMouse(double mouseY) {
         // Centre the thumb under the pointer while dragging.
         int max = maxConfigScroll();
-        int vh = configViewportHeight();
+        int vh = configScrollViewportHeight();
         int content = configContentHeight();
         if (max <= 0 || vh <= 0 || content <= 0) return;
         int thumbH = Math.max(12, (int) ((vh * (float) vh) / (float) content));
-        float t = (float) ((mouseY - configViewportTop() - thumbH / 2.0D) / Math.max(1.0D, vh - thumbH));
+        float t = (float) ((mouseY - configScrollViewportTop() - thumbH / 2.0D) / Math.max(1.0D, vh - thumbH));
         configScrollY = Math.max(0f, Math.min(max, t * max));
         applyConfigScrollLayout();
     }
 
     @Override
     public void onClose() {
+        if (page == Page.CONFIG) saveConfig(false);
         Minecraft.getInstance().setScreen(parent);
     }
 
@@ -1165,6 +1546,56 @@ public final class QuestSettingsScreen extends Screen {
 
         ConfigTab(String title) {
             this.title = title;
+        }
+    }
+
+    private enum ConfigScope {
+        CLIENT,
+        SERVER
+    }
+
+    private final class ConfigScopeButton extends AbstractButton {
+        private final ConfigScope scope;
+        private final ResourceLocation icon;
+        private final String tooltip;
+
+        private ConfigScopeButton(ConfigScope scope, ResourceLocation icon, String tooltip) {
+            super(0, 0, 32, 35, Component.empty());
+            this.scope = scope;
+            this.icon = icon;
+            this.tooltip = tooltip;
+        }
+
+        @Override
+        public void onPress() {
+            if (scope == ConfigScope.CLIENT) {
+                if (showClientSettings && !showServerSettings) return;
+                showClientSettings = !showClientSettings;
+            } else {
+                if (showServerSettings && !showClientSettings) return;
+                showServerSettings = !showServerSettings;
+            }
+            configScrollY = 0f;
+            applyConfigScrollLayout();
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+            boolean selected = scope == ConfigScope.CLIENT ? showClientSettings : showServerSettings;
+            boolean hovered = isMouseOver(mouseX, mouseY);
+            ResourceLocation texture = selected ? SCOPE_TAB_SELECTED_TEX
+                    : hovered ? SCOPE_TAB_HOVER_TEX : SCOPE_TAB_TEX;
+            int textureHeight = selected ? 35 : 32;
+            int textureY = getY() + getHeight() - textureHeight;
+            gg.blit(texture, getX(), textureY, 0, 0, 32, textureHeight, 32, textureHeight);
+            gg.blit(icon, getX() + 11, getY() + 7 + (hovered ? 1 : 0), 0, 0, 9, 9, 9, 9);
+            if (hovered) {
+                queueTooltip(List.of(Component.literal(tooltip)), mouseX, mouseY);
+            }
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {
         }
     }
 
@@ -1210,6 +1641,13 @@ public final class QuestSettingsScreen extends Screen {
         private final java.util.function.Supplier<String> value;
         private final Runnable onPress;
         private ConfigTab group = ConfigTab.ALL;
+        private boolean serverOnly;
+
+        private boolean matches(String query) {
+            if (query == null || query.isBlank()) return true;
+            String searchable = (label + " " + subtitle).toLowerCase(java.util.Locale.ROOT);
+            return searchable.contains(query);
+        }
 
         public ConfigRow(int x, int y, int w, String label, String subtitle,
                          java.util.function.Supplier<String> value,
@@ -1226,6 +1664,8 @@ public final class QuestSettingsScreen extends Screen {
             // Most rows save straight away; text fields save through their responder.
             if (onPress != null) {
                 onPress.run();
+                configDirty = true;
+                if (serverOnly) serverConfigDirty = true;
                 saveConfig(false);
                 applyConfigScrollLayout();
             }
@@ -1242,10 +1682,11 @@ public final class QuestSettingsScreen extends Screen {
             var font = Minecraft.getInstance().font;
             String valueText = value == null ? "" : value.get();
             if (valueText == null) valueText = "";
+            Boolean toggleState = toggleState(valueText);
 
             int labelX = getX() + 7;
             float valueScale = 0.72f;
-            int valueW = (int) (font.width(valueText) * valueScale);
+            int valueW = toggleState == null ? (int) (font.width(valueText) * valueScale) : TOGGLE_WIDTH;
             int valueX = getX() + this.width - valueW - 5;
 
             String labelText = label;
@@ -1257,12 +1698,23 @@ public final class QuestSettingsScreen extends Screen {
             }
 
             drawScaledString(gg, labelText, 0.82f, labelX, getY() + 5, 0xFFFFFF);
-            drawScaledString(gg, valueText, valueScale, valueX, getY() + 7, 0xA0C8FF);
+            if (toggleState == null) {
+                drawScaledString(gg, valueText, valueScale, valueX, getY() + 7, 0xA0C8FF);
+            } else {
+                ResourceLocation texture = toggleState
+                        ? hovered ? TOGGLE_ON_HOVER_TEX : TOGGLE_ON_TEX
+                        : hovered ? TOGGLE_OFF_HOVER_TEX : TOGGLE_OFF_TEX;
+                int toggleY = getY() + (height - TOGGLE_HEIGHT) / 2;
+                gg.blit(texture, valueX, toggleY, 0, 0,
+                        TOGGLE_WIDTH, TOGGLE_HEIGHT, TOGGLE_WIDTH, TOGGLE_HEIGHT);
+            }
 
             if (hovered) {
                 List<Component> tooltip = new ArrayList<>();
                 tooltip.add(Component.literal(label));
                 if (!subtitle.isBlank()) tooltip.add(Component.literal(subtitle));
+                tooltip.add(Component.literal(trs(serverOnly ? "scope.server" : "scope.client"))
+                        .withStyle(style -> style.withColor(serverOnly ? 0xFFFF55 : 0x55FFFF)));
                 queueTooltip(tooltip, mouseX, mouseY);
             }
         }
@@ -1274,6 +1726,12 @@ public final class QuestSettingsScreen extends Screen {
             float inv = 1f / scale;
             gg.drawString(Minecraft.getInstance().font, text, (int) (x * inv), (int) (y * inv), color, false);
             gg.pose().popPose();
+        }
+
+        private Boolean toggleState(String valueText) {
+            if (valueText.equals(trs("state.on")) || valueText.equals(trs("state.enabled"))) return true;
+            if (valueText.equals(trs("state.off")) || valueText.equals(trs("state.disabled"))) return false;
+            return null;
         }
 
         @Override
@@ -1361,6 +1819,46 @@ public final class QuestSettingsScreen extends Screen {
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
+    private static final class DebugButton extends AbstractButton {
+        private DebugButton(int x, int y) {
+            super(x, y, 10, 13, Component.empty());
+        }
+
+        @Override
+        public void onPress() {
+            Config.DEV_MODE.set(!Config.devMode());
+            Config.saveLater();
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            ResourceLocation texture = Config.devMode() ? UNDEBUG_TEX : DEBUG_TEX;
+            graphics.blit(texture, getX(), getY(), 0, 0, 10, 13, 10, 13);
+            if (isMouseOver(mouseX, mouseY)) {
+                graphics.renderTooltip(Minecraft.getInstance().font,
+                        tr(Config.devMode() ? "debug.disable" : "debug.enable"), mouseX, mouseY - 12);
+            }
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {
+        }
+    }
+
+    private static final class ColorConfigControl {
+        private final ForgeConfigSpec.ConfigValue<String> config;
+        private final String fallback;
+        private String value;
+        private ConfigRow row;
+        private EditBox field;
+
+        private ColorConfigControl(ForgeConfigSpec.ConfigValue<String> config, String fallback) {
+            this.config = config;
+            this.fallback = fallback;
+            this.value = fallback;
+        }
+    }
+
     private static final class ActionButton extends AbstractButton {
         private final Runnable onPress;
 
@@ -1377,8 +1875,9 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
-            ResourceLocation tex = !this.active ? BTN_TEX_DISABLED : (hovered ? BTN_TEX_HOVER : BTN_TEX);
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            ResourceLocation sprite = !this.active ? VANILLA_BUTTON_DISABLED_SPRITE
+                    : hovered ? VANILLA_BUTTON_HOVER_SPRITE : VANILLA_BUTTON_SPRITE;
+            LegacyGuiSprites.drawButton(gg, sprite, getX(), getY(), this.width, this.height);
 
             var font = Minecraft.getInstance().font;
             int textW = font.width(getMessage());

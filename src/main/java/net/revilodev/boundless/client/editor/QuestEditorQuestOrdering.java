@@ -40,6 +40,8 @@ public final class QuestEditorQuestOrdering {
         for (NamedEntry category : QuestEditorJsonFiles.listCategoryEntries(pack)) {
             String id = safe(category.id);
             index.categoryNames.put(id, safe(category.name));
+            QuestEditorModels.CategoryData data = QuestEditorJsonFiles.loadCategory(category.path, id);
+            if (data != null) index.categoryDataById.put(id, data);
             if (!id.isBlank() && !"all".equalsIgnoreCase(id)) index.categoryIds.add(id);
         }
         for (NamedEntry subCategory : QuestEditorJsonFiles.listSubCategoryEntries(pack)) {
@@ -47,6 +49,10 @@ public final class QuestEditorQuestOrdering {
             String parent = data == null ? "" : safe(data.category);
             String id = safe(subCategory.id);
             index.subCategoryNames.put(parent + "::" + id, safe(subCategory.name));
+            if (data != null) {
+                index.subCategoryDataById.put(id, data);
+                index.subCategoriesByCategory.computeIfAbsent(parent, ignored -> new ArrayList<>()).add(data);
+            }
             if (!id.isBlank()) {
                 index.subCategoryIds.add(id);
                 if (!parent.isBlank()) index.subCategoryIds.add(parent + "::" + id);
@@ -60,6 +66,7 @@ public final class QuestEditorQuestOrdering {
             if (!id.isBlank() && !index.questIds.add(id)) index.duplicateQuestIds.add(id);
             index.questDataByEntryId.put(safe(item.entry.id), data);
             index.items.add(item);
+            index.questsByCategory.computeIfAbsent(safe(data.category).trim(), ignored -> new ArrayList<>()).add(item);
         }
 
         return index;
@@ -86,6 +93,72 @@ public final class QuestEditorQuestOrdering {
         }
         items.sort(Comparator.comparing(item -> safe(item.entry.sortKey).toLowerCase(Locale.ROOT)));
         return items;
+    }
+
+    public static void upsertQuestListIndex(QuestListIndex index, JsonObject obj, Path target, Path original) {
+        if (index == null || obj == null || target == null) return;
+        String fallbackId = QuestEditorJsonFiles.fileId(target);
+        QuestEntryData loaded = QuestEditorJsonFiles.loadQuest(target, fallbackId, obj);
+        if (loaded == null) return;
+        QuestEntryData data = loaded;
+        for (QuestListItem item : index.items) {
+            if (item == null || item.entry == null || item.data == null) continue;
+            if (target.equals(item.entry.path) || original != null && original.equals(item.entry.path)
+                    || loaded.id.equals(item.entry.id)) {
+                copyQuestData(item.data, loaded);
+                data = item.data;
+                break;
+            }
+        }
+        int order = QuestEditorEntryCodec.parseIntFlexible(obj, "order", 0);
+        String sortKey = String.format(Locale.ROOT, "%06d_%s", order, fallbackId);
+        QuestEntryData indexedData = data;
+        NamedEntry entry = new NamedEntry(indexedData.id, indexedData.name, indexedData.icon, target, sortKey);
+        index.items.removeIf(item -> item != null && item.entry != null
+                && (target.equals(item.entry.path) || original != null && original.equals(item.entry.path)
+                || indexedData.id.equals(item.entry.id)));
+        index.items.add(new QuestListItem(entry, indexedData));
+        index.items.sort(Comparator.comparing(item -> safe(item.entry.sortKey).toLowerCase(Locale.ROOT)));
+        index.questIds.clear();
+        index.duplicateQuestIds.clear();
+        index.questDataByEntryId.clear();
+        index.questsByCategory.clear();
+        for (QuestListItem item : index.items) {
+            String id = safe(item.data == null ? item.entry.id : item.data.id).trim();
+            if (!id.isBlank() && !index.questIds.add(id)) index.duplicateQuestIds.add(id);
+            index.questDataByEntryId.put(safe(item.entry.id), item.data);
+            if (item.data != null) {
+                index.questsByCategory.computeIfAbsent(safe(item.data.category).trim(), ignored -> new ArrayList<>()).add(item);
+            }
+        }
+    }
+
+    private static void copyQuestData(QuestEntryData target, QuestEntryData source) {
+        target.path = source.path;
+        target.id = source.id;
+        target.name = source.name;
+        target.nameTranslations = source.nameTranslations;
+        target.icon = source.icon;
+        target.description = source.description;
+        target.descriptionTranslations = source.descriptionTranslations;
+        target.media = source.media;
+        target.category = source.category;
+        target.subCategory = source.subCategory;
+        target.dependencies = source.dependencies;
+        target.incompatibleDependencies = source.incompatibleDependencies;
+        target.lockAfterDependency = source.lockAfterDependency;
+        target.optional = source.optional;
+        target.repeatable = source.repeatable;
+        target.autoComplete = source.autoComplete;
+        target.hiddenUnderDependency = source.hiddenUnderDependency;
+        target.type = source.type;
+        target.completionJson = source.completionJson;
+        target.rewardJson = source.rewardJson;
+        target.treeX = source.treeX;
+        target.treeY = source.treeY;
+        target.treeBackground = source.treeBackground;
+        target.treeOrigin = source.treeOrigin;
+        target.importWarnings = source.importWarnings;
     }
 
     // move quest within group
@@ -145,9 +218,22 @@ public final class QuestEditorQuestOrdering {
 
     // move sub category by order
     public static void moveSubCategoryByOrder(QuestPack pack, Gson gson, String subCategoryId, MoveDirection direction) throws IOException {
-        if (pack == null || subCategoryId == null || subCategoryId.isBlank()) return;
+        List<NamedEntry> subCategories = reorderedSubCategories(pack, subCategoryId, direction);
+        if (subCategories.isEmpty()) return;
+        applyExplicitOrder(pack, gson, subCategories, "order");
+    }
+
+    static List<NamedEntry> reorderedSubCategories(QuestPack pack, String subCategoryId, MoveDirection direction) {
+        if (pack == null || subCategoryId == null || subCategoryId.isBlank()) return List.of();
         List<NamedEntry> subCategories = QuestEditorJsonFiles.listSubCategoryEntries(pack);
-        moveOrderedEntry(pack, gson, subCategories, subCategoryId, direction, "order");
+        QuestEditorModels.SubCategoryData selected = QuestEditorJsonFiles.loadSubCategory(pack, subCategoryId);
+        if (selected == null) return List.of();
+        subCategories.removeIf(entry -> {
+            QuestEditorModels.SubCategoryData data = QuestEditorJsonFiles.loadSubCategory(entry.path, entry.id);
+            return data == null || !safe(selected.category).equals(safe(data.category));
+        });
+        if (!moveEntry(subCategories, subCategoryId, direction)) return List.of();
+        return List.copyOf(subCategories);
     }
 
     // quest file base name
@@ -194,7 +280,12 @@ public final class QuestEditorQuestOrdering {
 
     // move list entries by saved order
     private static void moveOrderedEntry(QuestPack pack, Gson gson, List<NamedEntry> entries, String id, MoveDirection direction, String key) throws IOException {
-        if (entries == null || entries.size() < 2 || id == null || id.isBlank()) return;
+        if (!moveEntry(entries, id, direction)) return;
+        applyExplicitOrder(pack, gson, entries, key);
+    }
+
+    private static boolean moveEntry(List<NamedEntry> entries, String id, MoveDirection direction) {
+        if (entries == null || entries.size() < 2 || id == null || id.isBlank() || direction == null) return false;
         int index = -1;
         for (int i = 0; i < entries.size(); i++) {
             if (id.equals(entries.get(i).id)) {
@@ -202,13 +293,13 @@ public final class QuestEditorQuestOrdering {
                 break;
             }
         }
-        if (index < 0) return;
+        if (index < 0) return false;
         int targetIndex = direction == MoveDirection.UP ? index - 1 : index + 1;
-        if (targetIndex < 0 || targetIndex >= entries.size()) return;
+        if (targetIndex < 0 || targetIndex >= entries.size()) return false;
 
         NamedEntry moving = entries.remove(index);
         entries.add(targetIndex, moving);
-        applyExplicitOrder(pack, gson, entries, key);
+        return true;
     }
 
     // write explicit order values back to disk

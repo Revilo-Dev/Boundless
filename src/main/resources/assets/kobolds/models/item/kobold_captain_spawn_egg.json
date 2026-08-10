@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "kobolds:item/kobold_captain_spawn_egg"
-  }
-}
