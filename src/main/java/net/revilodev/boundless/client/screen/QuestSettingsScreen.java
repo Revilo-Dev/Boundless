@@ -5,6 +5,7 @@ import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractButton;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -109,6 +110,8 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiEnableDescriptionColorsRow;
     private ConfigRow uiQuestWidgetTextColorRow;
     private ConfigRow uiDescriptionTextColorRow;
+    private EditBox questWidgetTextColorField;
+    private EditBox descriptionTextColorField;
     private ConfigRow uiEnableDescriptionReadMoreRow;
     private ConfigRow uiEnableDescriptionWrappingRow;
     private ConfigRow uiDescriptionAlignmentRow;
@@ -304,12 +307,10 @@ public final class QuestSettingsScreen extends Screen {
                 () -> enableDescriptionColors = !enableDescriptionColors);
         uiQuestWidgetTextColorRow = new ConfigRow(px, uiQuestWidgetTextColorBaseY, pw, trs("row.widget_text_color"),
                 trs("row.widget_text_color.subtitle"),
-                this::formatQuestWidgetTextColor,
-                this::cycleQuestWidgetTextColor);
+                () -> "", null);
         uiDescriptionTextColorRow = new ConfigRow(px, uiDescriptionTextColorBaseY, pw, trs("row.description_color"),
                 trs("row.description_color.subtitle"),
-                this::formatDescriptionTextColor,
-                this::cycleDescriptionTextColor);
+                () -> "", null);
         uiEnableDescriptionReadMoreRow = new ConfigRow(px, uiEnableDescriptionReadMoreBaseY, pw, trs("row.read_more"),
                 trs("row.read_more.subtitle"),
                 () -> trs(enableDescriptionReadMore ? "state.on" : "state.off"),
@@ -382,7 +383,26 @@ public final class QuestSettingsScreen extends Screen {
         addConfigTabButton(ConfigTab.STYLE, CONFIG_TAB_STYLE_TEX, trs("tab.style"));
         addConfigTabButton(ConfigTab.UI, CONFIG_TAB_UI_TEX, trs("tab.ui"));
         addConfigTabButton(ConfigTab.FEATURES, CONFIG_TAB_FEATURES_TEX, trs("tab.features"));
+        initColorFields();
         applyConfigScrollLayout();
+    }
+
+    private void initColorFields() {
+        questWidgetTextColorField = new EditBox(font, px + pw - 45, uiQuestWidgetTextColorBaseY + 3, 39, 14, Component.empty());
+        descriptionTextColorField = new EditBox(font, px + pw - 45, uiDescriptionTextColorBaseY + 3, 39, 14, Component.empty());
+        configureColorField(questWidgetTextColorField, true);
+        configureColorField(descriptionTextColorField, false);
+        addRenderableWidget(questWidgetTextColorField);
+        addRenderableWidget(descriptionTextColorField);
+    }
+
+    private void configureColorField(EditBox field, boolean widgetColor) {
+        field.setMaxLength(7);
+        field.setFilter(value -> value.matches("#?[0-9a-fA-F]{0,6}"));
+        field.setResponder(value -> {
+            if (widgetColor) questWidgetTextColor = value;
+            else descriptionTextColor = value;
+        });
     }
 
     private void addConfigRow(ConfigRow row, ConfigTab group) {
@@ -439,6 +459,14 @@ public final class QuestSettingsScreen extends Screen {
         menuList.active = menu;
 
         boolean config = page == Page.CONFIG;
+        if (questWidgetTextColorField != null) {
+            questWidgetTextColorField.visible = false;
+            questWidgetTextColorField.active = false;
+        }
+        if (descriptionTextColorField != null) {
+            descriptionTextColorField.visible = false;
+            descriptionTextColorField.active = false;
+        }
         uiPinnedRow.visible = config;
         uiPinnedRow.active = config;
         uiHideInventoryRow.visible = config;
@@ -520,6 +548,8 @@ public final class QuestSettingsScreen extends Screen {
         enableDescriptionColors = Config.enableDescriptionColors();
         questWidgetTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor());
         descriptionTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor());
+        if (questWidgetTextColorField != null) questWidgetTextColorField.setValue(questWidgetTextColor);
+        if (descriptionTextColorField != null) descriptionTextColorField.setValue(descriptionTextColor);
         enableDescriptionReadMore = Config.enableDescriptionReadMore();
         enableDescriptionTextWrapping = Config.enableDescriptionTextWrapping();
         descriptionTextAlignment = normalizeDescriptionTextAlignment(Config.descriptionTextAlignment());
@@ -932,6 +962,8 @@ public final class QuestSettingsScreen extends Screen {
         for (int i = 0; i < visibleRows.size(); i++) {
             layoutRow(visibleRows.get(i), baseY + i * rowGap, top, bottom);
         }
+        layoutColorField(questWidgetTextColorField, uiQuestWidgetTextColorRow, top, bottom);
+        layoutColorField(descriptionTextColorField, uiDescriptionTextColorRow, top, bottom);
         if (resetConfigButton != null) {
             resetConfigButton.setX(px + 2);
             resetConfigButton.setWidth(pw - 4);
@@ -977,6 +1009,14 @@ public final class QuestSettingsScreen extends Screen {
         boolean inView = (y + row.getHeight()) > top && y < bottom;
         row.visible = page == Page.CONFIG;
         row.active = page == Page.CONFIG && inView;
+    }
+
+    private void layoutColorField(EditBox field, ConfigRow row, int top, int bottom) {
+        if (field == null || row == null) return;
+        field.setY(row.getY() + 3);
+        boolean visible = row.visible && row.getY() + row.getHeight() > top && row.getY() < bottom;
+        field.visible = visible;
+        field.active = visible;
     }
 
     private void renderConfigScrollbar(GuiGraphics gg) {

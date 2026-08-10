@@ -91,18 +91,59 @@ public final class QuestPackStorage {
             throw new IOException("Replacement questpack is missing");
         }
 
+        Path archivedRoot = null;
         if (liveRoot != null && Files.exists(liveRoot)) {
             String archivedReason = sanitizeSegment(reason);
             if (archivedReason.isBlank()) archivedReason = "replaced";
-            Path archivedRoot = packBackupRoot(packName)
+            archivedRoot = packBackupRoot(packName)
                     .resolve("_replaced")
                     .resolve(timestamp() + "-" + archivedReason);
             Files.createDirectories(archivedRoot.getParent());
             moveReplace(liveRoot, archivedRoot);
         }
 
-        moveReplace(stagedRoot, liveRoot);
+        try {
+            moveReplace(stagedRoot, liveRoot);
+        } catch (IOException failure) {
+            if (archivedRoot != null && Files.exists(archivedRoot) && !Files.exists(liveRoot)) {
+                try {
+                    moveReplace(archivedRoot, liveRoot);
+                } catch (IOException restoreFailure) {
+                    failure.addSuppressed(restoreFailure);
+                }
+            }
+            throw failure;
+        }
         snapshotQuestPack(liveRoot, packName, "saved");
+    }
+
+    /** Recover a completed upload that an older version left in a hidden staging directory. */
+    public static void recoverStagedQuestPacks(Path packsRoot) {
+        if (packsRoot == null || !Files.isDirectory(packsRoot)) return;
+        Path root = packsRoot.toAbsolutePath().normalize();
+        try (var entries = Files.list(root)) {
+            for (Path staged : (Iterable<Path>) entries::iterator) {
+                if (!Files.isDirectory(staged)) continue;
+                String name = staged.getFileName() == null ? "" : staged.getFileName().toString();
+                if (!name.startsWith(".") || !name.endsWith(".upload")) continue;
+                String packName = name.substring(1, name.length() - ".upload".length()).trim();
+                if (!isRecoverablePackName(packName)) continue;
+                Path live = root.resolve(packName).normalize();
+                if (!live.startsWith(root) || Files.exists(live)) continue;
+                try {
+                    moveReplace(staged, live);
+                } catch (IOException ignored) {
+                    // Preserve the staging folder if recovery cannot finish safely.
+                }
+            }
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static boolean isRecoverablePackName(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        return !name.isBlank() && !name.startsWith(".") && !name.contains("/") && !name.contains("\\")
+                && !lower.endsWith(".upload") && !lower.endsWith(".tmp") && !lower.endsWith(".temp");
     }
 
     private static Path packBackupRoot(String packName) {

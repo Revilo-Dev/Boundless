@@ -23,7 +23,6 @@ public final class ServerQuestEvents {
     public static void onChangedDimension(PlayerEvent.PlayerChangedDimensionEvent e) {
         if (!(e.getEntity() instanceof ServerPlayer sp)) return;
         QuestTracker.markServerStateDirty(sp);
-        QuestTracker.refreshPersistentContextTargets(sp, false, true, true);
         QuestTracker.serverTickPlayer(sp);
         BoundlessNetwork.syncPlayer(sp);
     }
@@ -32,7 +31,6 @@ public final class ServerQuestEvents {
     public static void onRespawn(PlayerEvent.PlayerRespawnEvent e) {
         if (!(e.getEntity() instanceof ServerPlayer sp)) return;
         QuestTracker.markServerStateDirty(sp);
-        QuestTracker.refreshPersistentContextTargets(sp, false, true, true);
         QuestTracker.serverTickPlayer(sp);
         BoundlessNetwork.syncPlayer(sp);
     }

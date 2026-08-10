@@ -64,7 +64,9 @@ public final class QuestEditorPackFiles {
     // is invalid pack folder name
     public static boolean isInvalidPackFolderName(String name) {
         String value = safe(name).trim();
-        return !hasPackNameContent(value) || !value.equals(normalizePackName(value));
+        String lower = value.toLowerCase(Locale.ROOT);
+        return !hasPackNameContent(value) || !value.equals(normalizePackName(value))
+                || value.startsWith(".") || lower.endsWith(".upload") || lower.endsWith(".tmp") || lower.endsWith(".temp");
     }
 
     // has pack name content
@@ -105,6 +107,7 @@ public final class QuestEditorPackFiles {
     // collect visible quest packs
     public static List<QuestPack> listPacks() {
         migrateLegacyResourcePackQuestPacks();
+        QuestPackStorage.recoverStagedQuestPacks(packsRoot());
         List<QuestPack> packs = new ArrayList<>();
         Set<String> seen = new HashSet<>();
 
