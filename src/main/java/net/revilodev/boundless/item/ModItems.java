@@ -9,6 +9,7 @@ import net.minecraftforge.registries.RegistryObject;
 import net.revilodev.boundless.BoundlessMod;
 
 public final class ModItems {
+    // Everything Boundless adds to the item registry.
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, BoundlessMod.MOD_ID);
 
     public static final RegistryObject<Item> QUEST_BOOK =
@@ -17,6 +18,7 @@ public final class ModItems {
             ITEMS.register("quest_completion_scroll", () -> new QuestCompletionScrollItem(new Item.Properties().stacksTo(1)));
 
     public static ItemStack createQuestScroll(String questId) {
+        // Scrolls store the target quest in their item data.
         return QuestCompletionScrollItem.withQuestId(new ItemStack(QUEST_COMPLETION_SCROLL.get()), questId);
     }
 

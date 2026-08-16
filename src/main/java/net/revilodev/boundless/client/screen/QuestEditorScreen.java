@@ -485,7 +485,7 @@ public final class QuestEditorScreen extends Screen {
         packIconPathBox = createBox("Pack icon path", BOX_H);
         packIconPathBox.setTextColor(0x00000000);
         packIconPathBox.setTextColorUneditable(0x00000000);
-        packDescriptionBox = createMultiLineBox("Pack description", BOX_H_TALL, false);
+        packDescriptionBox = makeMultiBox("Pack description", BOX_H_TALL, false);
 
         catIdBox = createBox("Category id", BOX_H);
         catNameBox = createBox("Category name", BOX_H);
@@ -510,19 +510,19 @@ public final class QuestEditorScreen extends Screen {
         questIconBox = createBox("Quest icon", BOX_H);
         questIconBox.setTextColor(0x00000000);
         questIconBox.setTextColorUneditable(0x00000000);
-        questDescriptionBox = createMultiLineBox("Quest description", BOX_H_TALL, true);
+        questDescriptionBox = makeMultiBox("Quest description", BOX_H_TALL, true);
         questCategoryBox = createBox("Quest category", BOX_H);
         questSubCategoryBox = createBox("Quest sub-category", BOX_H);
-        questDependenciesBox = createMultiLineBox("Dependencies", BOX_H_TALL, false);
-        questDependencyLockToggle = createDependencyLockToggle(false);
+        questDependenciesBox = makeMultiBox("Dependencies", BOX_H_TALL, false);
+        questDependencyLockToggle = makeDepLock(false);
         questOptionalToggle = createToggle(false);
         questRepeatableToggle = createToggle(false);
         questAutoCompleteToggle = createToggle(false);
         questHiddenUnderDependencyToggle = createToggle(false);
-        questCompletionBox = createMultiLineBox("Completion entries", BOX_H_TALL, false);
-        questRewardBox = createMultiLineBox("Reward entries", BOX_H_TALL, false);
+        questCompletionBox = makeMultiBox("Completion entries", BOX_H_TALL, false);
+        questRewardBox = makeMultiBox("Reward entries", BOX_H_TALL, false);
         initEntryRowBoxes();
-        initDescriptionFormatterButtons();
+        initFormatBtns();
 
         attachPackNameSanitizer(packNameBox);
         attachIdSanitizer(packNamespaceBox, false);
@@ -540,7 +540,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     // create inline description tools
-    private void initDescriptionFormatterButtons() {
+    private void initFormatBtns() {
         descriptionFormatButtons.clear();
         descriptionFormatButtons.add(createDescriptionInsertButton("<", "__undo__", 0xFF4A4A4A, 9, 0.75f));
         descriptionFormatButtons.add(createDescriptionInsertButton(">", "__redo__", 0xFF4A4A4A, 9, 0.75f));
@@ -581,12 +581,12 @@ public final class QuestEditorScreen extends Screen {
         return box;
     }
 
-    private ScaledMultiLineEditBox createMultiLineBox(String hint, int height) {
-        return createMultiLineBox(hint, height, false);
+    private ScaledMultiLineEditBox makeMultiBox(String hint, int height) {
+        return makeMultiBox(hint, height, false);
     }
 
     // create a shared multiline field
-    private ScaledMultiLineEditBox createMultiLineBox(String hint, int height, boolean allowColorFormatting) {
+    private ScaledMultiLineEditBox makeMultiBox(String hint, int height, boolean allowColorFormatting) {
         ScaledMultiLineEditBox box = new ScaledMultiLineEditBox(font, 0, 0, pw - 4, height, Component.literal(hint), Component.empty(), INPUT_TEXT_SCALE, allowColorFormatting);
         box.setCharacterLimit(4096);
         box.visible = false;
@@ -603,7 +603,7 @@ public final class QuestEditorScreen extends Screen {
         return button;
     }
 
-    private LockToggleButton createDependencyLockToggle(boolean initial) {
+    private LockToggleButton makeDepLock(boolean initial) {
         LockToggleButton button = new LockToggleButton(0, 0, DEP_LOCK_SIZE, DEP_LOCK_SIZE, initial);
         button.visible = false;
         button.active = false;
@@ -668,7 +668,7 @@ public final class QuestEditorScreen extends Screen {
 
         for (QuestPack pack : QuestEditorPackFiles.listPacks()) {
             PackMeta meta = QuestEditorPackFiles.readPackMeta(pack.root, pack.name);
-            String packIconId = QuestEditorPackFiles.normalizePackIconId(meta.iconPath);
+            String packIconId = QuestEditorPackFiles.cleanIconId(meta.iconPath);
             boolean legacy = pack.legacy;
             boolean changed = stagedPacks.containsKey(pack.name);
             boolean enabled = !legacy && pack.enabled;
@@ -869,8 +869,8 @@ public final class QuestEditorScreen extends Screen {
             boolean next = !Config.enableBuiltinQuestPack();
             Config.ENABLE_BUILTIN_QUEST_PACK.set(next);
             Config.SPEC.save();
-            if (isSingleplayerAuthoritySession() || !QuestEditorPackFiles.sendQuestPackEnabledToServer("", next, true)) {
-                QuestEditorPackFiles.runBoundlessReloadInBackground();
+            if (isSingleplayerAuthoritySession() || !QuestEditorPackFiles.sendPackEnabled("", next, true)) {
+                QuestEditorPackFiles.reloadLater();
             }
             QuestPanelClient.applyConfigChanges();
             statusMessage = next ? trs("status.builtin_enabled") : trs("status.builtin_disabled");
@@ -888,8 +888,8 @@ public final class QuestEditorScreen extends Screen {
             setError(trs("error.update_questpack_failed"));
             return;
         }
-        if (isSingleplayerAuthoritySession() || (!QuestEditorPackFiles.sendQuestPackToServer(pack, next) && !QuestEditorPackFiles.sendQuestPackEnabledToServer(pack.name, next, false))) {
-            QuestEditorPackFiles.runBoundlessReloadInBackground();
+        if (isSingleplayerAuthoritySession() || (!QuestEditorPackFiles.sendPack(pack, next) && !QuestEditorPackFiles.sendPackEnabled(pack.name, next, false))) {
+            QuestEditorPackFiles.reloadLater();
         }
         statusMessage = trs(next ? "status.questpack_enabled" : "status.questpack_disabled", pack.name);
         statusColor = 0xA0FFA0;
@@ -982,7 +982,7 @@ public final class QuestEditorScreen extends Screen {
         if (currentPack.legacy) {
             return;
         }
-        if (!QuestEditorPackFiles.ensurePackWorkspace(currentPack)) {
+        if (!QuestEditorPackFiles.ensurePack(currentPack)) {
             setError(trs("error.open_pack_failed"));
             return;
         }
@@ -1181,7 +1181,7 @@ public final class QuestEditorScreen extends Screen {
         questDescriptionBox.scrollToTop();
         questCompletionBox.scrollToTop();
         questRewardBox.scrollToTop();
-        questOrderToken = QuestEditorNaming.questOrderTokenFromPath(sourcePath);
+        questOrderToken = QuestEditorNaming.orderFromPath(sourcePath);
 
         applyQuestEditorFields();
         saveButton.setMessage(tr("save"));
@@ -1237,7 +1237,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void savePackCreate() {
-        String name = QuestEditorNaming.normalizePackName(packNameBox.getValue());
+        String name = QuestEditorNaming.cleanPackName(packNameBox.getValue());
         if (!Objects.equals(name, safe(packNameBox.getValue()))) {
             packNameBox.setValue(name);
         }
@@ -1264,7 +1264,7 @@ public final class QuestEditorScreen extends Screen {
         try {
             Files.createDirectories(root.getParent());
             Files.createDirectories(root);
-            String iconPath = QuestEditorPackFiles.normalizePackIconId(packIconPathBox.getValue());
+            String iconPath = QuestEditorPackFiles.cleanIconId(packIconPathBox.getValue());
             QuestEditorPackFiles.writePackMeta(root, name, "Boundless Quest Pack: " + name, iconPath, true);
             QuestPack pack = new QuestPack(name, namespace, root, false, true);
             pack.ensureDirs();
@@ -1280,7 +1280,7 @@ public final class QuestEditorScreen extends Screen {
     private void savePackOptions() {
         if (currentPack == null) return;
 
-        String requestedName = QuestEditorNaming.normalizePackName(packNameBox.getValue());
+        String requestedName = QuestEditorNaming.cleanPackName(packNameBox.getValue());
         if (!Objects.equals(requestedName, safe(packNameBox.getValue()))) {
             packNameBox.setValue(requestedName);
         }
@@ -1324,7 +1324,7 @@ public final class QuestEditorScreen extends Screen {
                 }
             }
             String description = "Boundless Quest Pack: " + requestedName;
-            String iconPath = QuestEditorPackFiles.normalizePackIconId(packIconPathBox.getValue());
+            String iconPath = QuestEditorPackFiles.cleanIconId(packIconPathBox.getValue());
             QuestEditorPackFiles.writePackMeta(newRoot, requestedName, description, iconPath, currentPack.enabled);
             currentPack = new QuestPack(requestedName, requestedNamespace, newRoot, currentPack.legacy, currentPack.enabled);
             invalidateQuestListIndex();
@@ -1488,7 +1488,7 @@ public final class QuestEditorScreen extends Screen {
     private void duplicateCurrentPackAsIs() {
         if (currentPack == null) return;
         try {
-            if (!QuestEditorPackFiles.ensurePackWorkspace(currentPack)) {
+            if (!QuestEditorPackFiles.ensurePack(currentPack)) {
                 setError("Failed to open pack");
                 return;
             }
@@ -1515,7 +1515,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void openPackDirectory() {
         try {
-            if (currentPack == null || !QuestEditorPackFiles.ensurePackWorkspace(currentPack)) {
+            if (currentPack == null || !QuestEditorPackFiles.ensurePack(currentPack)) {
                 setError("Failed to open pack");
                 return;
             }
@@ -1552,7 +1552,7 @@ public final class QuestEditorScreen extends Screen {
         if (obj == null) return;
 
         selectedEntryId = newId;
-        String orderToken = QuestEditorNaming.nextQuestOrderToken(currentPack);
+        String orderToken = QuestEditorNaming.nextOrder(currentPack);
         Path target = currentPack.questsDir.resolve(QuestEditorQuestOrdering.questFileBaseName(newId, orderToken) + ".json");
         saveJson(obj, target, null);
         QuestEntryData data = QuestEditorJsonFiles.loadQuest(currentPack, newId);
@@ -1781,25 +1781,25 @@ public final class QuestEditorScreen extends Screen {
         if (currentPack == null) return baseId;
         String base = safe(baseId).trim();
         if (base.isBlank()) return baseId;
-        return QuestEditorNaming.nextAvailableId(base, currentPack.questsDir);
+        return QuestEditorNaming.nextCopyId(base, currentPack.questsDir);
     }
 
     private String nextAvailableCategoryId(String baseId) {
         if (currentPack == null) return baseId;
         String base = safe(baseId).trim();
         if (base.isBlank()) return baseId;
-        return QuestEditorNaming.nextAvailableId(base, currentPack.categoriesDir);
+        return QuestEditorNaming.nextCopyId(base, currentPack.categoriesDir);
     }
 
     private String nextAvailableSubCategoryId(String baseId) {
         if (currentPack == null) return baseId;
         String base = safe(baseId).trim();
         if (base.isBlank()) return baseId;
-        return QuestEditorNaming.nextAvailableId(base, currentPack.subCategoriesDir);
+        return QuestEditorNaming.nextCopyId(base, currentPack.subCategoriesDir);
     }
 
     private String nextAvailablePackName(String baseName) {
-        return QuestEditorNaming.nextAvailablePackName(baseName);
+        return QuestEditorNaming.nextCopyPack(baseName);
     }
 
     private void deletePack(QuestPack pack) {
@@ -1901,7 +1901,7 @@ public final class QuestEditorScreen extends Screen {
         if (!changed) return;
 
         if (singleplayerAuthority) {
-            QuestEditorPackFiles.runBoundlessReloadInBackground();
+            QuestEditorPackFiles.reloadLater();
         }
         mc.execute(() -> QuestData.loadClient(true));
     }
@@ -1917,7 +1917,7 @@ public final class QuestEditorScreen extends Screen {
             return;
         }
         try {
-            Path zipPath = QuestEditorPackFiles.nextExportPath(currentPack);
+            Path zipPath = QuestEditorPackFiles.nextZipPath(currentPack);
             QuestEditorPackFiles.zipDirectory(currentPack.root, zipPath);
             statusMessage = trs("status.exported", zipPath.getFileName());
             statusColor = 0xA0FFA0;
@@ -2354,7 +2354,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void syncDependencyEntryLockButtons() {
         while (dependencyEntryLockButtons.size() < dependencyEntryBoxes.size()) {
-            LockToggleButton button = createDependencyLockToggle(dependencyLockState());
+            LockToggleButton button = makeDepLock(dependencyLockState());
             dependencyEntryLockButtons.add(button);
         }
         while (dependencyEntryLockButtons.size() > dependencyEntryBoxes.size()) {
@@ -2845,7 +2845,7 @@ public final class QuestEditorScreen extends Screen {
         if (box == null) return;
         box.setResponder(value -> {
             if (suppressIdSanitizer) return;
-            String normalized = QuestEditorNaming.normalizeIdInput(value, commaSeparated);
+            String normalized = QuestEditorNaming.cleanId(value, commaSeparated);
             if (normalized.equals(value)) return;
             int cursor = box.getCursorPosition();
             suppressIdSanitizer = true;
@@ -2860,7 +2860,7 @@ public final class QuestEditorScreen extends Screen {
         if (box == null) return;
         box.setResponder(value -> {
             if (suppressIdSanitizer) return;
-            String normalized = QuestEditorNaming.normalizePackName(value);
+            String normalized = QuestEditorNaming.cleanPackName(value);
             if (normalized.equals(value)) return;
             int cursor = box.getCursorPosition();
             suppressIdSanitizer = true;
@@ -2899,11 +2899,11 @@ public final class QuestEditorScreen extends Screen {
         if (id.isBlank()) return "";
 
         if (editingPath != null) {
-            String fromPath = QuestEditorNaming.questOrderTokenFromPath(editingPath);
+            String fromPath = QuestEditorNaming.orderFromPath(editingPath);
             if (!fromPath.isBlank()) return fromPath;
         }
 
-        return QuestEditorNaming.nextQuestOrderToken(currentPack);
+        return QuestEditorNaming.nextOrder(currentPack);
     }
 
     private ScreenState captureState() {

@@ -65,6 +65,7 @@ public final class QuestTracker {
     // client and server runtime caches
     private static final Gson GSON = new GsonBuilder().setLenient().create();
 
+    // Client progress mirrors server state so the UI can update without waiting on disk
     private static final Map<String, Map<String, Status>> WORLD_STATES = new HashMap<>();
     private static final Map<String, Integer> CLIENT_KILLS = new HashMap<>();
     private static final Map<String, Boolean> CLIENT_ADV_DONE = new HashMap<>();
@@ -81,6 +82,7 @@ public final class QuestTracker {
     private static final Map<UUID, Integer> SERVER_QUEST_SCAN_CURSOR = new HashMap<>();
     private static final Map<UUID, Integer> SERVER_DIRTY_MASKS = new HashMap<>();
     private static final Map<UUID, ServerStateSnapshot> SERVER_STATE_SNAPSHOTS = new HashMap<>();
+    // Spread expensive checks over several ticks instead of scanning every quest at once
     private static final int SERVER_QUEST_SCAN_BATCH = 32;
     private static final int DIRTY_INVENTORY = 1;
     private static final int DIRTY_EFFECTS = 1 << 1;
@@ -98,6 +100,7 @@ public final class QuestTracker {
     private record ServerStateSnapshot(long inventoryHash, long effectHash, int xpPoints, String biomeId, String dimensionId) {}
 
     private static final class EvaluationCache {
+        // Reused while one quest pass checks several targets against the same player state.
         private final UUID playerId;
         private final Map<String, Integer> acceptedItemCounts = new HashMap<>();
         private final Map<String, Integer> acceptedKillCounts = new HashMap<>();
@@ -136,6 +139,7 @@ public final class QuestTracker {
     }
 
     public static int getPermanentItemProgress(String key, int current, int required) {
+        // Collection progress never drops when the player spends collected items.
         int req = Math.max(0, required);
         int cur = Math.max(0, current);
 
@@ -316,6 +320,7 @@ public final class QuestTracker {
     }
 
     private static Map<String, Status> activeStateMap() {
+        // A single-player client and a dedicated server use different state stores.
         String key = ACTIVE_KEY;
         if (key == null) key = "default";
         return WORLD_STATES.computeIfAbsent(key, k -> new LinkedHashMap<>());
@@ -407,6 +412,7 @@ public final class QuestTracker {
     }
 
     public static boolean dependenciesMet(QuestData.Quest q, Player player) {
+        // Optional dependencies still influence visibility, but do not block completion.
         if (q == null || q.dependencies.isEmpty()) return true;
         if (q.lockAfterDependency) {
             for (String depId : q.dependencies) {
@@ -557,6 +563,7 @@ public final class QuestTracker {
     }
 
     private static boolean evaluateTarget(QuestData.Quest q, QuestData.Target t, Player player, boolean trackProgress) {
+        // Common dispatcher for every target type in quest JSON.
         if (t == null || player == null) return true;
 
         if (isSubmitTarget(q, t)) {
@@ -666,6 +673,7 @@ public final class QuestTracker {
     }
 
     public static boolean updateProgressAndCheckReady(QuestData.Quest q, Player player) {
+        // Tracking is only done when a player action may change a quest.
         if (player == null || q == null || q.completion == null) return false;
         if (getStatus(q, player) == Status.COMPLETED) return true;
 
@@ -1167,6 +1175,7 @@ public final class QuestTracker {
     }
 
     private static void giveItemRewards(ServerPlayer player, QuestData.Quest q) {
+        // Overflow goes through the normal player inventory drop path.
         if (player == null || q == null || q.rewards == null || q.rewards.items == null) return;
         for (QuestData.RewardEntry r : q.rewards.items) {
             if (r == null || r.acceptedItemsOrLegacy().isEmpty()) continue;
@@ -1298,6 +1307,7 @@ public final class QuestTracker {
     }
 
     public static boolean serverRedeem(QuestData.Quest q, ServerPlayer player) {
+        // Redemption is server-only because it changes inventory and quest state.
         if (q == null || player == null) return false;
 
         Status current = getServerStatus(player, q.id);
@@ -1428,6 +1438,7 @@ public final class QuestTracker {
     }
 
     public static void clientClearAll() {
+        // Called when switching worlds or disconnecting from a server.
         CLIENT_KILLS.clear();
         CLIENT_ADV_DONE.clear();
         CLIENT_ITEM_PROGRESS.clear();
@@ -1494,6 +1505,7 @@ public final class QuestTracker {
     }
 
     public static void serverTickPlayer(ServerPlayer sp) {
+        // Dirty masks avoid rechecking inventory, effects, and XP when nothing changed.
         if (sp == null) return;
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         int dirtyMask = consumeServerDirtyMask(sp);

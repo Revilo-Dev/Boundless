@@ -14,7 +14,7 @@ public final class BoundlessJeiPlugin implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
+        // Hand the live runtime to the reflection-based compatibility bridge.
         JeiCompat.setRuntime(jeiRuntime);
     }
 }
-

@@ -61,6 +61,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private static final ResourceLocation TEX_SCROLL =
             new ResourceLocation("boundless", "textures/gui/sprites/scroll-icon.png");
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
+    // tag items reused by reward previews
     private static final Map<ResourceLocation, List<Item>> TAG_ITEM_CACHE = new HashMap<>();
 
     private final Minecraft mc = Minecraft.getInstance();
@@ -380,6 +381,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     public void setHideBackButton(boolean v) { this.hideBackButton = v; }
 
     public void setBounds(int x, int y, int w, int h) {
+        // bounds changes invalidate wrapped text sizes
         this.setX(x);
         this.setY(y);
         this.width = w;
@@ -399,6 +401,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     public void setQuest(QuestData.Quest q) {
+        // quest changes reset scroll and clickable regions
         this.quest = q;
         this.scrollY = 0f;
         this.descExpanded = false;
@@ -414,6 +417,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        // detail content shares one cached layout per panel width
         if (!this.visible || quest == null) return;
 
         depRegions.clear();
@@ -1040,6 +1044,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private void updateBottomButtons() {
+        // actions depend on quest state and player permissions
         if (quest == null || mc.player == null) return;
 
         boolean depsMet = QuestTracker.dependenciesMet(quest, mc.player);
@@ -1078,6 +1083,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private LayoutCache getLayoutCache(int panelWidth) {
+        // rebuilding wraps and reward rows only when inputs change
         if (quest == null) return LayoutCache.empty();
         LayoutCacheKey key = new LayoutCacheKey(
                 System.identityHashCode(quest),
@@ -1355,6 +1361,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private List<DescriptionLine> buildDescriptionLines(String raw, int physicalWidth, int defaultColor, boolean allowFormatting) {
+        // descriptions keep color tokens while still wrapping at words
         List<StyledDescriptionChar> chars = allowFormatting
                 ? parseDescriptionChars(raw, defaultColor)
                 : parsePlainDescriptionChars(stripColorTokens(raw), defaultColor);
@@ -1543,6 +1550,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private void addDescriptionItemRegions(List<DescriptionLine> lines, int x, int y, int maxWidth) {
+        // item ids inside descriptions become hoverable targets
         if (lines == null || lines.isEmpty() || maxWidth <= 0) return;
         float scale = textScale();
         int wrapWidth = scaledWrapWidth(maxWidth);
@@ -1747,6 +1755,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private List<Item> resolveTagItems(ResourceLocation tagId) {
+        // tag resolution is cached for repeated detail rendering
         List<Item> cached = TAG_ITEM_CACHE.get(tagId);
         if (cached != null) return cached;
 
@@ -1769,6 +1778,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private EditBox createInputBox() {
+        // field targets use a small input box beside progress text
         EditBox box = new EditBox(mc.font, 0, 0, 40, 16, Component.empty());
         box.setMaxLength(128);
         box.setResponder(value -> {
@@ -1814,6 +1824,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // clicks first check buttons then text and item regions
         if (!this.visible || !this.active) return false;
 
         if (button == 0) {

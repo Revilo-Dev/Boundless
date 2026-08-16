@@ -25,6 +25,7 @@ import java.util.function.Consumer;
 
 // scaled multi line edit box
 public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
+    // The outer widget stays at GUI scale; the backing field works in scaled text pixels.
     private static final int CURSOR_INSERT_COLOR = 0xFFFFFFFF;
     private static final int TEXT_COLOR = -2039584;
     private static final int PLACEHOLDER_TEXT_COLOR = -857677600;
@@ -56,6 +57,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
 
     @Override
     public void setWidth(int width) {
+        // Reflow the backing field whenever the visible widget changes width.
         super.setWidth(width);
         float safeScale = this.textScale <= 0f ? 1f : this.textScale;
         this.textField.setWidth(Math.max(20, Math.round((width - this.totalInnerPadding()) / safeScale)));
@@ -133,6 +135,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Cursor placement and selection belong to the backing text field.
         if (!this.visible || !this.active) return false;
         if (this.withinContentAreaPoint(mouseX, mouseY) && button == 0) {
             this.setFocused(true);
@@ -182,6 +185,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
 
     @Override
     public void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // The stock scroll widget supplies clipping and the scrollbar around scaled text.
         if (!this.visible) return;
         this.renderBackground(guiGraphics);
         guiGraphics.enableScissor(this.getX() + 1, this.getY() + 1, this.getX() + this.width - 1, this.getY() + this.height - 1);
@@ -354,6 +358,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     private long drawFormattedString(GuiGraphics guiGraphics, String text, int x, int y, int initialColor) {
+        // Ampersand color tokens are rendered here instead of being stored as Minecraft styles.
         if (!this.allowColorFormatting) {
             int drawX = x;
             if (guiGraphics != null) {
@@ -501,6 +506,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     private void seekCursorScreen(double mouseX, double mouseY) {
+        // Convert screen coordinates back into the scaled text field's coordinate space.
         double safeScale = this.textScale <= 0f ? 1.0 : this.textScale;
         double d0 = (mouseX - (double) this.getX() - (double) this.innerPadding()) / safeScale;
         double d1 = (mouseY - (double) this.getY() - (double) this.innerPadding() + this.scrollAmount()) / safeScale;
@@ -516,6 +522,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 }
 
+// Backing model for editing, wrapping, selection, and undo history.
 final class ScaledTextField {
     private final Font font;
     private final List<StringView> displayLines = new ArrayList<>();
@@ -944,6 +951,7 @@ final class ScaledTextField {
     }
 
     private void reflowDisplayLines() {
+        // Wrapped views retain source offsets so cursor movement still uses the full string.
         this.displayLines.clear();
         if (this.value.isEmpty()) {
             this.displayLines.add(StringView.EMPTY);
