@@ -16,7 +16,7 @@ public final class QuestEditorNaming {
     }
 
     // normalize id input
-    public static String normalizeIdInput(String value, boolean commaSeparated) {
+    public static String cleanId(String value, boolean commaSeparated) {
         String raw = safe(value);
         if (raw.isEmpty()) return raw;
         if (!commaSeparated) {
@@ -35,14 +35,14 @@ public final class QuestEditorNaming {
     }
 
     // normalize pack name
-    public static String normalizePackName(String value) {
+    public static String cleanPackName(String value) {
         String raw = safe(value).toLowerCase(Locale.ROOT);
         if (raw.isBlank()) return "";
         return raw.replaceAll("\\s+", "-").replaceAll("[^a-z0-9_.-]", "");
     }
 
     // next available id
-    public static String nextAvailableId(String baseId, Path dir) {
+    public static String nextCopyId(String baseId, Path dir) {
         String base = safe(baseId).trim();
         if (base.isBlank() || dir == null) return baseId;
         String candidate = base + "_copy";
@@ -55,8 +55,8 @@ public final class QuestEditorNaming {
     }
 
     // next available pack name
-    public static String nextAvailablePackName(String baseName) {
-        String base = normalizePackName(baseName);
+    public static String nextCopyPack(String baseName) {
+        String base = cleanPackName(baseName);
         if (base.isBlank()) return "new-pack";
         Set<String> existing = new HashSet<>();
         for (QuestPack pack : QuestEditorPackFiles.listPacks()) {
@@ -82,7 +82,7 @@ public final class QuestEditorNaming {
     }
 
     // split index name
-    public static IndexName splitIndexName(String raw) {
+    public static IndexName splitName(String raw) {
         if (raw == null) return new IndexName("", "");
         String trimmed = raw.trim();
         if (trimmed.isBlank()) return new IndexName("", "");
@@ -98,17 +98,17 @@ public final class QuestEditorNaming {
     }
 
     // quest order token from path
-    public static String questOrderTokenFromPath(Path path) {
+    public static String orderFromPath(Path path) {
         if (path == null) return "";
-        return splitIndexName(QuestEditorJsonFiles.fileId(path)).index;
+        return splitName(QuestEditorJsonFiles.fileId(path)).index;
     }
 
     // next quest order token
-    public static String nextQuestOrderToken(QuestPack pack) {
+    public static String nextOrder(QuestPack pack) {
         if (pack == null) return "01";
         int max = 0;
         for (NamedEntry entry : QuestEditorJsonFiles.listQuestEntries(pack)) {
-            String index = splitIndexName(QuestEditorJsonFiles.fileId(entry.path)).index;
+            String index = splitName(QuestEditorJsonFiles.fileId(entry.path)).index;
             if (index.isBlank()) continue;
             try {
                 max = Math.max(max, Integer.parseInt(index));

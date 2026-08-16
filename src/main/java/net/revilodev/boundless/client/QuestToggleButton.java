@@ -10,6 +10,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 @OnlyIn(Dist.CLIENT)
 public class QuestToggleButton extends AbstractButton {
+    // image-only button reused by the inventory
     private ResourceLocation texNormal;
     private ResourceLocation texHover;
     private final Runnable onPress;
@@ -23,6 +24,7 @@ public class QuestToggleButton extends AbstractButton {
     }
 
     public void setTextures(ResourceLocation normal, ResourceLocation hover) {
+        // Some states swap both button texture at once
         this.texNormal = normal;
         this.texHover = hover;
     }

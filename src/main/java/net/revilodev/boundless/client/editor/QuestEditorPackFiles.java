@@ -97,7 +97,7 @@ public final class QuestEditorPackFiles {
     }
 
     // normalize pack icon id
-    public static String normalizePackIconId(String raw) {
+    public static String cleanIconId(String raw) {
         String value = safe(raw).trim();
         if (value.isBlank()) return "";
         String normalized = normalizeNamespacedId(value, false);
@@ -106,7 +106,6 @@ public final class QuestEditorPackFiles {
 
     // collect visible quest packs
     public static List<QuestPack> listPacks() {
-        migrateLegacyResourcePackQuestPacks();
         QuestPackStorage.recoverStagedQuestPacks(packsRoot());
         List<QuestPack> packs = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -159,25 +158,6 @@ public final class QuestEditorPackFiles {
                 && !lower.endsWith(".temp");
     }
 
-    // migrate legacy resourcepack packs into config storage
-    public static void migrateLegacyResourcePackQuestPacks() {
-        Path legacyRoot = resourcePacksRoot().resolve("boundless");
-        if (!Files.isDirectory(legacyRoot)) return;
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(legacyRoot)) {
-            for (Path path : stream) {
-                if (!Files.isDirectory(path)) continue;
-                String namespace = findNamespace(path);
-                if (namespace.isBlank()) continue;
-                Path questsDir = path.resolve("data").resolve(namespace).resolve("quests");
-                if (!Files.isDirectory(questsDir)) continue;
-                Path target = packsRoot().resolve(path.getFileName().toString());
-                if (Files.exists(target)) continue;
-                mirrorDirectory(path, target);
-            }
-        } catch (Exception ignored) {
-        }
-    }
-
     // find pack by name
     public static QuestPack findPackByName(String name) {
         for (QuestPack pack : listPacks()) {
@@ -187,7 +167,7 @@ public final class QuestEditorPackFiles {
     }
 
     // ensure pack workspace
-    public static boolean ensurePackWorkspace(QuestPack pack) {
+    public static boolean ensurePack(QuestPack pack) {
         if (pack == null) return false;
         Path root = pack.root;
         if (Files.isDirectory(root)) return true;
@@ -285,7 +265,7 @@ public final class QuestEditorPackFiles {
     }
 
     // send a pack enabled change to the server
-    public static boolean sendQuestPackEnabledToServer(String id, boolean enabled, boolean builtin) {
+    public static boolean sendPackEnabled(String id, boolean enabled, boolean builtin) {
         try {
             PacketDistributor.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
             return true;
@@ -295,7 +275,7 @@ public final class QuestEditorPackFiles {
     }
 
     // upload a full pack snapshot to the server
-    public static boolean sendQuestPackToServer(QuestPack pack, boolean enabled) {
+    public static boolean sendPack(QuestPack pack, boolean enabled) {
         if (pack == null || pack.name == null || pack.name.isBlank() || pack.root == null || !Files.isDirectory(pack.root)) {
             return false;
         }
@@ -361,7 +341,7 @@ public final class QuestEditorPackFiles {
     }
 
     // run boundless reload in background
-    public static void runBoundlessReloadInBackground() {
+    public static void reloadLater() {
         try {
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) return;
@@ -404,7 +384,7 @@ public final class QuestEditorPackFiles {
         QuestPackStorage.writeJsonAtomically(GSON, pack, meta);
     }
 
-    // backup pack
+    // create questpack backup
     public static void backupPack(QuestPack pack, String reason) throws IOException {
         if (pack == null || pack.root == null || pack.name == null) return;
         QuestPackStorage.snapshotQuestPack(pack.root, pack.name, reason);
@@ -438,9 +418,9 @@ public final class QuestEditorPackFiles {
         if (pack == null || pack.root == null) return false;
         boolean uploaded = false;
         if (!singleplayerAuthority) {
-            uploaded = sendQuestPackToServer(pack, pack.enabled);
+            uploaded = sendPack(pack, pack.enabled);
         }
-        // skip local mirroring when the pack already lives in the active root
+        // skip local mirroring when the pack already exists
         try {
             Path targetRoot = packsRoot().resolve(pack.name);
             Path sourceReal = pack.root.toRealPath();
@@ -488,7 +468,7 @@ public final class QuestEditorPackFiles {
     }
 
     // next export path
-    public static Path nextExportPath(QuestPack pack) throws IOException {
+    public static Path nextZipPath(QuestPack pack) throws IOException {
         Path exportRoot = Minecraft.getInstance().gameDirectory.toPath()
                 .resolve("config")
                 .resolve("boundless")

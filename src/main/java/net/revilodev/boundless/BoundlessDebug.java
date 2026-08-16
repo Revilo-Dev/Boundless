@@ -2,7 +2,7 @@ package net.revilodev.boundless;
 
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Lightweight, rate-limited diagnostics for investigating live server performance. */
+// rate-limited diagnostics for testing server performance
 public final class BoundlessDebug {
     private static final ConcurrentHashMap<String, Long> LAST_LOG_NANOS = new ConcurrentHashMap<>();
 
@@ -12,7 +12,7 @@ public final class BoundlessDebug {
         return Config.devMode();
     }
 
-    /** Log at most once per interval for a diagnostic category. */
+    //Log once per int per diagnostic
     public static void rateLimited(String category, long intervalMillis, String message, Object... arguments) {
         if (!enabled()) return;
         long now = System.nanoTime();

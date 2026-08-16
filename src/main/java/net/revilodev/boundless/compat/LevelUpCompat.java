@@ -8,6 +8,7 @@ import net.neoforged.fml.ModList;
 import java.lang.reflect.Method;
 
 public final class LevelUpCompat {
+    // Level Up is optional, so its API is resolved only after the mod list is ready.
     private static final ResourceLocation BOUNDLESS_QUEST_SOURCE =
             ResourceLocation.fromNamespaceAndPath("boundless", "quest_reward");
 
@@ -70,6 +71,7 @@ public final class LevelUpCompat {
     }
 
     private static void ensureInitialized() {
+        // Cache both a successful lookup and a missing/incompatible API.
         if (initialized) return;
         initialized = true;
         if (!ModList.get().isLoaded("levelup")) return;

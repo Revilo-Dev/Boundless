@@ -61,10 +61,12 @@ public final class BoundlessNetwork {
     private static boolean REGISTERED = false;
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
+    // redemption guard blocks duplicate clicks before a server reply
     private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, QuestPackUploadSession> QUESTPACK_UPLOADS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<java.util.UUID, ObjectiveProgressSnapshot> LAST_OBJECTIVE_SYNC = new ConcurrentHashMap<>();
 
+    // sync ids join large quest snapshots sent in chunks
     private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
     private static final int QUEST_CHUNK_BYTES = 60000;
     private static final Path INSTANCE_QUEST_PACKS_ROOT = Config.questPacksRoot();
@@ -84,11 +86,13 @@ public final class BoundlessNetwork {
 
     // register payload handlers once per game session
     public static void bootstrap(IEventBus bus) {
+        // payload registration happens during network setup
         bus.addListener(BoundlessNetwork::register);
     }
 
     // bind every client and server payload handler
     private static void register(RegisterPayloadHandlersEvent event) {
+        // clientbound and serverbound payloads share one protocol version
         if (REGISTERED) return;
         REGISTERED = true;
 
@@ -665,6 +669,7 @@ public final class BoundlessNetwork {
 
     // push full quest and progress state to one player
     public static void syncPlayer(ServerPlayer p) {
+        // login sync sends config data progress and quest definitions
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         clearObjectiveProgressCache(p);
         PacketDistributor.sendToPlayer(p, new SyncClear());
@@ -719,6 +724,7 @@ public final class BoundlessNetwork {
 
     // sync objective counters only when they changed
     public static void sendObjectiveProgress(ServerPlayer player) {
+        // unchanged snapshots are skipped to limit packet traffic
         if (player == null) return;
         QuestObjectiveState objectiveState = QuestObjectiveState.get(player.serverLevel());
         Map<String, Integer> itemSnapshot = sanitizeObjectiveItems(objectiveState.itemSnapshotFor(player.getUUID()));
@@ -858,6 +864,7 @@ public final class BoundlessNetwork {
 
     // send the full authoritative quest definition snapshot
     private static void sendQuestData(List<ServerPlayer> players) {
+        // one json snapshot can serve every player on this server
         if (players == null || players.isEmpty()) return;
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         ServerPlayer first = players.get(0);
@@ -877,6 +884,7 @@ public final class BoundlessNetwork {
 
     // build the authoritative quest json snapshot
     private static String buildQuestSyncJson(MinecraftServer server) {
+        // quest data uses json to preserve pack defined fields
         var quests = QuestData.allServer(server);
         var categories = QuestData.categoriesOrderedServer(server);
         var subCats = QuestData.subCategoriesAllOrderedServer(server);
@@ -1059,6 +1067,7 @@ public final class BoundlessNetwork {
 
     // split large quest json into client packet chunks
     private static void sendQuestJsonChunked(ServerPlayer p, String json) {
+        // large quest packs arrive in ordered packet chunks
         if (json == null) json = "";
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         int syncId = SYNC_ID_GEN.incrementAndGet();
@@ -1267,6 +1276,7 @@ public final class BoundlessNetwork {
 
     // accept quest pack upload chunks from the editor
     private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, IPayloadContext ctx) {
+        // chunks are assembled before unpacking into a pack folder
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
@@ -1342,6 +1352,7 @@ public final class BoundlessNetwork {
 
     // reload quests and resync every connected player
     private static void reloadAndSyncAll(ServerPlayer sp) {
+        // pack edits reload data then notify every connected player
         QuestData.loadServer(sp.server, true);
         List<ServerPlayer> players = sp.server.getPlayerList().getPlayers();
         for (ServerPlayer player : players) {
@@ -1537,6 +1548,7 @@ public final class BoundlessNetwork {
     }
 
     private static void handleSyncQuestsChunk(SyncQuestsChunk p, IPayloadContext ctx) {
+        // client waits for every chunk before replacing quest data
         ctx.enqueueWork(() -> ClientQuestSync.accept(p));
     }
 
@@ -1559,6 +1571,7 @@ public final class BoundlessNetwork {
     }
 
     public static boolean claimQuest(ServerPlayer sp, QuestData.Quest q) {
+        // submit targets are removed only after every target can be paid
         if (sp == null || q == null) return false;
         String lockKey = sp.getUUID() + ":" + q.id;
         if (!REDEEM_IN_FLIGHT.add(lockKey)) return false;

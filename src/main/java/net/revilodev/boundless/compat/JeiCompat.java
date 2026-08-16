@@ -4,6 +4,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 
 public final class JeiCompat {
+    // Kept as Object so JEI remains an optional dependency at runtime.
     private static Object runtime;
 
     private JeiCompat() {}
@@ -17,6 +18,7 @@ public final class JeiCompat {
     }
 
     public static boolean showItem(ItemStack stack, boolean showRecipe) {
+        // Reflection avoids loading JEI classes when the mod is not installed.
         if (stack == null || stack.isEmpty() || runtime == null) return false;
         try {
             Class<?> ingredientRoleClass = Class.forName("mezz.jei.api.recipe.RecipeIngredientRole");

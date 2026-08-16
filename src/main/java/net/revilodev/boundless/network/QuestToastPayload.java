@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.revilodev.boundless.BoundlessMod;
 
 public record QuestToastPayload(String questId) {
+    // Small client payload sent when a quest becomes available.
     public static final ResourceLocation ID =
             ResourceLocation.fromNamespaceAndPath(BoundlessMod.MOD_ID, "quest_toast");
 

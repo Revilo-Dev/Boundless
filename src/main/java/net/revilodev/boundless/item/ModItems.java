@@ -8,6 +8,7 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.revilodev.boundless.BoundlessMod;
 
 public final class ModItems {
+    // Everything Boundless adds to the item registry.
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(BoundlessMod.MOD_ID);
 
     public static final DeferredItem<Item> QUEST_BOOK =
@@ -16,6 +17,7 @@ public final class ModItems {
             ITEMS.registerItem("quest_completion_scroll", QuestCompletionScrollItem::new, new Item.Properties().stacksTo(1));
 
     public static ItemStack createQuestScroll(String questId) {
+        // Scrolls store the target quest in their item data.
         return QuestCompletionScrollItem.withQuestId(new ItemStack(QUEST_COMPLETION_SCROLL.get()), questId);
     }
 

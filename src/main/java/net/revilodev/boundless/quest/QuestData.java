@@ -100,6 +100,7 @@ public final class QuestData {
         }
 
         public Optional<Item> iconItem() {
+            // Texture paths are not registry ids, so they cannot produce an item icon
             try {
                 if (icon == null || icon.isBlank() || icon.contains("textures/")) return Optional.empty();
                 ResourceLocation rl = ResourceLocation.parse(icon);
@@ -443,6 +444,7 @@ public final class QuestData {
     }
 
     public static void forceReloadAll(MinecraftServer server) {
+        // Reload both resource-pack data and instance-local quest packs.
         loadedClient = false;
         loadedServer = false;
         lastClientWorldId = null;
@@ -451,6 +453,7 @@ public final class QuestData {
     }
 
     private static synchronized void load(ResourceManager rm, boolean forceReload) {
+        // The maps are rebuilt together so categories never point at stale quests.
         QUESTS.clear();
         CATEGORIES.clear();
         SUBCATEGORIES.clear();
@@ -523,6 +526,7 @@ public final class QuestData {
     }
 
     private static void loadModQuestPacksFromInstance() {
+        // Instance packs are regular folders under the game's config directory.
         if (!Files.isDirectory(INSTANCE_QUEST_PACKS_ROOT)) return;
         QuestPackStorage.recoverStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
 
@@ -1602,6 +1606,7 @@ public final class QuestData {
     }
 
     public static synchronized void applyNetworkJson(String json) {
+        // Network data replaces the local client cache as one complete snapshot.
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         QUESTS.clear();
         CATEGORIES.clear();
@@ -1863,6 +1868,7 @@ public final class QuestData {
     }
 
     public static synchronized void clearClientNetworkData() {
+        // Leave client loading available for the next server or world.
         if (FMLEnvironment.dist != Dist.CLIENT) return;
         QUESTS.clear();
         CATEGORIES.clear();

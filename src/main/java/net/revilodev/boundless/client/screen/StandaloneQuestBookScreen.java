@@ -19,7 +19,7 @@ import net.revilodev.boundless.quest.QuestData;
 @OnlyIn(Dist.CLIENT)
 public final class StandaloneQuestBookScreen extends Screen {
 
-    // standalone quest book textures
+    // book screen textures
     private static final ResourceLocation PANEL_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
     private static final ResourceLocation BTN_SETTINGS =

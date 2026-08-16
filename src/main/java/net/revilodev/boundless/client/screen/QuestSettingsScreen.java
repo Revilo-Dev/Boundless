@@ -25,6 +25,8 @@ import java.util.List;
 
 @OnlyIn(Dist.CLIENT)
 public final class QuestSettingsScreen extends Screen {
+
+    // shared panel and button textures
     private static final ResourceLocation PANEL_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
     private static final int PANEL_W = 147;
@@ -94,9 +96,11 @@ public final class QuestSettingsScreen extends Screen {
     private int pw;
     private int ph;
 
+    // settings home page
     private QuestListWidget menuList;
     private CategoryHeaderWidget header;
 
+    // rows on the config page
     private ConfigRow uiPinnedRow;
     private ConfigRow uiHideInventoryRow;
     private ConfigRow uiInventoryButtonPositionRow;
@@ -192,6 +196,7 @@ public final class QuestSettingsScreen extends Screen {
 
     @Override
     protected void init() {
+        // Settings are server-managed, so only operators can open this screen.
         var mc = Minecraft.getInstance();
         if (mc.player == null || !mc.player.hasPermissions(2)) {
             mc.setScreen(parent);
@@ -214,6 +219,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void initMenu() {
+        // The first page reuses the normal quest list as a simple menu
         menuList = new QuestListWidget(px + 2, py, pw, ph, this::handleMenuClick);
         menuList.setUseConfigScaling(false);
         menuList.setQuests(buildMenuQuests());
@@ -223,6 +229,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void initConfigWidgets() {
+        // Rows are laid out again when active tab or scroll position changes
         configRows.clear();
         configTabButtons.clear();
         int uiHeaderY = py + 2;
@@ -389,6 +396,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void initColorFields() {
+        // These sit over their rows so hex values can be typed directly.
         questWidgetTextColorField = new EditBox(font, px + pw - 45, uiQuestWidgetTextColorBaseY + 3, 39, 14, Component.empty());
         descriptionTextColorField = new EditBox(font, px + pw - 45, uiDescriptionTextColorBaseY + 3, 39, 14, Component.empty());
         configureColorField(questWidgetTextColorField, true);
@@ -419,6 +427,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void initNavButtons() {
+        // Back stays outside the scrolling content; reset scrolls with the rows
         int btnY = py + ph - 20;
         backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
         resetConfigButton = new HoldResetButton(px + 2, btnY, pw - 4, 20, () -> tr(configTab == ConfigTab.ALL ? "reset.all" : "reset.current"), this::resetCurrentConfigTab);
@@ -453,6 +462,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void setPage(Page next) {
+        // Both pages share one widget list, so visibility does the page switching
         page = next;
 
         boolean menu = page == Page.MENU;
@@ -535,6 +545,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void refreshConfigFields() {
+        // Reads from saved config before showing editor
         pinnedHudPos = normalizeHudPos(Config.pinnedQuestHudPosition());
         hideQuestBookInInventory = Config.hideQuestBookInInventory();
         questBookInventoryButtonPosition = normalizeQuestBookInventoryButtonPosition(Config.questBookInventoryButtonPosition());
@@ -653,6 +664,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void saveConfig(boolean close) {
+        // These two options would otherwise hide every inventory way to open the book.
         if (disableQuestBook && hideQuestBookInInventory) {
             hideQuestBookInInventory = false;
         }
@@ -689,6 +701,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void sendConfigToServer() {
+        // local save updates the client immediately, keeps server in sync
         try {
             PacketDistributor.sendToServer(new BoundlessNetwork.UpdateServerConfig(
                     pinnedHudPos,
@@ -759,6 +772,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private List<QuestData.Quest> buildMenuQuests() {
+        // Menu items use lightweight quest records so they render like the rest of the UI.
         List<QuestData.Quest> out = new ArrayList<>();
         out.add(buildMenuQuest(MENU_ID_CONFIG, trs("menu.config"), MENU_CONFIG_TEX.toString()));
         out.add(buildMenuQuest(MENU_ID_EDITOR, trs("menu.editor"), MENU_EDITOR_TEX.toString()));
@@ -836,6 +850,7 @@ public final class QuestSettingsScreen extends Screen {
         gg.blit(PANEL_TEX, leftX, topY, 0, 0, PANEL_W, PANEL_H, PANEL_W, PANEL_H);
 
         if (page == Page.CONFIG) {
+            // Render rows inside the panel only. Tabs and navigation stay above the scissor.
             boolean backVisible = backButton != null && backButton.visible;
             boolean resetVisible = resetConfigButton != null && resetConfigButton.visible;
             List<Boolean> tabVisible = new ArrayList<>();
@@ -874,6 +889,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void queueTooltip(List<Component> tooltip, int mouseX, int mouseY) {
+        // Widgets collect tooltips while rendering; the screen draws one after everything else.
         if (tooltip == null || tooltip.isEmpty()) return;
         pendingTooltip = tooltip;
         pendingTooltipX = mouseX;
@@ -934,6 +950,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private int configContentHeight() {
+        // Leave room for the reset button after the last row.
         return Math.max(0, visibleConfigRows().size() * 21 + 27);
     }
 
@@ -946,6 +963,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void applyConfigScrollLayout() {
+        // Only rows in the chosen tab join the vertical flow.
         int max = maxConfigScroll();
         if (configScrollY < 0f) configScrollY = 0f;
         if (configScrollY > max) configScrollY = max;
@@ -1037,6 +1055,7 @@ public final class QuestSettingsScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        // Keep wheel input in the panel so background widgets do not consume it.
         if (page == Page.CONFIG) {
             int top = configViewportTop();
             int bottom = configViewportBottom();
@@ -1097,6 +1116,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void setConfigScrollFromMouse(double mouseY) {
+        // Centre the thumb under the pointer while dragging.
         int max = maxConfigScroll();
         int vh = configViewportHeight();
         int content = configContentHeight();
@@ -1149,6 +1169,7 @@ public final class QuestSettingsScreen extends Screen {
 
         @Override
         public void onPress() {
+            // Changing tabs always starts at the first row.
             if (configTab == tab) return;
             configTab = tab;
             configScrollY = 0f;
@@ -1189,6 +1210,7 @@ public final class QuestSettingsScreen extends Screen {
 
         @Override
         public void onPress() {
+            // Most rows save straight away; text fields save through their responder.
             if (onPress != null) {
                 onPress.run();
                 saveConfig(false);
@@ -1284,6 +1306,7 @@ public final class QuestSettingsScreen extends Screen {
 
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+            // Releasing or moving away cancels the hold before a reset can fire.
             if (holding && (!this.isMouseOver(mouseX, mouseY) || !this.active || !this.visible)) {
                 holding = false;
                 completed = false;
