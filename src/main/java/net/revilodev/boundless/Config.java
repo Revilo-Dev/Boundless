@@ -91,6 +91,12 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
                     .define("enableQuestSearchBox", false);
+    public static final ModConfigSpec.ConfigValue<Boolean> STICKY_SUBCATEGORY_HEADERS =
+            BUILDER.comment("If true, keeps the current sub-category header visible while scrolling quest lists.")
+                    .define("stickySubCategoryHeaders", true);
+    public static final ModConfigSpec.ConfigValue<Boolean> STICKY_DESCRIPTION_HEADERS =
+            BUILDER.comment("If true, keeps the quest details header fixed above the description.")
+                    .define("stickyDescriptionHeaders", true);
     // enableDescriptionColors enables inline color tokens in quest text
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_COLORS =
             BUILDER.comment("If true, allows colored quest descriptions to render with Boundless color tokens.")
@@ -197,6 +203,14 @@ public final class Config {
         return DISABLED_CATEGORIES.get();
     }
 
+    public static boolean isCategoryDisabled(String categoryId) {
+        if (categoryId == null || categoryId.isBlank()) return false;
+        for (String disabled : DISABLED_CATEGORIES.get()) {
+            if (disabled != null && disabled.trim().equalsIgnoreCase(categoryId.trim())) return true;
+        }
+        return false;
+    }
+
     public static List<? extends String> appliedQuestPacks() {
         return APPLIED_QUEST_PACKS.get();
     }
@@ -216,6 +230,15 @@ public final class Config {
 
     // write the enabled state for one quest pack id
     public static void setQuestPackApplied(String id, boolean enabled) {
+        setQuestPackAppliedValue(id, enabled);
+        SPEC.save();
+    }
+
+    public static void setSyncedQuestPackApplied(String id, boolean enabled) {
+        setQuestPackAppliedValue(id, enabled);
+    }
+
+    private static void setQuestPackAppliedValue(String id, boolean enabled) {
         String normalized = normalizeQuestPackId(id);
         if (normalized.isBlank()) return;
         List<String> applied = normalizedCopy(APPLIED_QUEST_PACKS.get());
@@ -226,7 +249,6 @@ public final class Config {
         else disabled.add(normalized);
         APPLIED_QUEST_PACKS.set(applied);
         DISABLED_QUEST_PACKS.set(disabled);
-        SPEC.save();
     }
 
     // apply the current authority config snapshot on clients
@@ -259,8 +281,8 @@ public final class Config {
             boolean disableQuestBook,
             boolean spawnWithQuestBook) {
         DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
-        // Pack enablement is server-authoritative. The client only receives this
-        // snapshot for display; it never uploads local pack overrides to a server.
+        APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : normalizedCopy(appliedQuestPacks));
+        DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : normalizedCopy(disabledQuestPacks));
         PINNED_QUEST_HUD_POSITION.set(pinnedQuestHudPosition);
         HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
         QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
@@ -392,6 +414,14 @@ public final class Config {
 
     public static boolean enableDescriptionColors() {
         return ENABLE_DESCRIPTION_COLORS.get();
+    }
+
+    public static boolean stickySubCategoryHeaders() {
+        return STICKY_SUBCATEGORY_HEADERS.get();
+    }
+
+    public static boolean stickyDescriptionHeaders() {
+        return STICKY_DESCRIPTION_HEADERS.get();
     }
 
     public static int questWidgetTextColor() {

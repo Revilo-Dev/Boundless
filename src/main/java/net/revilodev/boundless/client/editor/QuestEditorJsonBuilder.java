@@ -80,6 +80,9 @@ public final class QuestEditorJsonBuilder {
         obj.addProperty("auto_complete", fields.autoComplete);
         obj.addProperty("hiddenUnderDependency", fields.hiddenUnderDependency);
         obj.addProperty("lock_after_dependency", fields.lockAfterDependency);
+        if (fields.treeX >= 0) obj.addProperty("tree_x", fields.treeX);
+        if (fields.treeY >= 0) obj.addProperty("tree_y", fields.treeY);
+        obj.addProperty("tree_background", normalizeTreeBackground(fields.treeBackground));
         if (!safe(fields.loadedQuestType).isBlank()) {
             obj.addProperty("type", fields.loadedQuestType);
         }
@@ -122,6 +125,14 @@ public final class QuestEditorJsonBuilder {
         return value == null ? "" : value;
     }
 
+    private static String normalizeTreeBackground(String raw) {
+        String value = safe(raw).trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (value) {
+            case "circle", "diamond", "rounded_square", "square" -> value;
+            default -> "square";
+        };
+    }
+
     // quest build fields
     public static final class QuestBuildFields {
         public String id = "";
@@ -140,5 +151,8 @@ public final class QuestEditorJsonBuilder {
         public List<String> dependencies = List.of();
         public String completionRaw = "";
         public String rewardRaw = "";
+        public int treeX = -1;
+        public int treeY = -1;
+        public String treeBackground = "square";
     }
 }

@@ -563,7 +563,7 @@ public final class QuestEditorControls {
                     gg.drawString(Minecraft.getInstance().font, entry.label, textX, top + 7, labelColor, false);
 
                     if (entry.kind == EditorEntryKind.NORMAL && entry.subtitle != null && !entry.subtitle.isBlank()) {
-                        drawScaledString(gg, entry.subtitle, 0.65f, textX, top + 17, 0xB0B0B0);
+                        drawScaledString(gg, entry.subtitle, 0.55f, textX, top + 18, 0xB0B0B0);
                     }
 
                     if (entry.showMoveArrows) {
@@ -595,6 +595,11 @@ public final class QuestEditorControls {
                             pendingTooltipX = mouseX;
                             pendingTooltipY = mouseY;
                         }
+                    }
+                    if (entry.typeIcon != null) {
+                        int iconX = getX() + width - 35;
+                        int iconY = top + 6;
+                        gg.blit(entry.typeIcon, iconX, iconY, 0, 0, 16, 16, 16, 16);
                     }
                 }
 

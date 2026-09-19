@@ -217,7 +217,7 @@ public final class QuestListWidget extends AbstractWidget {
     // filter quests by the active category
     private boolean matchesCategory(QuestData.Quest q) {
         if (bypassFilters) return true;
-        if (Config.disabledCategories().contains(q.category)) return false;
+        if (Config.isCategoryDisabled(q.category)) return false;
         if ("all".equalsIgnoreCase(category)) return includeInAll(q);
         if (!q.category.equalsIgnoreCase(category)) return false;
         return categoryUnlocked(q.category);
@@ -504,6 +504,10 @@ public final class QuestListWidget extends AbstractWidget {
             yCursor += rowHeight(row);
         }
 
+        if (Config.stickySubCategoryHeaders() && scrollY > 0f) {
+            renderStickySubCategoryHeader(gg, rows, contentTop, hideIcons, widgetTextColor);
+        }
+
         gg.disableScissor();
 
         int content = contentHeight(rows);
@@ -515,6 +519,43 @@ public final class QuestListWidget extends AbstractWidget {
             int barY = contentTop + (int) ((viewportHeight - barH) * scrollRatio);
             gg.fill(getX() + width + 4, barY, getX() + width + 6, barY + barH, 0xFF808080);
         }
+    }
+
+    private void renderStickySubCategoryHeader(GuiGraphics gg, List<RowEntry> rows, int contentTop,
+                                               boolean hideIcons, int widgetTextColor) {
+        int offset = 0;
+        QuestData.SubCategory activeHeader = null;
+        for (RowEntry row : rows) {
+            if (row.isHeader() && offset <= scrollY) activeHeader = row.subCategory;
+            if (offset > scrollY) break;
+            offset += rowHeight(row);
+        }
+        if (activeHeader == null) return;
+
+        int h = subHeaderH;
+        gg.fill(getX(), contentTop, getX() + width, contentTop + h, 0xFF373737);
+        float iconScale = 0.45f * configuredIconScale();
+        int iconSize = (int) (16 * iconScale);
+        int iconX = getX() + 2;
+        int iconY = contentTop + (h - iconSize) / 2;
+        if (!hideIcons) {
+            activeHeader.iconItem().ifPresent(item -> {
+                gg.pose().pushPose();
+                gg.pose().translate(iconX, iconY, 0);
+                gg.pose().scale(iconScale, iconScale, 1f);
+                gg.renderItem(new ItemStack(item), 0, 0);
+                gg.pose().popPose();
+            });
+        }
+        float textScale = 0.66f * configuredTextScale();
+        int textX = iconX + (hideIcons ? 0 : iconSize) + 2;
+        String name = activeHeader.name == null ? "" : activeHeader.name;
+        int maxWidth = (int) ((getX() + width - textX - 4) / textScale);
+        if (mc.font.width(name) > maxWidth) {
+            name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWidth - mc.font.width("..."))) + "...";
+        }
+        int textY = contentTop + (h - (int) (mc.font.lineHeight * textScale)) / 2 + 1;
+        drawScaledString(gg, name, textScale, textX, textY, widgetTextColor);
     }
 
     // draw one quest row texture with hover brightening

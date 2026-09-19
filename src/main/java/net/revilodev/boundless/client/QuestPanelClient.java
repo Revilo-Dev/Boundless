@@ -88,6 +88,10 @@ public final class QuestPanelClient {
         st.list.setCategory(st.selectedCategory);
         e.addListener(st.list);
 
+        st.tree = new QuestTreeWidget(0, 0, 127, PANEL_H - 20, q -> openDetails(st, q));
+        st.tree.setQuests(new java.util.ArrayList<>(QuestData.all()));
+        e.addListener(st.tree);
+
         st.searchBox = new EditBox(Minecraft.getInstance().font, 0, 0, 127, 16, Component.translatable("ui.boundless.questbook.search_quests"));
         st.searchBox.setHint(Component.translatable("ui.boundless.questbook.search"));
         st.searchBox.setMaxLength(64);
@@ -111,6 +115,7 @@ public final class QuestPanelClient {
             st.selectedCategory = id;
             lastSelectedCategory = id;
             if (st.list != null) st.list.setCategory(id);
+            refreshTree(st);
         });
         if (!Config.disableCategories()) {
             st.tabs.setSelected(st.selectedCategory);
@@ -182,6 +187,7 @@ public final class QuestPanelClient {
         if (st.open && Config.centerInventoryWithQuestPanel()) {
             setLeft(inv, computeCenteredLeft(inv));
         }
+        refreshQuestBookData(st);
         reposition(inv, st);
         updateVisibility(st);
         handleRecipeButtonRules(inv, st);
@@ -217,6 +223,9 @@ public final class QuestPanelClient {
                 double dY = e.getScrollDeltaY();
                 used = st.list.mouseScrolled(mx, my, dY) || st.list.mouseScrolled(mx, my, 0.0, dY);
             }
+        }
+        if (!used && st.tree != null && st.tree.visible && mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
+            used = st.tree.mouseScrolled(mx, my, 0.0, e.getScrollDeltaY());
         }
         if (st.details != null && st.details.visible) {
             if (mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
@@ -344,6 +353,13 @@ public final class QuestPanelClient {
             st.list.setBounds(px, py, pw, ph);
             st.list.setTopInset(Config.enableQuestSearchBox() ? 18 : 0);
         }
+        if (st.tree != null) {
+            st.tree.setX(px);
+            st.tree.setY(py);
+            st.tree.setWidth(pw);
+            st.tree.setHeight(ph);
+            refreshTree(st);
+        }
         if (st.details != null) {
             st.details.setBounds(px, py, pw, ph);
 
@@ -463,6 +479,44 @@ public final class QuestPanelClient {
         updateVisibility(st);
     }
 
+    private static void refreshQuestBookData(State st) {
+        int signature = 31 * QuestData.all().hashCode() + QuestData.categoriesOrdered().hashCode();
+        signature = 31 * signature + Config.disabledCategories().hashCode();
+        if (signature == st.questBookDataSignature) return;
+        st.questBookDataSignature = signature;
+        if (st.list != null) {
+            st.list.setQuests(QuestData.all());
+            st.list.setCategory(st.selectedCategory);
+        }
+        if (st.tabs != null && !Config.disableCategories()) {
+            st.tabs.setSelected(st.selectedCategory);
+            st.tabs.setCategories(QuestData.categoriesOrdered());
+            st.selectedCategory = st.tabs.getSelectedId();
+            if (st.selectedCategory == null || st.selectedCategory.isBlank()) st.selectedCategory = st.tabs.selectFirstCategory();
+            lastSelectedCategory = st.selectedCategory;
+            if (st.list != null) st.list.setCategory(st.selectedCategory);
+        }
+        refreshTree(st);
+    }
+
+    private static void refreshTree(State st) {
+        if (st == null || st.tree == null) return;
+        java.util.List<QuestData.Quest> quests = new java.util.ArrayList<>();
+        for (QuestData.Quest quest : QuestData.all()) {
+            if ("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category)) quests.add(quest);
+        }
+        st.tree.setQuests(quests);
+    }
+
+    private static boolean usesTreeView(State st) {
+        if (st == null) return false;
+        for (QuestData.Quest quest : QuestData.all()) {
+            if (("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category))
+                    && (quest.treeX >= 0 || quest.treeY >= 0)) return true;
+        }
+        return false;
+    }
+
     // return from quest details to the quest list
     private static void closeDetails(State st) {
         st.showingDetails = false;
@@ -471,7 +525,9 @@ public final class QuestPanelClient {
 
     // show only the widgets for the current panel mode
     private static void updateVisibility(State st) {
-        boolean listVisible = st.open && !st.showingDetails;
+        boolean treeView = usesTreeView(st);
+        boolean listVisible = st.open && !st.showingDetails && !treeView;
+        boolean treeVisible = st.open && !st.showingDetails && treeView;
         boolean detailsVisible = st.open && st.showingDetails;
 
         if (st.bg != null) {
@@ -482,6 +538,10 @@ public final class QuestPanelClient {
         if (st.list != null) {
             st.list.visible = listVisible;
             st.list.active = listVisible;
+        }
+        if (st.tree != null) {
+            st.tree.visible = treeVisible;
+            st.tree.active = treeVisible;
         }
 
         if (st.searchBox != null) {
@@ -632,6 +692,7 @@ public final class QuestPanelClient {
         SettingsButton settingsButton;
         PanelBackground bg;
         QuestListWidget list;
+        QuestTreeWidget tree;
         QuestDetailsPanel details;
         CategoryTabsWidget tabs;
         CategoryHeaderWidget header;
@@ -645,6 +706,7 @@ public final class QuestPanelClient {
         int recipeOffsetX;
         int recipeOffsetY;
         boolean hasRecipeOffset;
+        int questBookDataSignature = Integer.MIN_VALUE;
 
         State(InventoryScreen inv) {
             this.inv = inv;

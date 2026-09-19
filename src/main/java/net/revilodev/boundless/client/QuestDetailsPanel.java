@@ -484,7 +484,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
         int y = this.getY();
         int w = this.width;
 
-        int contentTop = y + HEADER_HEIGHT;
+        boolean stickyHeader = Config.stickyDescriptionHeaders();
+        int contentTop = stickyHeader ? y + HEADER_HEIGHT : y;
         int contentBottom = complete.getY() - CONTENT_BOTTOM_MARGIN;
         int viewportH = Math.max(0, contentBottom - contentTop);
 
@@ -493,7 +494,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
         int maxScroll = Math.max(0, measuredContentHeight + BOTTOM_PADDING - viewportH);
         scrollY = Mth.clamp(scrollY, 0f, maxScroll);
 
-        quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x + 4, y + 2));
+        if (stickyHeader) {
+            quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x + 4, y + 2));
 
         String title = quest.name;
         int nameWidth = w - 32 - 18;
@@ -517,8 +519,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
             gg.drawString(mc.font, title, x + 26, y + 6, 0xFFFFFF, false);
         }
 
-        boolean showScrollButton = Config.enableQuestScrolls() && QuestTracker.canCreateScroll(quest, mc.player);
-        boolean pinningEnabled = !Config.disableQuestPinning() && !showScrollButton;
+        boolean showScrollButton = stickyHeader && Config.enableQuestScrolls() && QuestTracker.canCreateScroll(quest, mc.player);
+        boolean pinningEnabled = stickyHeader && !Config.disableQuestPinning() && !showScrollButton;
         pin.visible = pinningEnabled;
         pin.active = pinningEnabled;
         if (pinningEnabled) {
@@ -528,6 +530,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         scroll.active = showScrollButton;
         if (showScrollButton) {
             scroll.render(gg, mouseX, mouseY, partialTick);
+        }
         }
 
         gg.enableScissor(x, contentTop, x + w, contentBottom);

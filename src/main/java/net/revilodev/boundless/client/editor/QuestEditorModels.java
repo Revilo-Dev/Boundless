@@ -30,6 +30,7 @@ public final class QuestEditorModels {
         public final String label;
         public final String subtitle;
         public final String icon;
+        public final ResourceLocation typeIcon;
         public final ResourceLocation actionIcon;
         public final ResourceLocation rowTexture;
         public final String actionTooltip;
@@ -59,10 +60,15 @@ public final class QuestEditorModels {
         }
 
         public EditorEntry(String id, String label, String subtitle, String icon, ResourceLocation actionIcon, String actionTooltip, String rowTooltip, ResourceLocation rowTexture, EditorEntryKind kind, int indent, boolean showMoveArrows) {
+            this(id, label, subtitle, icon, null, actionIcon, actionTooltip, rowTooltip, rowTexture, kind, indent, showMoveArrows);
+        }
+
+        public EditorEntry(String id, String label, String subtitle, String icon, ResourceLocation typeIcon, ResourceLocation actionIcon, String actionTooltip, String rowTooltip, ResourceLocation rowTexture, EditorEntryKind kind, int indent, boolean showMoveArrows) {
             this.id = id;
             this.label = label;
             this.subtitle = subtitle;
             this.icon = icon == null ? "" : icon;
+            this.typeIcon = typeIcon;
             this.actionIcon = actionIcon;
             this.rowTexture = rowTexture == null ? ROW_TEX : rowTexture;
             this.actionTooltip = actionTooltip == null ? "" : actionTooltip;
@@ -70,6 +76,12 @@ public final class QuestEditorModels {
             this.kind = kind == null ? EditorEntryKind.NORMAL : kind;
             this.indent = Math.max(0, indent);
             this.showMoveArrows = showMoveArrows;
+        }
+
+        public static EditorEntry pack(String id, String label, String icon, ResourceLocation typeIcon,
+                                       ResourceLocation actionIcon, String actionTooltip, String rowTooltip, ResourceLocation rowTexture) {
+            return new EditorEntry(id, label, "", icon, typeIcon, actionIcon, actionTooltip, rowTooltip, rowTexture,
+                    EditorEntryKind.NORMAL, 0, false);
         }
 
         // movable
@@ -218,6 +230,7 @@ public final class QuestEditorModels {
     public static final class PackMeta {
         public String description = "";
         public String iconPath = "";
+        public String layout = "list";
         public boolean enabled = true;
     }
 
@@ -261,6 +274,9 @@ public final class QuestEditorModels {
         public String type = "";
         public String completionJson = "";
         public String rewardJson = "";
+        public String treeX = "";
+        public String treeY = "";
+        public String treeBackground = "square";
     }
 
     // index name
@@ -457,6 +473,8 @@ public final class QuestEditorModels {
         public String packIconPath = "";
 
         public String packDescription = "";
+
+        public boolean packTreeLayout = false;
 
         public String catId = "";
 

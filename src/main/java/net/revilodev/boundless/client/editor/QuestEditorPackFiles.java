@@ -118,7 +118,7 @@ public final class QuestEditorPackFiles {
                     String name = path.getFileName().toString();
                     if (!isVisibleQuestPackDirectoryName(name)) continue;
                     String namespace = findNamespace(path);
-                    boolean enabled = readPackMeta(path, name).enabled;
+                    boolean enabled = Config.isQuestPackApplied(name, readPackMeta(path, name).enabled);
                     packs.add(new QuestPack(name, namespace, path, false, enabled));
                     seen.add(name);
                 }
@@ -234,6 +234,9 @@ public final class QuestEditorPackFiles {
             if (boundless != null && boundless.has("icon_path") && boundless.get("icon_path").isJsonPrimitive()) {
                 meta.iconPath = safe(boundless.get("icon_path").getAsString());
             }
+            if (boundless != null && boundless.has("layout") && boundless.get("layout").isJsonPrimitive()) {
+                meta.layout = normalizeLayout(boundless.get("layout").getAsString());
+            }
             if (boundless != null && boundless.has("enabled")) {
                 JsonElement enabled = boundless.get("enabled");
                 if (enabled != null && enabled.isJsonPrimitive()) {
@@ -256,7 +259,7 @@ public final class QuestEditorPackFiles {
         if (pack == null || pack.root == null) return false;
         try {
             PackMeta meta = readPackMeta(pack.root, pack.name);
-            writePackMeta(pack.root, pack.name, safe(meta.description), safe(meta.iconPath), enabled);
+            writePackMeta(pack.root, pack.name, safe(meta.description), safe(meta.iconPath), meta.layout, enabled);
             QuestPackStorage.snapshotQuestPack(pack.root, pack.name, "enabled");
             return true;
         } catch (Exception ignored) {
@@ -367,7 +370,7 @@ public final class QuestEditorPackFiles {
     }
 
     // write pack meta
-    public static void writePackMeta(Path root, String name, String description, String iconPath, boolean enabled) throws IOException {
+    public static void writePackMeta(Path root, String name, String description, String iconPath, String layout, boolean enabled) throws IOException {
         JsonObject pack = new JsonObject();
         JsonObject body = new JsonObject();
         body.addProperty("pack_format", 0);
@@ -377,11 +380,16 @@ public final class QuestEditorPackFiles {
         if (iconPath != null && !iconPath.isBlank()) {
             boundless.addProperty("icon_path", iconPath);
         }
+        boundless.addProperty("layout", normalizeLayout(layout));
         boundless.addProperty("enabled", enabled);
         pack.add("boundless", boundless);
 
         Path meta = packMetaPath(root);
         QuestPackStorage.writeJsonAtomically(GSON, pack, meta);
+    }
+
+    public static String normalizeLayout(String raw) {
+        return "tree".equalsIgnoreCase(safe(raw).trim()) ? "tree" : "list";
     }
 
     // create questpack backup
@@ -566,9 +574,9 @@ public final class QuestEditorPackFiles {
         if (allowTags && id.startsWith("#")) {
             String rest = id.substring(1).trim();
             if (rest.isBlank()) return "";
-            return rest.contains(":") ? "#" + rest : "#minecraft:" + rest;
+            return "#" + rest;
         }
-        return id.contains(":") ? id : "minecraft:" + id;
+        return id;
     }
 
     private static String safe(String value) {

@@ -112,6 +112,8 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
     private ConfigRow uiEnableSearchBoxRow;
+    private ConfigRow uiStickySubCategoryHeadersRow;
+    private ConfigRow uiStickyDescriptionHeadersRow;
     private ConfigRow uiEnableDescriptionColorsRow;
     private ConfigRow uiQuestWidgetTextColorRow;
     private ConfigRow uiDescriptionTextColorRow;
@@ -175,6 +177,8 @@ public final class QuestSettingsScreen extends Screen {
     private double questTextScale;
     private double questIconScale;
     private boolean enableQuestSearchBox;
+    private boolean stickySubCategoryHeaders;
+    private boolean stickyDescriptionHeaders;
     private boolean enableDescriptionColors;
     private String questWidgetTextColor;
     private String descriptionTextColor;
@@ -309,6 +313,14 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.search_widget.subtitle"),
                 () -> trs(enableQuestSearchBox ? "state.on" : "state.off"),
                 () -> enableQuestSearchBox = !enableQuestSearchBox);
+        uiStickySubCategoryHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Sticky sub-category headers",
+                "Keep the active sub-category heading visible while scrolling.",
+                () -> trs(stickySubCategoryHeaders ? "state.on" : "state.off"),
+                () -> stickySubCategoryHeaders = !stickySubCategoryHeaders);
+        uiStickyDescriptionHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Sticky description headers",
+                "Keep the quest title visible above long descriptions.",
+                () -> trs(stickyDescriptionHeaders ? "state.on" : "state.off"),
+                () -> stickyDescriptionHeaders = !stickyDescriptionHeaders);
         uiEnableDescriptionColorsRow = new ConfigRow(px, uiEnableDescriptionColorsBaseY, pw, trs("row.text_coloring"),
                 trs("row.text_coloring.subtitle"),
                 () -> trs(enableDescriptionColors ? "state.on" : "state.off"),
@@ -379,6 +391,8 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiFilterDisplayRow, ConfigTab.UI);
         addConfigRow(uiDisableCategoriesRow, ConfigTab.UI);
         addConfigRow(uiEnableSearchBoxRow, ConfigTab.UI);
+        addConfigRow(uiStickySubCategoryHeadersRow, ConfigTab.STYLE);
+        addConfigRow(uiStickyDescriptionHeadersRow, ConfigTab.STYLE);
 
         addConfigRow(uiEnableQuestToastsRow, ConfigTab.FEATURES);
         addConfigRow(functionalityDisablePinningRow, ConfigTab.FEATURES);
@@ -407,6 +421,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void configureColorField(EditBox field, boolean widgetColor) {
         field.setMaxLength(7);
+        field.setEditable(true);
         field.setFilter(value -> value.matches("#?[0-9a-fA-F]{0,6}"));
         field.setResponder(value -> {
             if (widgetColor) questWidgetTextColor = value;
@@ -557,6 +572,8 @@ public final class QuestSettingsScreen extends Screen {
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
         enableQuestSearchBox = Config.enableQuestSearchBox();
+        stickySubCategoryHeaders = Config.stickySubCategoryHeaders();
+        stickyDescriptionHeaders = Config.stickyDescriptionHeaders();
         enableDescriptionColors = Config.enableDescriptionColors();
         questWidgetTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor());
         descriptionTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor());
@@ -680,6 +697,8 @@ public final class QuestSettingsScreen extends Screen {
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
+        Config.STICKY_SUBCATEGORY_HEADERS.set(stickySubCategoryHeaders);
+        Config.STICKY_DESCRIPTION_HEADERS.set(stickyDescriptionHeaders);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
         Config.QUEST_WIDGET_TEXT_COLOR.set(normalizeThemeColor(questWidgetTextColor, "FFFFFF"));
         Config.DESCRIPTION_TEXT_COLOR.set(normalizeThemeColor(descriptionTextColor, "CFCFCF"));
@@ -760,6 +779,8 @@ public final class QuestSettingsScreen extends Screen {
             enableDescriptionTextWrapping = true;
             descriptionTextAlignment = "left";
             hideCategoryHeader = false;
+            stickySubCategoryHeaders = true;
+            stickyDescriptionHeaders = true;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
             enableQuestToasts = true;
@@ -1075,6 +1096,18 @@ public final class QuestSettingsScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (page == Page.CONFIG && button == 0) {
+            if (questWidgetTextColorField != null && questWidgetTextColorField.visible
+                    && questWidgetTextColorField.isMouseOver(mouseX, mouseY)) {
+                questWidgetTextColorField.setFocused(true);
+                setFocused(questWidgetTextColorField);
+                return true;
+            }
+            if (descriptionTextColorField != null && descriptionTextColorField.visible
+                    && descriptionTextColorField.isMouseOver(mouseX, mouseY)) {
+                descriptionTextColorField.setFocused(true);
+                setFocused(descriptionTextColorField);
+                return true;
+            }
             if (backButton != null && backButton.visible && backButton.active && backButton.isMouseOver(mouseX, mouseY)) {
                 backButton.onPress();
                 return true;

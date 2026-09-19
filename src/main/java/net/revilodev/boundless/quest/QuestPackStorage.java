@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -24,6 +25,8 @@ public final class QuestPackStorage {
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS", Locale.ROOT);
 
     private QuestPackStorage() {}
+
+    public record Snapshot(Path path, LocalDateTime createdAt, String reason) {}
 
     public static void writeJsonAtomically(Gson gson, JsonElement element, Path target) throws IOException {
         if (gson == null) throw new IOException("Gson unavailable");
@@ -66,6 +69,47 @@ public final class QuestPackStorage {
         Path snapshotRoot = packBackupRoot.resolve(name);
         copyDirectory(packRoot, snapshotRoot);
         pruneSnapshots(packBackupRoot);
+    }
+
+    public static List<Path> listSnapshots(String packName) throws IOException {
+        Path root = packBackupRoot(packName);
+        if (!Files.isDirectory(root)) return List.of();
+        try (var stream = Files.list(root)) {
+            return stream.filter(Files::isDirectory)
+                    .filter(path -> !path.getFileName().toString().startsWith("_"))
+                    .sorted(Comparator.comparing((Path path) -> path.getFileName().toString()).reversed())
+                    .toList();
+        }
+    }
+
+    public static List<Snapshot> listSnapshotDetails(String packName) throws IOException {
+        List<Snapshot> snapshots = new ArrayList<>();
+        for (Path path : listSnapshots(packName)) {
+            String folderName = path.getFileName() == null ? "" : path.getFileName().toString();
+            LocalDateTime createdAt = snapshotTimestamp(path, folderName);
+            String reason = folderName.length() > 20 ? folderName.substring(20).replace('_', ' ') : "backup";
+            snapshots.add(new Snapshot(path, createdAt, reason));
+        }
+        return List.copyOf(snapshots);
+    }
+
+    public static void restoreSnapshot(Path liveRoot, String packName, Path snapshotRoot) throws IOException {
+        if (liveRoot == null || packName == null || packName.isBlank() || snapshotRoot == null || !Files.isDirectory(snapshotRoot)) {
+            throw new IOException("Questpack backup is missing");
+        }
+        Path backupRoot = packBackupRoot(packName).toAbsolutePath().normalize();
+        Path snapshot = snapshotRoot.toAbsolutePath().normalize();
+        if (!snapshot.startsWith(backupRoot)) throw new IOException("Invalid questpack backup");
+
+        Path staged = liveRoot.resolveSibling("." + sanitizeSegment(packName) + ".restore");
+        deleteDirectory(staged);
+        try {
+            copyDirectory(snapshot, staged);
+            replaceDirectoryWithArchive(liveRoot, staged, packName, "restored");
+        } catch (IOException failure) {
+            if (Files.exists(staged)) deleteDirectory(staged);
+            throw failure;
+        }
     }
 
     public static void archiveReplacedFile(Path packRoot, String packName, Path original, String reason) throws IOException {
@@ -152,6 +196,20 @@ public final class QuestPackStorage {
 
     private static String timestamp() {
         return BACKUP_TIMESTAMP.format(LocalDateTime.now());
+    }
+
+    private static LocalDateTime snapshotTimestamp(Path path, String folderName) {
+        try {
+            if (folderName.length() >= 19) {
+                return LocalDateTime.parse(folderName.substring(0, 19), BACKUP_TIMESTAMP);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDateTime.ofInstant(Files.getLastModifiedTime(path).toInstant(), ZoneId.systemDefault());
+        } catch (IOException ignored) {
+            return LocalDateTime.now();
+        }
     }
 
     private static String sanitizeSegment(String value) {

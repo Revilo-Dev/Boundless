@@ -446,7 +446,7 @@ public final class QuestTracker {
 
     public static boolean isVisible(QuestData.Quest q, Player player) {
         if (q == null || player == null) return false;
-        if (Config.disabledCategories().contains(q.category)) return false;
+        if (Config.isCategoryDisabled(q.category)) return false;
         if (q.hiddenUnderDependency && !q.dependencies.isEmpty() && !dependenciesMet(q, player)) return false;
         Status st = getStatus(q, player);
         if (st == Status.REJECTED) return false;
@@ -730,7 +730,7 @@ public final class QuestTracker {
         for (int processed = 0; processed < batch; processed++) {
             QuestData.Quest quest = quests.get((start + processed) % total);
             if (quest == null || quest.completion == null || quest.completion.targets == null) continue;
-            if (Config.disabledCategories().contains(quest.category)) continue;
+            if (Config.isCategoryDisabled(quest.category)) continue;
 
             Status status = getServerStatus(player, quest.id);
             if (status == Status.REDEEMED || status == Status.REJECTED) continue;
@@ -1530,7 +1530,7 @@ public final class QuestTracker {
             for (int processed = 0; processed < batch; processed++) {
                 QuestData.Quest q = quests.get((start + processed) % total);
                 if (q == null || !questNeedsEvaluationForMask(q, dirtyMask)) continue;
-                if (Config.disabledCategories().contains(q.category)) continue;
+                if (Config.isCategoryDisabled(q.category)) continue;
 
                 Status cur = getServerStatus(sp, q.id);
                 if (cur == Status.REDEEMED || cur == Status.REJECTED) continue;

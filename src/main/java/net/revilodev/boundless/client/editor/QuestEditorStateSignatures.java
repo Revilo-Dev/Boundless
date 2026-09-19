@@ -12,7 +12,8 @@ public final class QuestEditorStateSignatures {
         if (fields == null) fields = new SignatureFields();
         return switch (editorType) {
             case PACK_CREATE -> "pack|" + safe(fields.packName)
-                    + "|" + safe(fields.packNamespace);
+                    + "|" + safe(fields.packNamespace)
+                    + "|" + fields.packTreeLayout;
             case PACK_OPTIONS -> "pack-options|" + safe(fields.packName)
                     + "|" + safe(fields.packIconPath)
                     + "|" + safe(fields.packDescription);
@@ -56,6 +57,7 @@ public final class QuestEditorStateSignatures {
         public String packNamespace = "";
         public String packIconPath = "";
         public String packDescription = "";
+        public boolean packTreeLayout;
         public String categoryId = "";
         public String categoryName = "";
         public String categoryIcon = "";

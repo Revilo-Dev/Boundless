@@ -64,6 +64,7 @@ public final class BoundlessNetwork {
     // redemption guard blocks duplicate clicks before a server reply
     private static final Set<String> REDEEM_IN_FLIGHT = ConcurrentHashMap.newKeySet();
     private static final ConcurrentHashMap<String, QuestPackUploadSession> QUESTPACK_UPLOADS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Object> QUESTPACK_UPLOAD_LOCKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<java.util.UUID, ObjectiveProgressSnapshot> LAST_OBJECTIVE_SYNC = new ConcurrentHashMap<>();
 
     // sync ids join large quest snapshots sent in chunks
@@ -1055,6 +1056,9 @@ public final class BoundlessNetwork {
             if (q.sourcePath != null && !q.sourcePath.isBlank()) {
                 o.addProperty("sourcePath", q.sourcePath);
             }
+            if (q.treeX >= 0) o.addProperty("treeX", q.treeX);
+            if (q.treeY >= 0) o.addProperty("treeY", q.treeY);
+            o.addProperty("treeBackground", q.treeBackground);
 
             qs.add(o);
         }
@@ -1302,10 +1306,18 @@ public final class BoundlessNetwork {
             QUESTPACK_UPLOADS.remove(key);
             byte[] zipBytes = session.join();
             try {
-                writeUploadedQuestPack(id, zipBytes);
-                Config.setQuestPackApplied(id, session.enabled);
-                reloadAndSyncAll(sp);
+                Object uploadLock = QUESTPACK_UPLOAD_LOCKS.computeIfAbsent(id, ignored -> new Object());
+                synchronized (uploadLock) {
+                    writeUploadedQuestPack(id, zipBytes);
+                    Config.setQuestPackApplied(id, session.enabled);
+                    reloadAndSyncAll(sp);
+                }
             } catch (IOException ignored) {
+                QuestPackStorage.recoverStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
+                if (Files.isDirectory(INSTANCE_QUEST_PACKS_ROOT.resolve(id))) {
+                    Config.setQuestPackApplied(id, session.enabled);
+                    reloadAndSyncAll(sp);
+                }
             }
         });
     }

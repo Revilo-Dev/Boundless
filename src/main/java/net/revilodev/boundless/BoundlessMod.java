@@ -52,6 +52,7 @@ public final class BoundlessMod {
         if (net.neoforged.fml.loading.FMLEnvironment.dist == Dist.CLIENT) {
             modBus.addListener(this::clientSetup);
             modBus.addListener(QuestBookKeybinds::onRegisterKeyMappings);
+            modBus.addListener(ClientQuestEvents::onRegisterClientReloadListeners);
             NeoForge.EVENT_BUS.addListener(QuestBookKeybinds::onClientTick);
         }
         BoundlessNetwork.bootstrap(modBus);

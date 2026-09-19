@@ -73,6 +73,9 @@ public final class QuestData {
         public final String category;
         public final String subCategory;
         public final String sourcePath;
+        public final int treeX;
+        public final int treeY;
+        public final String treeBackground;
 
         public Quest(String id, String name, String icon, String description,
                      List<String> dependencies, boolean lockAfterDependency, boolean optional, boolean repeatable,
@@ -80,6 +83,15 @@ public final class QuestData {
                      boolean hiddenUnderDependency, Rewards rewards,
                      String type, Completion completion, String category,
                      String subCategory, String sourcePath) {
+            this(id, name, icon, description, dependencies, lockAfterDependency, optional, repeatable, autoComplete,
+                    hiddenUnderDependency, rewards, type, completion, category, subCategory, sourcePath, -1, -1, "square");
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     List<String> dependencies, boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground) {
 
             this.id = Objects.requireNonNull(id);
             this.name = name == null ? id : name;
@@ -97,6 +109,17 @@ public final class QuestData {
             this.category = (category == null || category.isBlank()) ? "misc" : category;
             this.subCategory = subCategory == null ? "" : subCategory;
             this.sourcePath = sourcePath == null ? "" : sourcePath;
+            this.treeX = treeX;
+            this.treeY = treeY;
+            this.treeBackground = normalizeTreeBackground(treeBackground);
+        }
+
+        private static String normalizeTreeBackground(String raw) {
+            String value = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+            return switch (value) {
+                case "circle", "diamond", "rounded_square", "square" -> value;
+                default -> "square";
+            };
         }
 
         public Optional<Item> iconItem() {
@@ -387,7 +410,7 @@ public final class QuestData {
     }
 
     private static boolean isQuestDisabled(Quest q) {
-        return Config.disabledCategories().contains(q.category);
+        return Config.isCategoryDisabled(q.category);
     }
 
     private static boolean isBuiltinQuestNamespace(String namespace) {
@@ -1071,10 +1094,13 @@ public final class QuestData {
         if (subCategory == null) subCategory = optString(obj, "subCategory");
 
         String sourcePath = src == null ? "" : src.getPath();
+        int treeX = parseIntFlexible(obj, "tree_x", -1);
+        int treeY = parseIntFlexible(obj, "tree_y", -1);
+        String treeBackground = optString(obj, "tree_background");
 
         return new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                 rewards, type, completion,
-                category, subCategory, sourcePath);
+                category, subCategory, sourcePath, treeX, treeY, treeBackground);
     }
 
     private static List<String> parseDependencies(JsonObject obj) {
@@ -1839,10 +1865,13 @@ public final class QuestData {
                     String category = optString(o, "category");
                     String subCategory = optString(o, "subCategory");
                     String sourcePath = optString(o, "sourcePath");
+                    int treeX = parseIntFlexible(o, "treeX", -1);
+                    int treeY = parseIntFlexible(o, "treeY", -1);
+                    String treeBackground = optString(o, "treeBackground");
 
                     Quest q = new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                             rewards, type, completion,
-                            category, subCategory, sourcePath);
+                            category, subCategory, sourcePath, treeX, treeY, treeBackground);
                     if (!isQuestDisabled(q)) QUESTS.put(q.id, q);
                 }
             }

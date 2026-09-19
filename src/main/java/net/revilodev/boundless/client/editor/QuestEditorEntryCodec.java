@@ -1364,11 +1364,11 @@ public final class QuestEditorEntryCodec {
 
             if (rest.isBlank()) return "";
 
-            return rest.contains(":") ? "#" + rest : "#minecraft:" + rest;
+            return "#" + rest;
 
         }
 
-        return id.contains(":") ? id : "minecraft:" + id;
+        return id;
 
     }
 

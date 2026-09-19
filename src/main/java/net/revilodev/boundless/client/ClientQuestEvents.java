@@ -2,12 +2,31 @@
 package net.revilodev.boundless.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
 
 public final class ClientQuestEvents {
+
+    public static void onRegisterClientReloadListeners(RegisterClientReloadListenersEvent event) {
+        event.registerReloadListener(new SimplePreparableReloadListener<Void>() {
+            @Override
+            protected Void prepare(ResourceManager resourceManager, ProfilerFiller profiler) {
+                return null;
+            }
+
+            @Override
+            protected void apply(Void ignored, ResourceManager resourceManager, ProfilerFiller profiler) {
+                QuestData.loadClient(true);
+                QuestPanelClient.applyConfigChanges();
+            }
+        });
+    }
 
     // load quest data when the player joins
     public static void onClientLogin(ClientPlayerNetworkEvent.LoggingIn e) {
@@ -34,4 +53,3 @@ public final class ClientQuestEvents {
         QuestTracker.setClientMultiplayer(false);
     }
 }
-

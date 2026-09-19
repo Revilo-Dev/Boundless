@@ -101,7 +101,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
             if ("all".equalsIgnoreCase(c.id)) continue;
 
             // skip categories disabled in the config
-            if (Config.disabledCategories().contains(c.id)) continue;
+            if (Config.isCategoryDisabled(c.id)) continue;
 
             categories.add(c);
         }

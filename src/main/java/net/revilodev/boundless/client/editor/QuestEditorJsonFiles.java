@@ -189,6 +189,9 @@ public final class QuestEditorJsonFiles {
         data.type = optString(obj, "type", "");
         data.completionJson = obj.has("completion") ? GSON.toJson(obj.get("completion")) : "";
         data.rewardJson = obj.has("reward") ? GSON.toJson(obj.get("reward")) : "";
+        data.treeX = optStringFlexible(obj, "tree_x", "");
+        data.treeY = optStringFlexible(obj, "tree_y", "");
+        data.treeBackground = optString(obj, "tree_background", "square");
         return data;
     }
 
