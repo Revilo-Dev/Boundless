@@ -27,6 +27,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.client.QuestBookKeybinds;
 import net.revilodev.boundless.client.ClientQuestEvents;
 import net.revilodev.boundless.client.QuestPanelClient;
+import net.revilodev.boundless.compat.AuraCompat;
 import net.revilodev.boundless.command.BoundlessCommands;
 import net.revilodev.boundless.item.ModItems;
 import net.revilodev.boundless.network.BoundlessNetwork;
@@ -61,6 +62,7 @@ public final class BoundlessMod {
         NeoForge.EVENT_BUS.addListener(ServerQuestEvents::onChangedDimension);
         NeoForge.EVENT_BUS.addListener(ServerQuestEvents::onRespawn);
         NeoForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.ServerQuestTicker::onPlayerTick);
+        NeoForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.QuestPackBackupTicker::onServerTick);
 
     }
 
@@ -69,6 +71,7 @@ public final class BoundlessMod {
     }
 
     private void clientSetup(final FMLClientSetupEvent event) {
+        AuraCompat.register();
         NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenInit);
         NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenClosing);
         NeoForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
@@ -123,9 +126,9 @@ public final class BoundlessMod {
     @SubscribeEvent
     public void onDatapackSync(OnDatapackSyncEvent event) {
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
-        QuestData.loadServer(event.getPlayerList().getServer(), true);
         List<ServerPlayer> players = event.getRelevantPlayers().toList();
-        players.forEach(BoundlessNetwork::syncPlayer);
+        // this shares one rebuilt snapshot with the players being synced
+        BoundlessNetwork.reloadAndSync(event.getPlayerList().getServer(), players);
         if (startedAt != 0L) {
             BoundlessDebug.rateLimited("datapack-sync", 2_000L,
                     "players={}, elapsed={}ms", players.size(), (System.nanoTime() - startedAt) / 1_000_000L);

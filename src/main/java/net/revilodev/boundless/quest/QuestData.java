@@ -5,9 +5,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.PackResources;
-import net.minecraft.server.packs.resources.IoSupplier;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.GsonHelper;
@@ -20,7 +17,6 @@ import net.revilodev.boundless.BoundlessDebug;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -42,18 +38,29 @@ public final class QuestData {
     private static final Path INSTANCE_QUEST_PACKS_ROOT =
             FMLPaths.GAMEDIR.get().resolve("config").resolve("boundless").resolve("questpacks");
 
-    // loaded quest definitions
-    private static final Map<String, Quest> QUESTS = new LinkedHashMap<>();
-    private static final Map<String, Category> CATEGORIES = new LinkedHashMap<>();
-    private static final Map<String, SubCategory> SUBCATEGORIES = new LinkedHashMap<>();
-    private static final Collection<Quest> QUESTS_VIEW = Collections.unmodifiableCollection(QUESTS.values());
-    private static boolean loadedClient = false;
-    private static boolean loadedServer = false;
+    private static final DataStore CLIENT_DATA = new DataStore();
+    private static final DataStore SERVER_DATA = new DataStore();
 
-    // Keep client and server cache identities separate. A multiplayer client has no
-    // local world id (null), which is still a valid cache key for server-synced data.
-    private static String lastClientWorldId = null;
-    private static String lastServerWorldId = null;
+    // this keeps client and server quest data from replacing each other
+    private static final class DataStore {
+        final Map<String, Quest> quests = new LinkedHashMap<>();
+        final Map<String, Category> categories = new LinkedHashMap<>();
+        final Map<String, SubCategory> subCategories = new LinkedHashMap<>();
+        final Collection<Quest> questView = Collections.unmodifiableCollection(quests.values());
+        boolean loaded;
+        String worldId;
+
+        void clear() {
+            quests.clear();
+            categories.clear();
+            subCategories.clear();
+        }
+    }
+
+    public record NetworkSnapshot(
+            Map<String, Quest> quests,
+            Map<String, Category> categories,
+            Map<String, SubCategory> subCategories) {}
 
     // immutable quest definition
     public static final class Quest {
@@ -445,18 +452,16 @@ public final class QuestData {
 
     public static void forceReloadAll(MinecraftServer server) {
         // Reload both resource-pack data and instance-local quest packs.
-        loadedClient = false;
-        loadedServer = false;
-        lastClientWorldId = null;
-        lastServerWorldId = null;
+        CLIENT_DATA.loaded = false;
+        SERVER_DATA.loaded = false;
+        CLIENT_DATA.worldId = null;
+        SERVER_DATA.worldId = null;
         loadServer(server, true);
     }
 
-    private static synchronized void load(ResourceManager rm, boolean forceReload) {
+    private static synchronized void load(ResourceManager rm, boolean forceReload, DataStore data) {
         // The maps are rebuilt together so categories never point at stale quests.
-        QUESTS.clear();
-        CATEGORIES.clear();
-        SUBCATEGORIES.clear();
+        data.clear();
 
         Map<ResourceLocation, List<Resource>> catStacks =
                 rm.listResourceStacks(PATH_CATEGORIES, rl -> rl.getPath().endsWith(".json"));
@@ -482,14 +487,17 @@ public final class QuestData {
                 boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                         parseBoolFlexible(obj, "autoComplete", false));
 
-                CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
-            } catch (Exception ignored) {}
+                data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
+            } catch (Exception e) {
+                BoundlessDebug.warnRateLimited("category-parse:" + entry.getKey(), 5_000L,
+                        "could not parse category {}", entry.getKey(), e);
+            }
         }
 
-        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORIES);
-        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORIES_ALT);
-        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORY);
-        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORY_ALT);
+        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORIES, data);
+        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORIES_ALT, data);
+        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORY, data);
+        loadSubCategoriesFromManager(rm, PATH_SUBCATEGORY_ALT, data);
 
         Map<ResourceLocation, List<Resource>> questStacks =
                 rm.listResourceStacks(PATH_QUESTS, rl -> rl.getPath().endsWith(".json"));
@@ -511,32 +519,39 @@ public final class QuestData {
                 if (obj == null) continue;
 
                 Quest q = parseQuestObject(obj, loc);
-                if (q != null && !isQuestDisabled(q)) QUESTS.put(q.id, q);
-            } catch (Exception ignored) {}
+                if (q != null && !isQuestDisabled(q)) data.quests.put(q.id, q);
+            } catch (Exception e) {
+                BoundlessDebug.warnRateLimited("quest-parse:" + loc, 5_000L,
+                        "could not parse quest {}", loc, e);
+            }
         }
 
-        loadModQuestPacksFromInstance();
+        loadModQuestPacksFromInstance(data);
 
-        ensureSubCategoriesFromQuests();
+        ensureSubCategoriesFromQuests(data);
 
-        if (!CATEGORIES.containsKey("all")) {
-            CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
+        if (!data.categories.containsKey("all")) {
+            data.categories.put("all", new Category("all", "minecraft:book", "All",
                     Integer.MIN_VALUE, false, "", false));
         }
     }
 
-    private static void loadModQuestPacksFromInstance() {
+    private static void loadModQuestPacksFromInstance(DataStore data) {
         // Instance packs are regular folders under the game's config directory.
         if (!Files.isDirectory(INSTANCE_QUEST_PACKS_ROOT)) return;
-        QuestPackStorage.recoverStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
+        QuestPackStorage.cleanupStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
 
         try (DirectoryStream<Path> packs = Files.newDirectoryStream(INSTANCE_QUEST_PACKS_ROOT)) {
             for (Path packRoot : packs) {
                 if (!Files.isDirectory(packRoot)) continue;
+                String folderName = packRoot.getFileName() == null ? "" : packRoot.getFileName().toString();
+                if (!QuestPackStorage.isQuestPackDirectoryName(folderName)) continue;
                 if (!isInstancePackEnabled(packRoot)) continue;
-                loadModQuestPackData(packRoot);
+                loadModQuestPackData(packRoot, data);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            BoundlessDebug.warnRateLimited("questpack-load", 5_000L,
+                    "could not scan questpacks in {}", INSTANCE_QUEST_PACKS_ROOT, e);
         }
     }
 
@@ -571,21 +586,23 @@ public final class QuestData {
         }
     }
 
-    private static void loadModQuestPackData(Path packRoot) {
+    private static void loadModQuestPackData(Path packRoot, DataStore data) {
         Path dataRoot = packRoot.resolve("data");
         if (!Files.isDirectory(dataRoot)) {
             String namespace = namespaceFromPackRoot(packRoot);
             Path directQuestsRoot = packRoot.resolve("quests");
             if (Files.isDirectory(directQuestsRoot)) {
-                loadQuestNamespace(directQuestsRoot, namespace);
+                loadQuestNamespace(directQuestsRoot, namespace, data);
             }
             try (DirectoryStream<Path> namespaces = Files.newDirectoryStream(packRoot)) {
                 for (Path namespaceDir : namespaces) {
                     if (!Files.isDirectory(namespaceDir)) continue;
                     if (!Files.isDirectory(namespaceDir.resolve("quests"))) continue;
-                    loadQuestNamespace(namespaceDir.resolve("quests"), normalizeNamespace(namespaceDir.getFileName().toString()));
+                    loadQuestNamespace(namespaceDir.resolve("quests"), normalizeNamespace(namespaceDir.getFileName().toString()), data);
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                BoundlessDebug.warnRateLimited("questpack-data:" + packRoot.getFileName(), 5_000L,
+                        "could not load questpack data from {}", packRoot, e);
             }
             return;
         }
@@ -594,27 +611,28 @@ public final class QuestData {
             for (Path namespaceDir : namespaces) {
                 if (!Files.isDirectory(namespaceDir)) continue;
                 String ns = namespaceDir.getFileName() == null ? "" : normalizeNamespace(namespaceDir.getFileName().toString());
-                if (shouldSkipNamespace(ns)) continue;
 
                 Path questsRoot = namespaceDir.resolve("quests");
                 if (!Files.isDirectory(questsRoot)) continue;
 
-                loadQuestNamespace(questsRoot, ns);
+                loadQuestNamespace(questsRoot, ns, data);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            BoundlessDebug.warnRateLimited("questpack-data:" + packRoot.getFileName(), 5_000L,
+                    "could not load questpack data from {}", packRoot, e);
         }
     }
 
-    private static void loadQuestNamespace(Path questsRoot, String namespace) {
+    private static void loadQuestNamespace(Path questsRoot, String namespace, DataStore data) {
         if (!Files.isDirectory(questsRoot)) return;
         String ns = normalizeNamespace(namespace);
-        if (shouldSkipNamespace(ns)) return;
-        loadCategoriesFromPath(questsRoot.resolve("categories"), ns);
-        loadSubCategoriesFromPath(questsRoot.resolve("subcategories"), ns);
-        loadSubCategoriesFromPath(questsRoot.resolve("sub_category"), ns);
-        loadSubCategoriesFromPath(questsRoot.resolve("subcategory"), ns);
-        loadSubCategoriesFromPath(questsRoot.resolve("sub-category"), ns);
-        loadQuestsFromPath(questsRoot, ns);
+        // instance packs may use the boundless namespace without being built in data
+        loadCategoriesFromPath(questsRoot.resolve("categories"), ns, data);
+        loadSubCategoriesFromPath(questsRoot.resolve("subcategories"), ns, data);
+        loadSubCategoriesFromPath(questsRoot.resolve("sub_category"), ns, data);
+        loadSubCategoriesFromPath(questsRoot.resolve("subcategory"), ns, data);
+        loadSubCategoriesFromPath(questsRoot.resolve("sub-category"), ns, data);
+        loadQuestsFromPath(questsRoot, ns, data);
     }
 
     private static String namespaceFromPackRoot(Path packRoot) {
@@ -636,7 +654,7 @@ public final class QuestData {
         return out.isEmpty() ? "boundless_pack" : out.toString();
     }
 
-    private static void loadCategoriesFromPath(Path categoriesDir, String namespace) {
+    private static void loadCategoriesFromPath(Path categoriesDir, String namespace, DataStore data) {
         if (!Files.isDirectory(categoriesDir)) return;
         try (DirectoryStream<Path> files = Files.newDirectoryStream(categoriesDir, "*.json")) {
             for (Path file : files) {
@@ -652,15 +670,17 @@ public final class QuestData {
                     String dependency = optString(obj, "dependency");
                     boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                             parseBoolFlexible(obj, "autoComplete", false));
-                    CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
-                } catch (Exception ignored) {
+                    data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
+                } catch (Exception e) {
+                    BoundlessDebug.warnRateLimited("category-file:" + file, 5_000L,
+                            "could not parse category file {}", file, e);
                 }
             }
         } catch (Exception ignored) {
         }
     }
 
-    private static void loadSubCategoriesFromPath(Path subDir, String namespace) {
+    private static void loadSubCategoriesFromPath(Path subDir, String namespace, DataStore data) {
         if (!Files.isDirectory(subDir)) return;
         try (DirectoryStream<Path> files = Files.newDirectoryStream(subDir, "*.json")) {
             for (Path file : files) {
@@ -668,15 +688,17 @@ public final class QuestData {
                     JsonObject obj = safeObject(reader);
                     if (obj == null) continue;
                     String relPath = "quests/" + subDir.getFileName() + "/" + file.getFileName();
-                    readSubCategoryObject(obj, relPath);
-                } catch (Exception ignored) {
+                    readSubCategoryObject(obj, relPath, data);
+                } catch (Exception e) {
+                    BoundlessDebug.warnRateLimited("subcategory-file:" + file, 5_000L,
+                            "could not parse subcategory file {}", file, e);
                 }
             }
         } catch (Exception ignored) {
         }
     }
 
-    private static void loadQuestsFromPath(Path questsRoot, String namespace) {
+    private static void loadQuestsFromPath(Path questsRoot, String namespace, DataStore data) {
         if (!Files.isDirectory(questsRoot)) return;
         try (var stream = Files.walk(questsRoot)) {
             stream.filter(Files::isRegularFile)
@@ -692,42 +714,18 @@ public final class QuestData {
                                 JsonObject obj = safeObject(reader);
                                 if (obj == null) return;
                                 Quest q = parseQuestObject(obj, loc);
-                                if (q != null && !isQuestDisabled(q)) QUESTS.put(q.id, q);
+                                if (q != null && !isQuestDisabled(q)) data.quests.put(q.id, q);
                             }
-                        } catch (Exception ignored) {
+                        } catch (Exception e) {
+                            BoundlessDebug.warnRateLimited("quest-file:" + path, 5_000L,
+                                    "could not parse quest file {}", path, e);
                         }
                     });
         } catch (Exception ignored) {
         }
     }
 
-    private static int listDataCategoriesFromPack(PackResources res, String ns) {
-        final int[] count = {0};
-        res.listResources(PackType.SERVER_DATA, ns, PATH_CATEGORIES, (loc, supplier) -> {
-            if (!loc.getPath().endsWith(".json")) return;
-            try (Reader r = supplierToReader(supplier)) {
-                JsonObject obj = safeObject(r);
-                if (obj == null) return;
-
-                String id = optString(obj, "id");
-                if (id == null || id.isBlank()) return;
-
-                String icon = optString(obj, "icon");
-                String cname = optString(obj, "name");
-                int order = parseIntFlexible(obj, "order", 0);
-                boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
-                String dependency = optString(obj, "dependency");
-                boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
-                        parseBoolFlexible(obj, "autoComplete", false));
-
-                CATEGORIES.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
-                count[0]++;
-            } catch (Exception ignored) {}
-        });
-        return count[0];
-    }
-
-    private static void loadSubCategoriesFromManager(ResourceManager rm, String path) {
+    private static void loadSubCategoriesFromManager(ResourceManager rm, String path, DataStore data) {
         Map<ResourceLocation, List<Resource>> subStacks =
                 rm.listResourceStacks(path, rl -> rl.getPath().endsWith(".json"));
 
@@ -741,25 +739,15 @@ public final class QuestData {
             try (Reader raw = top.openAsReader(); Reader reader = new BufferedReader(raw)) {
                 JsonObject obj = safeObject(reader);
                 if (obj == null) continue;
-                readSubCategoryObject(obj, loc == null ? "" : loc.getPath());
-            } catch (Exception ignored) {}
+                readSubCategoryObject(obj, loc == null ? "" : loc.getPath(), data);
+            } catch (Exception e) {
+                BoundlessDebug.warnRateLimited("subcategory-parse:" + loc, 5_000L,
+                        "could not parse subcategory {}", loc, e);
+            }
         }
     }
 
-    private static int listDataSubCategoriesFromPack(PackResources res, String ns, String path) {
-        final int[] count = {0};
-        res.listResources(PackType.SERVER_DATA, ns, path, (loc, supplier) -> {
-            if (!loc.getPath().endsWith(".json")) return;
-            try (Reader r = supplierToReader(supplier)) {
-                JsonObject obj = safeObject(r);
-                if (obj == null) return;
-                if (readSubCategoryObject(obj, loc.getPath())) count[0]++;
-            } catch (Exception ignored) {}
-        });
-        return count[0];
-    }
-
-    private static boolean readSubCategoryObject(JsonObject obj, String sourcePath) {
+    private static boolean readSubCategoryObject(JsonObject obj, String sourcePath, DataStore data) {
         String id = optString(obj, "id");
         if (id == null || id.isBlank()) return false;
 
@@ -775,35 +763,12 @@ public final class QuestData {
         }
 
         String key = subKey(cat, id);
-        SUBCATEGORIES.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, List.of(), sourcePath));
+        data.subCategories.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, List.of(), sourcePath));
         return true;
     }
 
-    private static int listDataQuestsFromPack(PackResources res, String ns) {
-        final int[] count = {0};
-        res.listResources(PackType.SERVER_DATA, ns, PATH_QUESTS, (loc, supplier) -> {
-            if (!loc.getPath().endsWith(".json")) return;
-            String path = loc.getPath();
-            if (path.contains("/categories/")) return;
-            if (isSubCategoryPath(path)) return;
-            if (shouldIgnoreQuestJson(loc)) return;
-
-            try (Reader r = supplierToReader(supplier)) {
-                JsonObject obj = safeObject(r);
-                if (obj == null) return;
-
-                Quest q = parseQuestObject(obj, loc);
-                if (q != null && !isQuestDisabled(q)) {
-                    QUESTS.put(q.id, q);
-                    count[0]++;
-                }
-            } catch (Exception ignored) {}
-        });
-        return count[0];
-    }
-
-    private static void ensureSubCategoriesFromQuests() {
-        for (Quest q : QUESTS.values()) {
+    private static void ensureSubCategoriesFromQuests(DataStore data) {
+        for (Quest q : data.quests.values()) {
             if (q == null || q.subCategory == null || q.subCategory.isBlank()) continue;
 
             String cat = q.category;
@@ -811,17 +776,13 @@ public final class QuestData {
             String key = subKey(cat, subId);
 
             String wildcardKey = subKey("", subId);
-            if (!SUBCATEGORIES.containsKey(key) && !SUBCATEGORIES.containsKey(wildcardKey)) {
-                Category c = CATEGORIES.get(cat);
+            if (!data.subCategories.containsKey(key) && !data.subCategories.containsKey(wildcardKey)) {
+                Category c = data.categories.get(cat);
                 String icon = c != null ? c.icon : q.icon;
                 String name = prettifyId(subId);
-                SUBCATEGORIES.put(key, new SubCategory(subId, cat, icon, name, 0, true, List.of(), ""));
+                data.subCategories.put(key, new SubCategory(subId, cat, icon, name, 0, true, List.of(), ""));
             }
         }
-    }
-
-    private static Reader supplierToReader(IoSupplier<java.io.InputStream> supplier) throws IOException {
-        return new BufferedReader(new InputStreamReader(supplier.get(), StandardCharsets.UTF_8));
     }
 
     public static synchronized void loadClient(boolean forceReload) {
@@ -837,21 +798,20 @@ public final class QuestData {
             }
         } catch (Throwable ignored) {}
 
-        if (!forceReload && !QUESTS.isEmpty()
-                && Objects.equals(lastClientWorldId, worldId)
-                && loadedClient) {
+        if (!forceReload && Objects.equals(CLIENT_DATA.worldId, worldId)
+                && CLIENT_DATA.loaded) {
             return;
         }
 
-        lastClientWorldId = worldId;
+        CLIENT_DATA.worldId = worldId;
 
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         ResourceManager rm = mc.getResourceManager();
-        load(rm, forceReload);
-        loadedClient = true;
+        load(rm, forceReload, CLIENT_DATA);
+        CLIENT_DATA.loaded = true;
         if (startedAt != 0L) {
             BoundlessDebug.rateLimited("client-quest-load", 2_000L,
-                    "forceReload={}, quests={}, categories={}, elapsed={}ms", forceReload, QUESTS.size(), CATEGORIES.size(),
+                    "forceReload={}, quests={}, categories={}, elapsed={}ms", forceReload, CLIENT_DATA.quests.size(), CLIENT_DATA.categories.size(),
                     (System.nanoTime() - startedAt) / 1_000_000L);
         }
     }
@@ -864,50 +824,54 @@ public final class QuestData {
             worldId = server.getWorldData().getLevelName();
         }
 
-        if (!forceReload && !QUESTS.isEmpty()
-                && Objects.equals(lastServerWorldId, worldId)
-                && loadedServer) {
+        if (!forceReload && Objects.equals(SERVER_DATA.worldId, worldId)
+                && SERVER_DATA.loaded) {
             return;
         }
 
-        lastServerWorldId = worldId;
+        SERVER_DATA.worldId = worldId;
 
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
         ResourceManager rm = server.getServerResources().resourceManager();
-        load(rm, forceReload);
-        loadedServer = true;
+        load(rm, forceReload, SERVER_DATA);
+        SERVER_DATA.loaded = true;
         if (startedAt != 0L) {
             BoundlessDebug.rateLimited("server-quest-load", 2_000L,
-                    "world={}, forceReload={}, quests={}, categories={}, elapsed={}ms", worldId, forceReload, QUESTS.size(), CATEGORIES.size(),
+                    "world={}, forceReload={}, quests={}, categories={}, elapsed={}ms", worldId, forceReload, SERVER_DATA.quests.size(), SERVER_DATA.categories.size(),
                     (System.nanoTime() - startedAt) / 1_000_000L);
         }
     }
 
-    public static synchronized boolean isEmpty() { return QUESTS.isEmpty(); }
+    public static synchronized boolean isEmpty() { return CLIENT_DATA.quests.isEmpty(); }
 
     public static synchronized Collection<Quest> all() {
-        if (!loadedClient) loadClient(false);
-        return QUESTS_VIEW;
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        return CLIENT_DATA.questView;
     }
 
     public static synchronized Collection<Quest> allServer(MinecraftServer server) {
         loadServer(server, false);
-        return QUESTS_VIEW;
+        return SERVER_DATA.questView;
     }
 
     public static synchronized Optional<Quest> byId(String id) {
-        if (!loadedClient) loadClient(false);
-        return Optional.ofNullable(QUESTS.get(id));
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        return Optional.ofNullable(CLIENT_DATA.quests.get(id));
     }
 
     public static synchronized Optional<Quest> byIdServer(MinecraftServer server, String id) {
-        if (!loadedServer) loadServer(server, false);
-        return Optional.ofNullable(QUESTS.get(id));
+        if (!SERVER_DATA.loaded) loadServer(server, false);
+        return Optional.ofNullable(SERVER_DATA.quests.get(id));
     }
 
     public static synchronized Optional<Category> categoryById(String id) {
-        if (!loadedClient) loadClient(false);
-        return Optional.ofNullable(CATEGORIES.get(id));
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        return Optional.ofNullable(CLIENT_DATA.categories.get(id));
+    }
+
+    public static synchronized Optional<Category> categoryByIdServer(MinecraftServer server, String id) {
+        if (!SERVER_DATA.loaded) loadServer(server, false);
+        return Optional.ofNullable(SERVER_DATA.categories.get(id));
     }
 
     public static synchronized boolean isCategoryUnlocked(Category c, net.minecraft.world.entity.player.Player player) {
@@ -923,7 +887,7 @@ public final class QuestData {
     public static synchronized boolean includeQuestInAll(Quest q, net.minecraft.world.entity.player.Player player) {
         if (q == null) return false;
 
-        Category c = CATEGORIES.getOrDefault(q.category, null);
+        Category c = CLIENT_DATA.categories.getOrDefault(q.category, null);
         if (c == null) return true;
         if (c.excludeFromAll) return false;
 
@@ -931,14 +895,14 @@ public final class QuestData {
     }
 
     public static synchronized List<Category> categoriesOrdered() {
-        if (!loadedClient) loadClient(false);
+        if (!CLIENT_DATA.loaded) loadClient(false);
 
-        if (!CATEGORIES.containsKey("all")) {
-            CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
+        if (!CLIENT_DATA.categories.containsKey("all")) {
+            CLIENT_DATA.categories.put("all", new Category("all", "minecraft:book", "All",
                     Integer.MIN_VALUE, false, "", false));
         }
 
-        List<Category> list = new ArrayList<>(CATEGORIES.values());
+        List<Category> list = new ArrayList<>(CLIENT_DATA.categories.values());
         list.sort((a, b) -> {
             if ("all".equals(a.id)) return -1;
             if ("all".equals(b.id)) return 1;
@@ -953,12 +917,12 @@ public final class QuestData {
     public static synchronized List<Category> categoriesOrderedServer(MinecraftServer server) {
         loadServer(server, false);
 
-        if (!CATEGORIES.containsKey("all")) {
-            CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
+        if (!SERVER_DATA.categories.containsKey("all")) {
+            SERVER_DATA.categories.put("all", new Category("all", "minecraft:book", "All",
                     Integer.MIN_VALUE, false, "", false));
         }
 
-        List<Category> list = new ArrayList<>(CATEGORIES.values());
+        List<Category> list = new ArrayList<>(SERVER_DATA.categories.values());
         list.sort((a, b) -> {
             if ("all".equals(a.id)) return -1;
             if ("all".equals(b.id)) return 1;
@@ -971,26 +935,26 @@ public final class QuestData {
     }
 
     public static synchronized List<SubCategory> subCategoriesAllOrdered() {
-        if (!loadedClient) loadClient(false);
-        ensureSubCategoriesFromQuests();
-        return buildSubCategoryList(null);
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        ensureSubCategoriesFromQuests(CLIENT_DATA);
+        return buildSubCategoryList(null, CLIENT_DATA);
     }
 
     public static synchronized List<SubCategory> subCategoriesAllOrderedServer(MinecraftServer server) {
         loadServer(server, false);
-        ensureSubCategoriesFromQuests();
-        return buildSubCategoryList(null);
+        ensureSubCategoriesFromQuests(SERVER_DATA);
+        return buildSubCategoryList(null, SERVER_DATA);
     }
 
     public static synchronized List<SubCategory> subCategoriesForCategory(String categoryId) {
-        if (!loadedClient) loadClient(false);
-        ensureSubCategoriesFromQuests();
-        return buildSubCategoryList(categoryId);
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        ensureSubCategoriesFromQuests(CLIENT_DATA);
+        return buildSubCategoryList(categoryId, CLIENT_DATA);
     }
 
-    private static List<SubCategory> buildSubCategoryList(String categoryFilter) {
+    private static List<SubCategory> buildSubCategoryList(String categoryFilter, DataStore data) {
         Map<String, List<Quest>> grouped = new LinkedHashMap<>();
-        for (Quest q : QUESTS.values()) {
+        for (Quest q : data.quests.values()) {
             if (q == null || q.subCategory == null || q.subCategory.isBlank()) continue;
             if (categoryFilter != null && !q.category.equalsIgnoreCase(categoryFilter)) continue;
 
@@ -1006,8 +970,8 @@ public final class QuestData {
 
             qs.sort(Comparator.comparing(Quest::sourceSortKey));
 
-            SubCategory meta = SUBCATEGORIES.get(key);
-            if (meta == null) meta = SUBCATEGORIES.get(subKey("", qs.get(0).subCategory));
+            SubCategory meta = data.subCategories.get(key);
+            if (meta == null) meta = data.subCategories.get(subKey("", qs.get(0).subCategory));
             String cat = qs.get(0).category;
             String id = meta != null ? meta.id : qs.get(0).subCategory;
             String icon = meta != null ? meta.icon : qs.get(0).icon;
@@ -1605,18 +1569,15 @@ public final class QuestData {
         return out;
     }
 
-    public static synchronized void applyNetworkJson(String json) {
-        // Network data replaces the local client cache as one complete snapshot.
+    public static NetworkSnapshot parseNetworkJson(String json) {
+        // this parses large sync data away from the render thread
         long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
-        QUESTS.clear();
-        CATEGORIES.clear();
-        SUBCATEGORIES.clear();
+        DataStore parsed = new DataStore();
 
         try {
             JsonElement rootEl = GSON.fromJson(json, JsonElement.class);
             if (rootEl == null || !rootEl.isJsonObject()) {
-                loadedClient = false;
-                return;
+                throw new IllegalArgumentException("Quest sync root is invalid");
             }
 
             JsonObject root = rootEl.getAsJsonObject();
@@ -1637,7 +1598,7 @@ public final class QuestData {
                     boolean autoComplete = parseBoolFlexible(o, "auto_complete",
                             parseBoolFlexible(o, "autoComplete", false));
 
-                    CATEGORIES.put(id, new Category(id, icon, name, order, excludeFromAll, dependency, autoComplete));
+                    parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency, autoComplete));
                 }
             }
 
@@ -1668,7 +1629,7 @@ public final class QuestData {
                     }
 
                     String key = subKey(cat, id);
-                    SUBCATEGORIES.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, questIds, sourcePath));
+                    parsed.subCategories.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, questIds, sourcePath));
                 }
             }
 
@@ -1843,37 +1804,51 @@ public final class QuestData {
                     Quest q = new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                             rewards, type, completion,
                             category, subCategory, sourcePath);
-                    if (!isQuestDisabled(q)) QUESTS.put(q.id, q);
+                    if (!isQuestDisabled(q)) parsed.quests.put(q.id, q);
                 }
             }
 
-            if (!CATEGORIES.containsKey("all")) {
-                CATEGORIES.put("all", new Category("all", "minecraft:book", "All",
+            if (!parsed.categories.containsKey("all")) {
+                parsed.categories.put("all", new Category("all", "minecraft:book", "All",
                         Integer.MIN_VALUE, false, "", false));
             }
 
-            ensureSubCategoriesFromQuests();
-            loadedClient = true;
+            ensureSubCategoriesFromQuests(parsed);
             if (startedAt != 0L) {
                 BoundlessDebug.rateLimited("client-quest-parse", 2_000L,
-                        "bytes={}, quests={}, categories={}, elapsed={}ms", json == null ? 0 : json.length(), QUESTS.size(), CATEGORIES.size(),
+                        "bytes={}, quests={}, categories={}, elapsed={}ms", json == null ? 0 : json.length(), parsed.quests.size(), parsed.categories.size(),
                         (System.nanoTime() - startedAt) / 1_000_000L);
             }
+            return new NetworkSnapshot(
+                    Collections.unmodifiableMap(new LinkedHashMap<>(parsed.quests)),
+                    Collections.unmodifiableMap(new LinkedHashMap<>(parsed.categories)),
+                    Collections.unmodifiableMap(new LinkedHashMap<>(parsed.subCategories)));
         } catch (Exception e) {
-            QUESTS.clear();
-            CATEGORIES.clear();
-            SUBCATEGORIES.clear();
-            loadedClient = false;
+            throw new IllegalArgumentException("Could not parse synced quest data", e);
         }
+    }
+
+    public static synchronized void applyNetworkSnapshot(NetworkSnapshot snapshot) {
+        if (snapshot == null) return;
+        CLIENT_DATA.clear();
+        CLIENT_DATA.quests.putAll(snapshot.quests());
+        CLIENT_DATA.categories.putAll(snapshot.categories());
+        CLIENT_DATA.subCategories.putAll(snapshot.subCategories());
+        // remote snapshots use the multiplayer cache key
+        CLIENT_DATA.worldId = null;
+        CLIENT_DATA.loaded = true;
+    }
+
+    public static void applyNetworkJson(String json) {
+        applyNetworkSnapshot(parseNetworkJson(json));
     }
 
     public static synchronized void clearClientNetworkData() {
         // Leave client loading available for the next server or world.
         if (FMLEnvironment.dist != Dist.CLIENT) return;
-        QUESTS.clear();
-        CATEGORIES.clear();
-        SUBCATEGORIES.clear();
-        loadedClient = true;
+        CLIENT_DATA.clear();
+        CLIENT_DATA.worldId = null;
+        CLIENT_DATA.loaded = true;
     }
 
     private static String optString(JsonObject o, String key) {

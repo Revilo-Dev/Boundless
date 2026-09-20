@@ -213,6 +213,7 @@ public final class QuestEditorControls {
 
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+            if ("__emoji__".equals(insertText)) return;
             int bg = this.fillColor;
             if (!this.active) {
                 bg = 0xFF4A4A4A;
@@ -557,6 +558,9 @@ public final class QuestEditorControls {
 
                     if (!iconStack.isEmpty()) {
                         gg.renderItem(iconStack, getX() + 6 + entry.indent, top + 5);
+                        textX = getX() + 25 + entry.indent;
+                    } else if (QuestEditorItemIcons.hasRenderableIcon(entry.icon)) {
+                        QuestEditorItemIcons.renderIcon(gg, entry.icon, getX() + 6 + entry.indent, top + 5);
                         textX = getX() + 25 + entry.indent;
                     }
                     int labelColor = 0xFFFFFF;

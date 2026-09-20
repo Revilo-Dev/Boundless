@@ -28,6 +28,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.JeiCompat;
 import net.revilodev.boundless.compat.LevelUpCompat;
+import net.revilodev.boundless.client.editor.QuestEditorEmojis;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestItemSpec;
@@ -317,14 +318,20 @@ public final class QuestDetailsPanel extends AbstractWidget {
         final boolean italic;
         final boolean encrypted;
         final boolean highlight;
+        final String emoji;
 
         StyledDescriptionChar(char value, int color, boolean bold, boolean italic, boolean encrypted, boolean highlight) {
+            this(value, color, bold, italic, encrypted, highlight, null);
+        }
+
+        StyledDescriptionChar(char value, int color, boolean bold, boolean italic, boolean encrypted, boolean highlight, String emoji) {
             this.value = value;
             this.color = color;
             this.bold = bold;
             this.italic = italic;
             this.encrypted = encrypted;
             this.highlight = highlight;
+            this.emoji = emoji;
         }
     }
 
@@ -1403,16 +1410,21 @@ public final class QuestDetailsPanel extends AbstractWidget {
             int spacesSeen = 0;
             for (StyledDescriptionChar ch : line.chars) {
                 int color = ch.highlight ? highlightColor(ch.color, globalIndex) : ch.color;
-                drawX = gg.drawString(mc.font,
-                        Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
-                                .withColor(color)
-                                .withBold(ch.bold)
-                                .withItalic(ch.italic)
-                                .withObfuscated(ch.encrypted)),
-                        drawX,
-                        drawY,
-                        color,
-                        false);
+                if (ch.emoji != null) {
+                    gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 3, 0, 0, 16, 16, 16, 16);
+                    drawX += 16;
+                } else {
+                    drawX = gg.drawString(mc.font,
+                            Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
+                                    .withColor(color)
+                                    .withBold(ch.bold)
+                                    .withItalic(ch.italic)
+                                    .withObfuscated(ch.encrypted)),
+                            drawX,
+                            drawY,
+                            color,
+                            false);
+                }
                 if (ch.value == ' ' && extraSpace > 0) {
                     drawX += extraSpace;
                     if (spacesSeen < remainder) drawX += 1;
@@ -1442,7 +1454,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 lineWidth = 0;
                 continue;
             }
-            int charWidth = mc.font.width(String.valueOf(ch.value));
+            int charWidth = descriptionCharWidth(ch);
             if (wrap && !line.isEmpty() && lineWidth + charWidth > wrapWidth) {
                 DescriptionWordWrapResult result = wrapDescriptionLineAtWord(line, wrapWidth);
                 lines.add(new DescriptionLine(result.line, descriptionLineWidth(result.line), !result.remainder.isEmpty(), false));
@@ -1509,7 +1521,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private int descriptionLineWidth(List<StyledDescriptionChar> chars) {
         int width = 0;
         for (StyledDescriptionChar ch : chars) {
-            width += mc.font.width(String.valueOf(ch.value));
+            width += descriptionCharWidth(ch);
         }
         return width;
     }
@@ -1518,6 +1530,12 @@ public final class QuestDetailsPanel extends AbstractWidget {
         List<StyledDescriptionChar> chars = new ArrayList<>();
         String text = raw == null ? "" : raw;
         for (int i = 0; i < text.length(); i++) {
+            int emojiEnd = QuestEditorEmojis.tokenEnd(text, i);
+            if (emojiEnd >= 0) {
+                chars.add(new StyledDescriptionChar('\0', defaultColor, false, false, false, false, text.substring(i + 1, emojiEnd)));
+                i = emojiEnd;
+                continue;
+            }
             chars.add(new StyledDescriptionChar(text.charAt(i), defaultColor, false, false, false, false));
         }
         return chars;
@@ -1554,9 +1572,19 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 i += 1;
                 continue;
             }
+            int emojiEnd = QuestEditorEmojis.tokenEnd(text, i);
+            if (emojiEnd >= 0) {
+                chars.add(new StyledDescriptionChar('\0', color, bold, italic, encrypted, highlight, text.substring(i + 1, emojiEnd)));
+                i = emojiEnd;
+                continue;
+            }
             chars.add(new StyledDescriptionChar(text.charAt(i), color, bold, italic, encrypted, highlight));
         }
         return chars;
+    }
+
+    private int descriptionCharWidth(StyledDescriptionChar ch) {
+        return ch.emoji != null ? 16 : mc.font.width(String.valueOf(ch.value));
     }
 
     private int highlightColor(int baseColor, int index) {

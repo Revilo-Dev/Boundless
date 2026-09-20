@@ -108,6 +108,7 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiHideHeaderRow;
     private ConfigRow uiFilterDisplayRow;
     private ConfigRow uiDisableCategoriesRow;
+    private ConfigRow uiShowIdFieldRow;
     private ConfigRow uiHideQuestWidgetIconsRow;
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
@@ -147,6 +148,7 @@ public final class QuestSettingsScreen extends Screen {
     private int uiHideHeaderBaseY;
     private int uiFilterDisplayBaseY;
     private int uiDisableCategoriesBaseY;
+    private int uiShowIdFieldBaseY;
     private int uiHideQuestWidgetIconsBaseY;
     private int uiQuestTextScaleBaseY;
     private int uiQuestIconScaleBaseY;
@@ -171,6 +173,7 @@ public final class QuestSettingsScreen extends Screen {
     private boolean hideCategoryHeader;
     private String filterDisplayMode;
     private boolean disableCategories;
+    private boolean showIdField;
     private boolean hideQuestWidgetIcons;
     private double questTextScale;
     private double questIconScale;
@@ -244,18 +247,19 @@ public final class QuestSettingsScreen extends Screen {
         uiHideHeaderBaseY = uiRow1 + rowGap * 4;
         uiFilterDisplayBaseY = uiRow1 + rowGap * 5;
         uiDisableCategoriesBaseY = uiRow1 + rowGap * 6;
-        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 7;
-        uiQuestTextScaleBaseY = uiRow1 + rowGap * 8;
-        uiQuestIconScaleBaseY = uiRow1 + rowGap * 9;
-        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 10;
-        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 11;
-        uiQuestWidgetTextColorBaseY = uiRow1 + rowGap * 12;
-        uiDescriptionTextColorBaseY = uiRow1 + rowGap * 13;
-        uiEnableDescriptionReadMoreBaseY = uiRow1 + rowGap * 14;
-        uiEnableDescriptionWrappingBaseY = uiRow1 + rowGap * 15;
-        uiDescriptionAlignmentBaseY = uiRow1 + rowGap * 16;
-        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 17;
-        functionalityHeaderBaseY = uiRow1 + rowGap * 18 + 4;
+        uiShowIdFieldBaseY = uiRow1 + rowGap * 7;
+        uiHideQuestWidgetIconsBaseY = uiRow1 + rowGap * 8;
+        uiQuestTextScaleBaseY = uiRow1 + rowGap * 9;
+        uiQuestIconScaleBaseY = uiRow1 + rowGap * 10;
+        uiEnableSearchBoxBaseY = uiRow1 + rowGap * 11;
+        uiEnableDescriptionColorsBaseY = uiRow1 + rowGap * 12;
+        uiQuestWidgetTextColorBaseY = uiRow1 + rowGap * 13;
+        uiDescriptionTextColorBaseY = uiRow1 + rowGap * 14;
+        uiEnableDescriptionReadMoreBaseY = uiRow1 + rowGap * 15;
+        uiEnableDescriptionWrappingBaseY = uiRow1 + rowGap * 16;
+        uiDescriptionAlignmentBaseY = uiRow1 + rowGap * 17;
+        uiEnableQuestToastsBaseY = uiRow1 + rowGap * 18;
+        functionalityHeaderBaseY = uiRow1 + rowGap * 19 + 4;
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
         functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
@@ -293,6 +297,10 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.categories.subtitle"),
                 () -> trs(disableCategories ? "state.disabled" : "state.enabled"),
                 () -> disableCategories = !disableCategories);
+        uiShowIdFieldRow = new ConfigRow(px, uiShowIdFieldBaseY, pw, trs("row.show_id_field"),
+                trs("row.show_id_field.subtitle"),
+                () -> trs(showIdField ? "state.on" : "state.off"),
+                () -> showIdField = !showIdField);
         uiHideQuestWidgetIconsRow = new ConfigRow(px, uiHideQuestWidgetIconsBaseY, pw, trs("row.disable_widget_icons"),
                 trs("row.disable_widget_icons.subtitle"),
                 () -> trs(hideQuestWidgetIcons ? "state.on" : "state.off"),
@@ -378,6 +386,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiCenterInventoryWithPanelRow, ConfigTab.UI);
         addConfigRow(uiFilterDisplayRow, ConfigTab.UI);
         addConfigRow(uiDisableCategoriesRow, ConfigTab.UI);
+        addConfigRow(uiShowIdFieldRow, ConfigTab.UI);
         addConfigRow(uiEnableSearchBoxRow, ConfigTab.UI);
 
         addConfigRow(uiEnableQuestToastsRow, ConfigTab.FEATURES);
@@ -492,6 +501,8 @@ public final class QuestSettingsScreen extends Screen {
         uiFilterDisplayRow.active = config;
         uiDisableCategoriesRow.visible = config;
         uiDisableCategoriesRow.active = config;
+        uiShowIdFieldRow.visible = config;
+        uiShowIdFieldRow.active = config;
         uiHideQuestWidgetIconsRow.visible = config;
         uiHideQuestWidgetIconsRow.active = config;
         uiQuestTextScaleRow.visible = config;
@@ -553,6 +564,7 @@ public final class QuestSettingsScreen extends Screen {
         hideCategoryHeader = Config.hideCategoryHeader();
         filterDisplayMode = Config.filterDisplayMode();
         disableCategories = Config.disableCategories();
+        showIdField = Config.showIdField();
         hideQuestWidgetIcons = Config.hideQuestWidgetIcons();
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
@@ -676,6 +688,7 @@ public final class QuestSettingsScreen extends Screen {
         Config.HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
         Config.FILTER_DISPLAY_MODE.set(filterDisplayMode);
         Config.DISABLE_CATEGORIES.set(disableCategories);
+        Config.SHOW_ID_FIELD.set(showIdField);
         Config.HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
@@ -747,6 +760,7 @@ public final class QuestSettingsScreen extends Screen {
             centerInventoryWithQuestPanel = true;
             filterDisplayMode = "tabs";
             disableCategories = false;
+            showIdField = false;
             enableQuestSearchBox = false;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.STYLE) {

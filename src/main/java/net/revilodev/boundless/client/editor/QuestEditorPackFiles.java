@@ -106,7 +106,7 @@ public final class QuestEditorPackFiles {
 
     // collect visible quest packs
     public static List<QuestPack> listPacks() {
-        QuestPackStorage.recoverStagedQuestPacks(packsRoot());
+        QuestPackStorage.cleanupStagedQuestPacks(packsRoot());
         List<QuestPack> packs = new ArrayList<>();
         Set<String> seen = new HashSet<>();
 
@@ -119,6 +119,8 @@ public final class QuestEditorPackFiles {
                     if (!isVisibleQuestPackDirectoryName(name)) continue;
                     String namespace = findNamespace(path);
                     boolean enabled = readPackMeta(path, name).enabled;
+                    // this uses the server toggle when one has been synced
+                    enabled = Config.isQuestPackApplied(name, enabled);
                     packs.add(new QuestPack(name, namespace, path, false, enabled));
                     seen.add(name);
                 }

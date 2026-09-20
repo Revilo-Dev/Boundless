@@ -12,6 +12,9 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
+import net.revilodev.boundless.client.editor.QuestEditorCustomIcons;
+import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
+import net.revilodev.boundless.client.editor.QuestEditorEmojis;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
 
@@ -541,6 +544,21 @@ public final class QuestListWidget extends AbstractWidget {
     // resolve and draw the quest icon
     private void renderQuestIcon(GuiGraphics gg, QuestData.Quest quest, int x, int y) {
         if (quest == null) return;
+        if (quest.icon != null && quest.icon.startsWith("boundless:effect/")) {
+            String effectId = quest.icon.substring("boundless:effect/".length()).replaceFirst("/", ":");
+            QuestEditorItemIcons.renderEffectPickerIcon(gg, QuestEditorItemIcons.effectIconStack(effectId), x, y);
+            return;
+        }
+        String emoji = QuestEditorEmojis.nameFromIconId(quest.icon);
+        if (emoji != null) {
+            renderScaledTextureIcon(gg, QuestEditorEmojis.texture(emoji), x, y);
+            return;
+        }
+        ResourceLocation customTexture = QuestEditorCustomIcons.texture(quest.icon);
+        if (customTexture != null) {
+            renderScaledTextureIcon(gg, customTexture, x, y);
+            return;
+        }
         ResourceLocation texture = textureIcon(quest.icon);
         if (texture != null) {
             renderScaledTextureIcon(gg, texture, x, y);

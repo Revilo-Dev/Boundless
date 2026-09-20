@@ -436,10 +436,12 @@ public final class QuestTracker {
         return QuestData.byId(questId).orElse(null);
     }
 
-    private static boolean shouldAutoClaim(QuestData.Quest q) {
+    private static boolean shouldAutoClaim(QuestData.Quest q, ServerPlayer player) {
         if (q == null) return Config.autoClaimQuestRewards();
         if (q.autoComplete) return true;
-        QuestData.Category category = QuestData.categoryById(q.category).orElse(null);
+        QuestData.Category category = player == null
+                ? QuestData.categoryById(q.category).orElse(null)
+                : QuestData.categoryByIdServer(player.server, q.category).orElse(null);
         if (category != null && category.autoComplete) return true;
         return Config.autoClaimQuestRewards();
     }
@@ -1539,7 +1541,7 @@ public final class QuestTracker {
                 boolean hasItemTargets = hasItemOrSubmitTargets(q);
 
                 if (ready && cur == Status.INCOMPLETE) {
-                    if (shouldAutoClaim(q)) {
+                    if (shouldAutoClaim(q, sp)) {
                         BoundlessNetwork.claimQuest(sp, q);
                     } else {
                         setServerStatus(sp, q.id, Status.COMPLETED);

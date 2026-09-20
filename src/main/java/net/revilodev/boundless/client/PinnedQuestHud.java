@@ -380,7 +380,6 @@ public final class PinnedQuestHud {
         if (mc.screen != null) return;
 
         ensureLoaded();
-        QuestData.loadClient(false);
 
         Player player = mc.player;
 

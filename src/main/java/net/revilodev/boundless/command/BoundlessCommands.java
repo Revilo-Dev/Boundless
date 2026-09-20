@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestPackStorage;
 import net.revilodev.boundless.quest.QuestTracker;
 
 import java.io.BufferedReader;
@@ -39,10 +40,7 @@ public final class BoundlessCommands {
                 .then(Commands.literal("reload")
                         .executes(ctx -> {
                             MinecraftServer server = ctx.getSource().getServer();
-                            QuestData.loadServer(server, true);
-                            for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-                                BoundlessNetwork.syncPlayer(p);
-                            }
+                            BoundlessNetwork.reloadAndSyncAll(server);
                             ctx.getSource().sendSuccess(() -> cmd("reload.success"), true);
                             return 1;
                         }))
@@ -266,10 +264,7 @@ public final class BoundlessCommands {
         Config.setQuestPackApplied(key, enabled);
 
         MinecraftServer server = source.getServer();
-        QuestData.loadServer(server, true);
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            BoundlessNetwork.syncPlayer(p);
-        }
+        BoundlessNetwork.reloadAndSyncAll(server);
         source.sendSuccess(() -> cmd(enabled ? "questpack.enable.success" : "questpack.disable.success", key), true);
         return 1;
     }
@@ -295,10 +290,12 @@ public final class BoundlessCommands {
             for (Path path : stream) {
                 if (!Files.isDirectory(path)) continue;
                 String id = path.getFileName() == null ? "" : path.getFileName().toString();
-                if (id.isBlank()) continue;
+                if (!QuestPackStorage.isQuestPackDirectoryName(id)) continue;
                 out.put(id, readQuestPackEnabled(path));
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            net.revilodev.boundless.BoundlessDebug.warnRateLimited("questpack-command-list", 5_000L,
+                    "could not list questpacks in {}", INSTANCE_QUEST_PACKS_ROOT, e);
         }
         return out;
     }
