@@ -14,6 +14,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -23,6 +24,8 @@ public final class QuestPackStorage {
     // backup folder timestamp
     private static final DateTimeFormatter BACKUP_TIMESTAMP =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS", Locale.ROOT);
+    private static final DateTimeFormatter BACKUP_DISPLAY_TIMESTAMP =
+            DateTimeFormatter.ofPattern("d/M HH:mm", Locale.ROOT);
 
     private QuestPackStorage() {}
 
@@ -139,10 +142,11 @@ public final class QuestPackStorage {
         if (liveRoot != null && Files.exists(liveRoot)) {
             String archivedReason = sanitizeSegment(reason);
             if (archivedReason.isBlank()) archivedReason = "replaced";
-            archivedRoot = packBackupRoot(packName)
-                    .resolve("_replaced")
-                    .resolve(timestamp() + "-" + archivedReason);
-            Files.createDirectories(archivedRoot.getParent());
+            snapshotQuestPack(liveRoot, packName, archivedReason);
+            Path parent = liveRoot.toAbsolutePath().normalize().getParent();
+            if (parent == null) throw new IOException("Questpack parent unavailable");
+            archivedRoot = parent.resolve("." + sanitizeSegment(packName) + ".replaced");
+            deleteDirectory(archivedRoot);
             moveReplace(liveRoot, archivedRoot);
         }
 
@@ -158,11 +162,12 @@ public final class QuestPackStorage {
             }
             throw failure;
         }
+        if (archivedRoot != null) deleteDirectory(archivedRoot);
         snapshotQuestPack(liveRoot, packName, "saved");
     }
 
-    /** Recover a completed upload that an older version left in a hidden staging directory. */
-    public static void recoverStagedQuestPacks(Path packsRoot) {
+    // this removes stale upload folders without loading them as packs
+    public static void cleanupStagedQuestPacks(Path packsRoot) {
         if (packsRoot == null || !Files.isDirectory(packsRoot)) return;
         Path root = packsRoot.toAbsolutePath().normalize();
         try (var entries = Files.list(root)) {
@@ -170,21 +175,21 @@ public final class QuestPackStorage {
                 if (!Files.isDirectory(staged)) continue;
                 String name = staged.getFileName() == null ? "" : staged.getFileName().toString();
                 if (!name.startsWith(".") || !name.endsWith(".upload")) continue;
-                String packName = name.substring(1, name.length() - ".upload".length()).trim();
-                if (!isRecoverablePackName(packName)) continue;
-                Path live = root.resolve(packName).normalize();
-                if (!live.startsWith(root) || Files.exists(live)) continue;
                 try {
-                    moveReplace(staged, live);
-                } catch (IOException ignored) {
-                    // Preserve the staging folder if recovery cannot finish safely.
+                    deleteDirectory(staged);
+                } catch (IOException e) {
+                    net.revilodev.boundless.BoundlessDebug.warnRateLimited("stale-upload:" + name, 5_000L,
+                            "could not remove stale upload {}", staged, e);
                 }
             }
-        } catch (IOException ignored) {
+        } catch (IOException e) {
+            net.revilodev.boundless.BoundlessDebug.warnRateLimited("stale-upload-scan", 5_000L,
+                    "could not scan stale uploads in {}", root, e);
         }
     }
 
-    private static boolean isRecoverablePackName(String name) {
+    public static boolean isQuestPackDirectoryName(String name) {
+        if (name == null) return false;
         String lower = name.toLowerCase(Locale.ROOT);
         return !name.isBlank() && !name.startsWith(".") && !name.contains("/") && !name.contains("\\")
                 && !lower.endsWith(".upload") && !lower.endsWith(".tmp") && !lower.endsWith(".temp");

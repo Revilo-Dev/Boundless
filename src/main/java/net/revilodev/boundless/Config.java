@@ -71,6 +71,10 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_CATEGORIES =
             BUILDER.comment("If true, disables category tabs and category-based filtering.")
                     .define("disableCategories", false);
+    // showIdField exposes manually editable IDs in the quest editor
+    public static final ModConfigSpec.ConfigValue<Boolean> SHOW_ID_FIELD =
+            BUILDER.comment("show the id field for elements in the editor, instead of auto generating")
+                    .define("showIdField", false);
     // enableBuiltinQuestPack keeps the shipped quest pack active
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_BUILTIN_QUEST_PACK =
             BUILDER.comment("If false, disables the built-in Boundless quest pack.")
@@ -146,6 +150,10 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
             BUILDER.comment("If true, quest completion scrolls can be created and used.")
                     .define("enableQuestScrolls", true);
+    // questPackBackupInterval controls automatic full pack backups
+    public static final ModConfigSpec.ConfigValue<String> QUEST_PACK_BACKUP_INTERVAL =
+            BUILDER.comment("Automatic questpack backup interval: 1m, 5m, 10m, 30m, off.")
+                    .define("questPackBackupInterval", "5m", Config::isQuestPackBackupInterval);
     // gameplay config section
     static {
         BUILDER.pop();
@@ -193,6 +201,17 @@ public final class Config {
 
     public static int questPackBackupLimit() {
         return QUEST_PACK_BACKUP_LIMIT;
+    }
+
+    // convert the selected backup interval into milliseconds
+    public static long questPackBackupIntervalMillis() {
+        return switch (QUEST_PACK_BACKUP_INTERVAL.get().trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "1m" -> 60_000L;
+            case "5m" -> 300_000L;
+            case "10m" -> 600_000L;
+            case "30m" -> 1_800_000L;
+            default -> 0L;
+        };
     }
 
     public static boolean devMode() {
@@ -335,6 +354,14 @@ public final class Config {
         return id == null ? "" : id.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
+    private static boolean isQuestPackBackupInterval(Object value) {
+        if (!(value instanceof String interval)) return false;
+        return switch (interval.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "1m", "5m", "10m", "30m", "off" -> true;
+            default -> false;
+        };
+    }
+
     public static String pinnedQuestHudPosition() {
         String s = PINNED_QUEST_HUD_POSITION.get();
         if (s == null) return "bottom_left";
@@ -406,6 +433,10 @@ public final class Config {
 
     public static boolean enableBuiltinQuestPack() {
         return ENABLE_BUILTIN_QUEST_PACK.get();
+    }
+
+    public static boolean showIdField() {
+        return SHOW_ID_FIELD.get();
     }
 
     public static boolean enableQuestSearchBox() {

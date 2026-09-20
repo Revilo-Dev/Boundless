@@ -9,6 +9,7 @@ import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -16,6 +17,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.BoundlessDebug;
+import net.revilodev.boundless.compat.AuraCompat;
 import net.revilodev.boundless.client.screen.QuestSettingsScreen;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
@@ -254,6 +256,18 @@ public final class QuestPanelClient {
         updateVisibility(st);
     }
 
+    // close every open quest panel for another inventory panel
+    public static void closeAllOpenPanels() {
+        for (State st : STATES.values()) {
+            if (st == null || !st.open) continue;
+            st.open = false;
+            if (st.originalLeft != null) setLeft(st.inv, st.originalLeft);
+            reposition(st.inv, st);
+            updateVisibility(st);
+        }
+        lastQuestOpen = false;
+    }
+
     // refresh live panels after config or quest data changes
     public static void applyConfigChanges() {
         for (State st : STATES.values()) {
@@ -295,6 +309,7 @@ public final class QuestPanelClient {
         st.open = !st.open;
         lastQuestOpen = st.open;
         if (st.open) {
+            AuraCompat.closeAuraInventoryPanels();
             if (isRecipePanelOpen(st.inv)) {
                 ImageButton recipe = findRecipeButton(st.inv);
                 if (recipe != null && recipe.visible && recipe.active) {
@@ -433,8 +448,8 @@ public final class QuestPanelClient {
 
     // detect when the recipe book is already expanded
     private static boolean isRecipePanelOpen(InventoryScreen inv) {
-        int centeredLeft = (inv.width - inv.getXSize()) / 2;
-        return inv.getGuiLeft() > centeredLeft + 10;
+        RecipeBookComponent recipeBook = inv.getRecipeBookComponent();
+        return recipeBook != null && recipeBook.isVisible();
     }
 
     // read the private inventory left position

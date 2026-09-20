@@ -553,6 +553,10 @@ public final class QuestEditorModels {
 
         CREATIVE,
 
+        EFFECTS,
+
+        CUSTOM,
+
         TAGS,
 
         INVENTORY

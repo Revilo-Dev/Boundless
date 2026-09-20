@@ -106,7 +106,7 @@ public final class QuestEditorPackFiles {
 
     // collect visible quest packs
     public static List<QuestPack> listPacks() {
-        QuestPackStorage.recoverStagedQuestPacks(packsRoot());
+        QuestPackStorage.cleanupStagedQuestPacks(packsRoot());
         List<QuestPack> packs = new ArrayList<>();
         Set<String> seen = new HashSet<>();
 

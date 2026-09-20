@@ -274,14 +274,14 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
                 if (line.beginIndex() > selected.endIndex()) break;
 
                 if (this.withinContentAreaTopBottom((int) selScreenY, (int) (selScreenY + this.lineHeight))) {
-                    int offset = this.font.width(
+                    int offset = this.textField.visualWidth(
                             text.substring(line.beginIndex(), Math.max(selected.beginIndex(), line.beginIndex()))
                     );
                     int endWidth;
                     if (selected.endIndex() > line.endIndex()) {
                         endWidth = maxLineWidth;
                     } else {
-                        endWidth = this.font.width(text.substring(line.beginIndex(), selected.endIndex()));
+                        endWidth = this.textField.visualWidth(text.substring(line.beginIndex(), selected.endIndex()));
                     }
                     int drawY = Math.round((float) (selScreenY * invScale));
                     this.renderHighlight(guiGraphics, startX + offset, drawY, startX + endWidth, drawY + this.font.lineHeight);
@@ -358,15 +358,9 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     private long drawFormattedString(GuiGraphics guiGraphics, String text, int x, int y, int initialColor) {
-        // Ampersand color tokens are rendered here instead of being stored as Minecraft styles.
+        // ampersand color tokens are rendered here instead of being stored as Minecraft styles
         if (!this.allowColorFormatting) {
-            int drawX = x;
-            if (guiGraphics != null) {
-                drawX = guiGraphics.drawString(this.font, text, drawX, y, initialColor, false);
-            } else {
-                drawX += this.font.width(text);
-            }
-            return packRenderResult(drawX, initialColor);
+            return packRenderResult(drawTextWithEmojis(guiGraphics, text, x, y, initialColor), initialColor);
         }
         int drawX = x;
         int color = initialColor;
@@ -412,6 +406,20 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
                 i += 1;
                 continue;
             }
+            int emojiEnd = QuestEditorEmojis.tokenEnd(text, i);
+            if (emojiEnd >= 0) {
+                if (!segment.isEmpty()) {
+                    if (guiGraphics != null) {
+                        drawX = drawStyledSegment(guiGraphics, segment.toString(), drawX, y, color, bold, italic, encrypted, highlight);
+                    } else {
+                        drawX += this.font.width(segment.toString());
+                    }
+                    segment.setLength(0);
+                }
+                drawX = drawEmoji(guiGraphics, text.substring(i + 1, emojiEnd), drawX, y);
+                i = emojiEnd;
+                continue;
+            }
             segment.append(text.charAt(i));
         }
         if (!segment.isEmpty()) {
@@ -422,6 +430,32 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
             }
         }
         return packRenderResult(drawX, color);
+    }
+
+    private int drawTextWithEmojis(GuiGraphics guiGraphics, String text, int x, int y, int color) {
+        int drawX = x;
+        int segmentStart = 0;
+        for (int i = 0; i < text.length(); i++) {
+            int emojiEnd = QuestEditorEmojis.tokenEnd(text, i);
+            if (emojiEnd < 0) continue;
+            if (i > segmentStart) {
+                String segment = text.substring(segmentStart, i);
+                drawX = guiGraphics != null ? guiGraphics.drawString(this.font, segment, drawX, y, color, false) : drawX + this.font.width(segment);
+            }
+            drawX = drawEmoji(guiGraphics, text.substring(i + 1, emojiEnd), drawX, y);
+            i = emojiEnd;
+            segmentStart = i + 1;
+        }
+        if (segmentStart < text.length()) {
+            String segment = text.substring(segmentStart);
+            drawX = guiGraphics != null ? guiGraphics.drawString(this.font, segment, drawX, y, color, false) : drawX + this.font.width(segment);
+        }
+        return drawX;
+    }
+
+    private int drawEmoji(GuiGraphics guiGraphics, String name, int x, int y) {
+        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y - 3, 0, 0, 16, 16, 16, 16);
+        return x + 16;
     }
 
     private int drawStyledSegment(GuiGraphics guiGraphics, String text, int x, int y, int color,
@@ -687,6 +721,7 @@ final class ScaledTextField {
     }
 
     public void seekCursor(Whence whence, int position) {
+        int previous = this.cursor;
         switch (whence) {
             case ABSOLUTE -> this.cursor = position;
             case RELATIVE -> this.cursor += position;
@@ -694,6 +729,7 @@ final class ScaledTextField {
         }
 
         this.cursor = Mth.clamp(this.cursor, 0, this.value.length());
+        this.cursor = this.normalizeEmojiCursor(this.cursor, this.cursor >= previous);
         this.cursorListener.run();
         if (!this.selecting) {
             this.selectCursor = this.cursor;
@@ -702,11 +738,9 @@ final class ScaledTextField {
 
     public void seekCursorLine(int offset) {
         if (offset != 0) {
-            int width = this.font.width(this.value.substring(this.getCursorLineView().beginIndex, this.cursor)) + 2;
+            int width = this.visualWidth(this.value.substring(this.getCursorLineView().beginIndex, this.cursor)) + 2;
             StringView line = this.getCursorLineView(offset);
-            int length = this.font
-                    .plainSubstrByWidth(this.value.substring(line.beginIndex, line.endIndex), width)
-                    .length();
+            int length = this.indexAtVisualWidth(this.value.substring(line.beginIndex, line.endIndex), width);
             this.seekCursor(Whence.ABSOLUTE, line.beginIndex + length);
         }
     }
@@ -719,9 +753,7 @@ final class ScaledTextField {
         int xi = Mth.floor(x);
         int yi = Mth.floor(y / 9.0);
         StringView line = this.displayLines.get(Mth.clamp(yi, 0, this.displayLines.size() - 1));
-        int length = this.font
-                .plainSubstrByWidth(this.value.substring(line.beginIndex, line.endIndex), xi)
-                .length();
+        int length = this.indexAtVisualWidth(this.value.substring(line.beginIndex, line.endIndex), xi);
         this.seekCursor(Whence.ABSOLUTE, line.beginIndex + length);
     }
 
@@ -951,19 +983,45 @@ final class ScaledTextField {
     }
 
     private void reflowDisplayLines() {
-        // Wrapped views retain source offsets so cursor movement still uses the full string.
+        // wrapped views retain source offsets so cursor movement still uses the full string
         this.displayLines.clear();
         if (this.value.isEmpty()) {
             this.displayLines.add(StringView.EMPTY);
         } else {
             int safeWidth = Math.max(1, this.width);
-            this.font.getSplitter().splitLines(
-                    this.value,
-                    safeWidth,
-                    Style.EMPTY,
-                    false,
-                    (style, begin, end) -> this.displayLines.add(new StringView(begin, end))
-            );
+            int lineStart = 0;
+            int lineWidth = 0;
+            int lastSpace = -1;
+            for (int index = 0; index < this.value.length();) {
+                char current = this.value.charAt(index);
+                if (current == '\n') {
+                    this.displayLines.add(new StringView(lineStart, index));
+                    index++;
+                    lineStart = index;
+                    lineWidth = 0;
+                    lastSpace = -1;
+                    continue;
+                }
+                int emojiEnd = QuestEditorEmojis.tokenEnd(this.value, index);
+                int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(this.value.codePointAt(index));
+                int glyphWidth = emojiEnd >= 0 ? 16 : this.font.width(this.value.substring(index, nextIndex));
+                if (lineWidth + glyphWidth > safeWidth && index > lineStart) {
+                    if (lastSpace >= lineStart) {
+                        this.displayLines.add(new StringView(lineStart, lastSpace));
+                        index = lastSpace + 1;
+                    } else {
+                        this.displayLines.add(new StringView(lineStart, index));
+                    }
+                    lineStart = index;
+                    lineWidth = 0;
+                    lastSpace = -1;
+                    continue;
+                }
+                lineWidth += glyphWidth;
+                if (Character.isWhitespace(current)) lastSpace = index;
+                index = nextIndex;
+            }
+            if (lineStart < this.value.length()) this.displayLines.add(new StringView(lineStart, this.value.length()));
             if (this.value.charAt(this.value.length() - 1) == '\n') {
                 this.displayLines.add(new StringView(this.value.length(), this.value.length()));
             }
@@ -971,6 +1029,50 @@ final class ScaledTextField {
                 this.displayLines.add(new StringView(0, this.value.length()));
             }
         }
+    }
+
+    int visualWidth(String text) {
+        int width = 0;
+        for (int index = 0; index < text.length();) {
+            int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
+            if (emojiEnd >= 0) {
+                width += 16;
+                index = emojiEnd + 1;
+                continue;
+            }
+            int nextIndex = index + Character.charCount(text.codePointAt(index));
+            width += this.font.width(text.substring(index, nextIndex));
+            index = nextIndex;
+        }
+        return width;
+    }
+
+    private int indexAtVisualWidth(String text, int targetWidth) {
+        int width = 0;
+        for (int index = 0; index < text.length();) {
+            int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
+            int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(text.codePointAt(index));
+            int glyphWidth = emojiEnd >= 0 ? 16 : this.font.width(text.substring(index, nextIndex));
+            if (width + glyphWidth > targetWidth) {
+                return emojiEnd >= 0 && targetWidth - width >= glyphWidth / 2 ? nextIndex : index;
+            }
+            width += glyphWidth;
+            index = nextIndex;
+        }
+        return text.length();
+    }
+
+    private int normalizeEmojiCursor(int position, boolean forward) {
+        for (int index = 0; index < this.value.length();) {
+            int emojiEnd = QuestEditorEmojis.tokenEnd(this.value, index);
+            if (emojiEnd >= 0) {
+                if (position > index && position <= emojiEnd) return forward ? emojiEnd + 1 : index;
+                index = emojiEnd + 1;
+            } else {
+                index += Character.charCount(this.value.codePointAt(index));
+            }
+        }
+        return position;
     }
 
     private String truncateFullText(String fullText) {

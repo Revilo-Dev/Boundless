@@ -101,19 +101,27 @@ public final class QuestEditorItemPickerRenderer {
         gg.pose().pushPose();
         gg.pose().translate(0.0f, 0.0f, 700.0f);
         gg.blit(BROWSER_GUI_TEX, x, y, 0, 0, ITEM_PICKER_W, ITEM_PICKER_H, ITEM_PICKER_W, ITEM_PICKER_H);
-        String title = switch (request.pickerMode) {
+        String title = request.iconPicker ? switch (request.itemPickerTab) {
+            case EFFECTS -> "Icons";
+            case CUSTOM -> "Custom Assets";
+            default -> "Item Icons";
+        } : switch (request.pickerMode) {
             case EFFECTS -> "Effect Browser";
             case MOBS -> "Mob Browser";
             default -> request.itemPickerTab == ItemPickerTab.TAGS ? "Item groups" : "Item Browser";
         };
         gg.drawString(font, title, x + (ITEM_PICKER_W - font.width(title)) / 2, y + 4, 0xFF000000, false);
         gg.blit(X_BUTTON_TEX, closeX(x), closeY(y), 0, 0, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE);
-        if (request.pickerMode == PickerMode.ITEMS) {
+        if (request.iconPicker) {
+            renderSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, false);
+            renderSideTab(gg, x, y, ItemPickerTab.EFFECTS, QUEST_TAB_SCROLL_ICON_TEX, 16, 16, request.itemPickerTab, false);
+            renderSideTab(gg, x, y, ItemPickerTab.CUSTOM, ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png"), 16, 16, request.itemPickerTab, false);
+        } else if (request.pickerMode == PickerMode.ITEMS) {
             renderSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, request.allowsTags);
             if (request.allowsTags) renderSideTab(gg, x, y, ItemPickerTab.TAGS, QUEST_TAB_SCROLL_ICON_TEX, 16, 16, request.itemPickerTab, true);
             renderSideTab(gg, x, y, ItemPickerTab.INVENTORY, BROWSER_TAB_INVENTORY_TEX, 16, 16, request.itemPickerTab, request.allowsTags);
         }
-        if (request.searchBox != null) {
+        if (request.searchBox != null && !(request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM)) {
             request.searchBox.setX(x + ITEM_PICKER_SEARCH_X);
             request.searchBox.setY(y + ITEM_PICKER_SEARCH_Y + 1);
             request.searchBox.setWidth(ITEM_PICKER_SEARCH_W);
@@ -122,8 +130,11 @@ public final class QuestEditorItemPickerRenderer {
         }
 
         renderGrid(request, x, y);
+        if (request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM) {
+            renderVanillaFooterButton(gg, font, x + 24, y + ITEM_PICKER_H + 4, ITEM_PICKER_W - 48, 16, "Open assets folder", true, false);
+        }
 
-        if (request.searchBox != null) {
+        if (request.searchBox != null && !(request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM)) {
             request.searchBox.render(gg, request.mouseX, request.mouseY, 0f);
         }
         renderSideTabTooltip(request, x, y);
@@ -152,8 +163,13 @@ public final class QuestEditorItemPickerRenderer {
             if (i < items.size()) {
                 ItemStack stack = items.get(i);
                 String selectedId = i < ids.size() ? ids.get(i) : request.selectionId.apply(stack);
-                if (request.pickerMode == PickerMode.EFFECTS) {
-                    QuestEditorItemIcons.renderEffectPickerIcon(gg, stack, sx + 1, sy + 1);
+                if (request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM) {
+                    ResourceLocation texture = QuestEditorCustomIcons.texture(selectedId);
+                    if (texture != null) gg.blit(texture, sx + 1, sy + 1, 0, 0, 16, 16, 16, 16);
+                } else if (request.pickerMode == PickerMode.EFFECTS || (request.iconPicker && request.itemPickerTab == ItemPickerTab.EFFECTS)) {
+                    String emoji = QuestEditorEmojis.nameFromIconId(selectedId);
+                    if (emoji != null) gg.blit(QuestEditorEmojis.texture(emoji), sx + 1, sy + 1, 0, 0, 16, 16, 16, 16);
+                    else QuestEditorItemIcons.renderEffectPickerIcon(gg, stack, sx + 1, sy + 1);
                 } else {
                     gg.renderItem(stack, sx + 1, sy + 1);
                 }
@@ -175,7 +191,11 @@ public final class QuestEditorItemPickerRenderer {
 
     private static void renderHoveredTooltip(RenderRequest request, Font font, ItemStack hovered, String hoveredId) {
         if (hovered.isEmpty()) return;
-        if (request.pickerMode == PickerMode.ITEMS && request.itemPickerTab == ItemPickerTab.TAGS && request.allowsTags) {
+        if (request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM) {
+            request.gg.renderTooltip(font, Component.literal(hoveredId.substring(QuestEditorCustomIcons.PREFIX.length())), request.mouseX, request.mouseY);
+        } else if (QuestEditorEmojis.nameFromIconId(hoveredId) != null) {
+            return;
+        } else if (request.pickerMode == PickerMode.ITEMS && request.itemPickerTab == ItemPickerTab.TAGS && request.allowsTags) {
             request.gg.renderTooltip(font, Component.literal(hoveredId), request.mouseX, request.mouseY);
         } else if (request.pickerMode == PickerMode.MOBS) {
             request.gg.renderTooltip(font, QuestEditorItemIcons.mobDisplayNameForMobId(hoveredId), request.mouseX, request.mouseY);
@@ -187,6 +207,12 @@ public final class QuestEditorItemPickerRenderer {
     }
 
     private static void renderSideTabTooltip(RenderRequest request, int pickerX, int pickerY) {
+        if (request.iconPicker) {
+            if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) request.gg.renderTooltip(request.font, Component.literal("Items"), request.mouseX, request.mouseY);
+            else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS, false)) request.gg.renderTooltip(request.font, Component.literal("Icons"), request.mouseX, request.mouseY);
+            else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM, false)) request.gg.renderTooltip(request.font, Component.literal("Custom Assets"), request.mouseX, request.mouseY);
+            return;
+        }
         if (request.pickerMode != PickerMode.ITEMS) return;
         if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, request.allowsTags)) {
             request.gg.renderTooltip(request.font, Component.literal("All Items"), request.mouseX, request.mouseY);
@@ -241,7 +267,8 @@ public final class QuestEditorItemPickerRenderer {
     private static int sideTabY(int pickerY, ItemPickerTab tab, boolean allowsTags) {
         int index = switch (tab) {
             case CREATIVE -> 0;
-            case TAGS -> 1;
+            case EFFECTS, TAGS -> 1;
+            case CUSTOM -> 2;
             case INVENTORY -> allowsTags ? 2 : 1;
         };
         return pickerY + ITEM_PICKER_SIDE_TAB_Y + index * (TAB_H + TAB_GAP);
@@ -265,6 +292,7 @@ public final class QuestEditorItemPickerRenderer {
         public final int mouseX;
         public final int mouseY;
         public final PickerMode pickerMode;
+        public final boolean iconPicker;
         public final ItemPickerTab itemPickerTab;
         public final boolean allowsTags;
         public final boolean multiToggleAvailable;
@@ -275,7 +303,7 @@ public final class QuestEditorItemPickerRenderer {
         public final Function<ItemStack, String> selectionId;
 
         public RenderRequest(GuiGraphics gg, Font font, EditBox searchBox, int screenWidth, int screenHeight, int mouseX, int mouseY,
-                             PickerMode pickerMode, ItemPickerTab itemPickerTab, boolean allowsTags, boolean multiToggleAvailable,
+                             PickerMode pickerMode, ItemPickerTab itemPickerTab, boolean iconPicker, boolean allowsTags, boolean multiToggleAvailable,
                              boolean multiSelect, Set<String> pendingSelection, PickerPageData page, List<String> effectIds,
                              Function<ItemStack, String> selectionId) {
             this.gg = gg;
@@ -287,6 +315,7 @@ public final class QuestEditorItemPickerRenderer {
             this.mouseY = mouseY;
             this.pickerMode = pickerMode;
             this.itemPickerTab = itemPickerTab;
+            this.iconPicker = iconPicker;
             this.allowsTags = allowsTags;
             this.multiToggleAvailable = multiToggleAvailable;
             this.multiSelect = multiSelect;

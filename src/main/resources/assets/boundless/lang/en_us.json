@@ -146,6 +146,7 @@
   "ui.boundless.editor.popup.unsaved_changes": "You have unsaved changes",
   "ui.boundless.editor.popup.save": "Save",
   "ui.boundless.editor.popup.discard": "Discard",
+  "ui.boundless.editor.emoji_picker": "Emojis",
 
   "ui.boundless.settings.title": "Quest Settings",
   "ui.boundless.settings.header": "Settings",
@@ -174,6 +175,8 @@
   "ui.boundless.settings.row.display_filters.subtitle": "Choose whether filters appear as buttons tabs or stay hidden.",
   "ui.boundless.settings.row.categories": "Categories",
   "ui.boundless.settings.row.categories.subtitle": "Disable category tabs and category-based filtering.",
+  "ui.boundless.settings.row.show_id_field": "Show Id Field",
+  "ui.boundless.settings.row.show_id_field.subtitle": "show the id field for elements in the editor, instead of auto generating",
   "ui.boundless.settings.row.disable_widget_icons": "Disable Widget Icons",
   "ui.boundless.settings.row.disable_widget_icons.subtitle": "Hide icons in quest list widgets.",
   "ui.boundless.settings.row.text_scale": "Text Scale",

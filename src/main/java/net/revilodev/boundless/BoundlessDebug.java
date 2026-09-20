@@ -15,12 +15,23 @@ public final class BoundlessDebug {
     //Log once per int per diagnostic
     public static void rateLimited(String category, long intervalMillis, String message, Object... arguments) {
         if (!enabled()) return;
+        if (!takeLogSlot(category, intervalMillis)) return;
+        BoundlessMod.LOGGER.info("[Boundless/Dev][{}] " + message, prepend(category, arguments));
+    }
+
+    // this keeps repeated failures visible without filling the log
+    public static void warnRateLimited(String category, long intervalMillis, String message, Object... arguments) {
+        if (!takeLogSlot("warn:" + category, intervalMillis)) return;
+        BoundlessMod.LOGGER.warn("[Boundless][{}] " + message, prepend(category, arguments));
+    }
+
+    private static boolean takeLogSlot(String category, long intervalMillis) {
         long now = System.nanoTime();
         long intervalNanos = intervalMillis * 1_000_000L;
         Long previous = LAST_LOG_NANOS.putIfAbsent(category, now);
-        if (previous != null && now - previous < intervalNanos) return;
+        if (previous != null && now - previous < intervalNanos) return false;
         LAST_LOG_NANOS.put(category, now);
-        BoundlessMod.LOGGER.info("[Boundless/Dev][{}] " + message, prepend(category, arguments));
+        return true;
     }
 
     private static Object[] prepend(String category, Object[] arguments) {
