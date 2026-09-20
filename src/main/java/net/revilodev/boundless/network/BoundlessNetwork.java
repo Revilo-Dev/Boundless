@@ -24,6 +24,7 @@ import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
+import net.revilodev.boundless.BoundlessDebug;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.toast.QuestUnlockedToast;
 import net.revilodev.boundless.item.ModItems;
@@ -39,7 +40,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,12 +48,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 public final class BoundlessNetwork {
 
@@ -72,7 +72,7 @@ public final class BoundlessNetwork {
 
     // sync ids join large quest snapshots sent in chunks
     private static final AtomicInteger SYNC_ID_GEN = new AtomicInteger();
-    private static final int QUEST_CHUNK_BYTES = 60000;
+    private static final int QUEST_CHUNK_BYTES = QuestPackTransfer.CHUNK_BYTES;
     private static final Path INSTANCE_QUEST_PACKS_ROOT = Config.questPacksRoot();
 
     private BoundlessNetwork() {}
@@ -349,7 +349,7 @@ public final class BoundlessNetwork {
                     int totalParts = buf.readVarInt();
                     int index = buf.readVarInt();
                     int len = buf.readVarInt();
-                    if (len < 0 || len > 1_200_000) throw new IllegalArgumentException("questpack chunk len " + len);
+                    if (len < 0 || len > QuestPackTransfer.CHUNK_BYTES) throw new IllegalArgumentException("questpack chunk len " + len);
                     byte[] bytes = new byte[len];
                     buf.readBytes(bytes);
                     return new UploadQuestPackChunk(id, enabled, uploadId, totalParts, index, bytes);
@@ -682,7 +682,7 @@ public final class BoundlessNetwork {
                     int total = buf.readVarInt();
                     int idx = buf.readVarInt();
                     int len = buf.readVarInt();
-                    if (len < 0 || len > 1_200_000) throw new IllegalArgumentException("chunk len " + len);
+                    if (len < 0 || len > QuestPackTransfer.CHUNK_BYTES) throw new IllegalArgumentException("chunk len " + len);
                     byte[] bytes = new byte[len];
                     buf.readBytes(bytes);
                     return new SyncQuestsChunk(syncId, total, idx, bytes);
@@ -892,7 +892,7 @@ public final class BoundlessNetwork {
 
     // send the full authoritative quest definition snapshot
     private static void sendQuestData(List<ServerPlayer> players) {
-        // one json snapshot can serve every player on this server
+        // this builds one snapshot for every player in this sync
         if (players == null || players.isEmpty()) return;
         ServerPlayer first = players.get(0);
         if (first == null || first.server == null) return;
@@ -1248,10 +1248,7 @@ public final class BoundlessNetwork {
                 Config.setQuestPackApplied(id, p.enabled());
             }
 
-            QuestData.loadServer(sp.server, true);
-            for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
-                syncPlayer(player);
-            }
+            reloadAndSyncAll(sp.server);
         });
     }
 
@@ -1300,10 +1297,16 @@ public final class BoundlessNetwork {
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
             String id = normalizeQuestPackFolderName(p.id());
             if (id.isBlank()) return;
-            if (p.totalParts() <= 0 || p.totalParts() > 65536) return;
+            pruneUploadSessions();
+            if (p.totalParts() <= 0 || p.totalParts() > QuestPackTransfer.MAX_UPLOAD_PARTS) return;
             if (p.index() < 0 || p.index() >= p.totalParts()) return;
+            if (p.part() == null || p.part().length > QuestPackTransfer.CHUNK_BYTES) return;
 
             String key = sp.getUUID() + ":" + id + ":" + p.uploadId();
+            long playerSessions = QUESTPACK_UPLOADS.keySet().stream()
+                    .filter(value -> value.startsWith(sp.getUUID() + ":"))
+                    .count();
+            if (!QUESTPACK_UPLOADS.containsKey(key) && playerSessions >= QuestPackTransfer.MAX_UPLOAD_SESSIONS) return;
             QuestPackUploadSession session = QUESTPACK_UPLOADS.compute(key, (ignored, existing) -> {
                 if (existing == null || existing.totalParts != p.totalParts()) {
                     return new QuestPackUploadSession(id, p.enabled(), p.totalParts());
@@ -1312,19 +1315,33 @@ public final class BoundlessNetwork {
             });
             if (session == null) return;
             if (session.parts[p.index()] == null) {
-                session.parts[p.index()] = p.part() == null ? new byte[0] : p.part();
+                if (!session.accept(p.index(), p.part())) {
+                    QUESTPACK_UPLOADS.remove(key);
+                    BoundlessDebug.warnRateLimited("questpack-upload-limit:" + sp.getUUID(), 5_000L,
+                            "rejected oversized questpack upload from {}", sp.getGameProfile().getName());
+                    return;
+                }
                 session.received++;
             }
             if (session.received < session.totalParts) return;
 
             QUESTPACK_UPLOADS.remove(key);
-            byte[] zipBytes = session.join();
-            try {
-                writeUploadedQuestPack(id, zipBytes);
+            MinecraftServer server = sp.server;
+            CompletableFuture.runAsync(() -> {
+                try {
+                    writeUploadedQuestPack(id, session.join());
+                } catch (IOException e) {
+                    throw new CompletionException(e);
+                }
+            }, QuestPackTransfer.IO_EXECUTOR).whenComplete((ignored, failure) -> server.execute(() -> {
+                if (failure != null) {
+                    BoundlessDebug.warnRateLimited("questpack-upload:" + id, 5_000L,
+                            "could not install uploaded questpack {}", id, failure);
+                    return;
+                }
                 Config.setQuestPackApplied(id, session.enabled);
-                reloadAndSyncAll(sp);
-            } catch (IOException ignored) {
-            }
+                reloadAndSyncAll(server);
+            }));
         });
     }
 
@@ -1335,12 +1352,22 @@ public final class BoundlessNetwork {
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
             String id = normalizeQuestPackFolderName(p.id());
             if (id.isBlank()) return;
-            try {
-                deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
+            MinecraftServer server = sp.server;
+            CompletableFuture.runAsync(() -> {
+                try {
+                    deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
+                } catch (IOException e) {
+                    throw new CompletionException(e);
+                }
+            }, QuestPackTransfer.IO_EXECUTOR).whenComplete((ignored, failure) -> server.execute(() -> {
+                if (failure != null) {
+                    BoundlessDebug.warnRateLimited("questpack-delete:" + id, 5_000L,
+                            "could not delete questpack {}", id, failure);
+                    return;
+                }
                 Config.setQuestPackApplied(id, false);
-                reloadAndSyncAll(sp);
-            } catch (IOException ignored) {
-            }
+                reloadAndSyncAll(server);
+            }));
         });
     }
 
@@ -1366,12 +1393,18 @@ public final class BoundlessNetwork {
         });
     }
 
-    // reload quests and resync every connected player
-    private static void reloadAndSyncAll(ServerPlayer sp) {
-        // pack edits reload data then notify every connected player
-        QuestData.loadServer(sp.server, true);
-        List<ServerPlayer> players = sp.server.getPlayerList().getPlayers();
+    public static void reloadAndSyncAll(MinecraftServer server) {
+        if (server == null) return;
+        reloadAndSync(server, server.getPlayerList().getPlayers());
+    }
+
+    // this rebuilds once then sends the same data to each player
+    public static void reloadAndSync(MinecraftServer server, List<ServerPlayer> players) {
+        if (server == null || players == null || players.isEmpty()) return;
+        QuestData.loadServer(server, true);
         for (ServerPlayer player : players) {
+            if (player == null) continue;
+            clearObjectiveProgressCache(player);
             sendToPlayer(player, new SyncClear());
             sendConfig(player);
         }
@@ -1393,33 +1426,28 @@ public final class BoundlessNetwork {
     // unpack uploaded quest packs into authoritative storage
     private static void writeUploadedQuestPack(String id, byte[] zipBytes) throws IOException {
         Files.createDirectories(INSTANCE_QUEST_PACKS_ROOT);
+        QuestPackStorage.cleanupStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
         Path targetRoot = INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize();
         if (!targetRoot.startsWith(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
         if (targetRoot.equals(INSTANCE_QUEST_PACKS_ROOT)) throw new IOException("Invalid questpack path");
 
-        Path tempRoot = INSTANCE_QUEST_PACKS_ROOT.resolve("." + id + ".upload").normalize();
+        Path tempRoot = INSTANCE_QUEST_PACKS_ROOT.resolve("." + id + ".uploading").normalize();
         deleteDirectoryIfExists(tempRoot);
         Files.createDirectories(tempRoot);
 
-        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zipBytes == null ? new byte[0] : zipBytes))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                String name = entry.getName();
-                if (name == null || name.isBlank()) continue;
-                Path dst = tempRoot.resolve(name).normalize();
-                if (!dst.startsWith(tempRoot)) throw new IOException("Invalid questpack zip entry");
-                if (entry.isDirectory()) {
-                    Files.createDirectories(dst);
-                } else {
-                    Path parent = dst.getParent();
-                    if (parent != null) Files.createDirectories(parent);
-                    Files.copy(zis, dst, StandardCopyOption.REPLACE_EXISTING);
-                }
-                zis.closeEntry();
-            }
+        try {
+            byte[] safeBytes = zipBytes == null ? new byte[0] : zipBytes;
+            if (safeBytes.length > QuestPackTransfer.MAX_UPLOAD_BYTES) throw new IOException("Questpack upload is too large");
+            QuestPackTransfer.extractZip(new ByteArrayInputStream(safeBytes), tempRoot);
+            QuestPackStorage.replaceDirectoryWithArchive(targetRoot, tempRoot, id, "uploaded");
+        } finally {
+            deleteDirectoryIfExists(tempRoot);
         }
+    }
 
-        QuestPackStorage.replaceDirectoryWithArchive(targetRoot, tempRoot, id, "uploaded");
+    private static void pruneUploadSessions() {
+        long cutoff = System.currentTimeMillis() - QuestPackTransfer.UPLOAD_SESSION_TIMEOUT_MS;
+        QUESTPACK_UPLOADS.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().lastUpdatedMs < cutoff);
     }
 
     // delete an extracted quest pack directory tree
@@ -1559,7 +1587,7 @@ public final class BoundlessNetwork {
     }
 
     private static void handleSyncQuestsChunk(SyncQuestsChunk p, PayloadContext ctx) {
-        // client waits for every chunk before replacing quest data
+        // this waits for every chunk before replacing quest data
         ctx.enqueueWork(() -> ClientQuestSync.accept(p));
     }
 
@@ -1879,12 +1907,24 @@ public final class BoundlessNetwork {
         final int totalParts;
         final byte[][] parts;
         int received;
+        int totalBytes;
+        long lastUpdatedMs;
 
         QuestPackUploadSession(String id, boolean enabled, int totalParts) {
             this.id = id;
             this.enabled = enabled;
             this.totalParts = totalParts;
             this.parts = new byte[totalParts][];
+            this.lastUpdatedMs = System.currentTimeMillis();
+        }
+
+        boolean accept(int index, byte[] part) {
+            if (index < 0 || index >= parts.length || part == null) return false;
+            if (totalBytes > QuestPackTransfer.MAX_UPLOAD_BYTES - part.length) return false;
+            parts[index] = part;
+            totalBytes += part.length;
+            lastUpdatedMs = System.currentTimeMillis();
+            return true;
         }
 
         byte[] join() {
@@ -1920,6 +1960,10 @@ public final class BoundlessNetwork {
                     instanceof net.revilodev.boundless.client.screen.StandaloneQuestBookScreen screen) {
                 screen.refreshSyncedData();
             }
+            if (net.minecraft.client.Minecraft.getInstance().screen
+                    instanceof net.revilodev.boundless.client.screen.QuestEditorScreen screen) {
+                screen.refreshSyncedData();
+            }
         }
     }
 
@@ -1930,17 +1974,21 @@ public final class BoundlessNetwork {
         private static int expected = -1;
         private static byte[][] parts = null;
         private static int received = 0;
+        private static int receivedBytes = 0;
+        private static long generation = 0L;
 
         private static void reset() {
             activeSyncId = -1;
             expected = -1;
             parts = null;
             received = 0;
+            receivedBytes = 0;
         }
 
         private static void clear() {
             reset();
             newestSyncIdSeen = -1;
+            generation++;
         }
 
         private static void accept(SyncQuestsChunk p) {
@@ -1950,11 +1998,13 @@ public final class BoundlessNetwork {
             int total = p.totalParts();
             int idx = p.index();
 
-            if (total <= 0 || total > 65536) { reset(); return; }
+            if (total <= 0 || total > QuestPackTransfer.MAX_SYNC_PARTS) { reset(); return; }
             if (idx < 0 || idx >= total) { reset(); return; }
+            if (p.part() == null || p.part().length > QuestPackTransfer.CHUNK_BYTES) { reset(); return; }
             if (sid < newestSyncIdSeen) return;
 
             if (activeSyncId != sid || expected != total || parts == null) {
+                generation++;
                 activeSyncId = sid;
                 newestSyncIdSeen = sid;
                 expected = total;
@@ -1963,11 +2013,19 @@ public final class BoundlessNetwork {
             }
 
             if (parts[idx] == null) {
-                parts[idx] = p.part() == null ? new byte[0] : p.part();
+                if (receivedBytes > QuestPackTransfer.MAX_SYNC_BYTES - p.part().length) {
+                    reset();
+                    BoundlessDebug.warnRateLimited("client-quest-sync-limit", 5_000L,
+                            "rejected quest sync larger than {} bytes", QuestPackTransfer.MAX_SYNC_BYTES);
+                    return;
+                }
+                parts[idx] = p.part();
                 received++;
+                receivedBytes += p.part().length;
             }
 
             if (received >= expected) {
+                long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
                 int totalLen = 0;
                 for (int i = 0; i < expected; i++) {
                     if (parts[i] == null) { reset(); return; }
@@ -1983,9 +2041,26 @@ public final class BoundlessNetwork {
                 }
 
                 String json = new String(all, StandardCharsets.UTF_8);
+                long parseGeneration = generation;
+                int parsedBytes = totalLen;
+                int parsedChunks = total;
                 reset();
-                QuestData.applyNetworkJson(json);
-                ClientOnly.applyConfigChanges();
+                CompletableFuture.supplyAsync(() -> QuestData.parseNetworkJson(json))
+                        .whenComplete((snapshot, failure) -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
+                            if (parseGeneration != generation) return;
+                            if (failure != null || snapshot == null) {
+                                BoundlessDebug.warnRateLimited("client-quest-parse", 5_000L,
+                                        "could not parse synced quest data", failure);
+                                return;
+                            }
+                            QuestData.applyNetworkSnapshot(snapshot);
+                            ClientOnly.applyConfigChanges();
+                            if (startedAt != 0L) {
+                                BoundlessDebug.rateLimited("client-quest-sync", 2_000L,
+                                        "syncId={}, bytes={}, chunks={}, elapsed={}ms", sid, parsedBytes, parsedChunks,
+                                        (System.nanoTime() - startedAt) / 1_000_000L);
+                            }
+                        }));
             }
         }
     }

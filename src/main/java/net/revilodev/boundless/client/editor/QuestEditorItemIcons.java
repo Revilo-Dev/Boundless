@@ -15,6 +15,7 @@ import java.util.Map;
 
 // editor item and mob icons
 public final class QuestEditorItemIcons {
+    private static final String EFFECT_PREFIX = "boundless:effect/";
     private QuestEditorItemIcons() {
     }
 
@@ -26,6 +27,37 @@ public final class QuestEditorItemIcons {
         } catch (Exception ignored) {
             return ItemStack.EMPTY;
         }
+    }
+
+    public static boolean hasRenderableIcon(String raw) {
+        return !iconStackFromId(raw).isEmpty() || QuestEditorCustomIcons.texture(raw) != null || effectId(raw) != null || QuestEditorEmojis.nameFromIconId(raw) != null;
+    }
+
+    public static void renderIcon(GuiGraphics gg, String raw, int x, int y) {
+        String effectId = effectId(raw);
+        if (effectId != null) {
+            renderEffectPickerIcon(gg, effectIconStack(effectId), x, y);
+            return;
+        }
+        ResourceLocation texture = QuestEditorCustomIcons.texture(raw);
+        if (texture != null) {
+            gg.blit(texture, x, y, 0, 0, 16, 16, 16, 16);
+            return;
+        }
+        String emoji = QuestEditorEmojis.nameFromIconId(raw);
+        if (emoji != null) {
+            gg.blit(QuestEditorEmojis.texture(emoji), x, y, 0, 0, 16, 16, 16, 16);
+            return;
+        }
+        ItemStack stack = iconStackFromId(raw);
+        if (!stack.isEmpty()) gg.renderItem(stack, x, y);
+    }
+
+    private static String effectId(String raw) {
+        if (raw == null || !raw.startsWith(EFFECT_PREFIX)) return null;
+        String encoded = raw.substring(EFFECT_PREFIX.length());
+        int separator = encoded.indexOf('/');
+        return separator < 0 ? null : encoded.substring(0, separator) + ":" + encoded.substring(separator + 1);
     }
 
     // strip tag prefix

@@ -27,6 +27,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.revilodev.boundless.client.QuestBookKeybinds;
 import net.revilodev.boundless.client.ClientQuestEvents;
 import net.revilodev.boundless.client.QuestPanelClient;
+import net.revilodev.boundless.compat.AuraCompat;
 import net.revilodev.boundless.command.BoundlessCommands;
 import net.revilodev.boundless.item.ModItems;
 import net.revilodev.boundless.network.BoundlessNetwork;
@@ -62,6 +63,7 @@ public final class BoundlessMod {
         MinecraftForge.EVENT_BUS.addListener(ServerQuestEvents::onChangedDimension);
         MinecraftForge.EVENT_BUS.addListener(ServerQuestEvents::onRespawn);
         MinecraftForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.ServerQuestTicker::onPlayerTick);
+        MinecraftForge.EVENT_BUS.addListener(net.revilodev.boundless.quest.QuestPackBackupTicker::onServerTick);
 
     }
 
@@ -70,6 +72,7 @@ public final class BoundlessMod {
     }
 
     private void clientSetup(final FMLClientSetupEvent event) {
+        AuraCompat.register();
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenInit);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenClosing);
         MinecraftForge.EVENT_BUS.addListener(QuestPanelClient::onScreenRenderPre);
@@ -118,11 +121,15 @@ public final class BoundlessMod {
 
     @SubscribeEvent
     public void onDatapackSync(OnDatapackSyncEvent event) {
-        QuestData.loadServer(event.getPlayerList().getServer(), true);
-        if (event.getPlayer() != null) {
-            BoundlessNetwork.syncPlayer(event.getPlayer());
-        } else {
-            event.getPlayerList().getPlayers().forEach(BoundlessNetwork::syncPlayer);
+        long startedAt = BoundlessDebug.enabled() ? System.nanoTime() : 0L;
+        List<ServerPlayer> players = event.getPlayer() == null
+                ? event.getPlayerList().getPlayers()
+                : List.of(event.getPlayer());
+        // this shares one rebuilt snapshot with the players being synced
+        BoundlessNetwork.reloadAndSync(event.getPlayerList().getServer(), players);
+        if (startedAt != 0L) {
+            BoundlessDebug.rateLimited("datapack-sync", 2_000L,
+                    "players={}, elapsed={}ms", players.size(), (System.nanoTime() - startedAt) / 1_000_000L);
         }
     }
 
