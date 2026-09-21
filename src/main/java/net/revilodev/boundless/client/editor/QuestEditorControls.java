@@ -538,11 +538,14 @@ public final class QuestEditorControls {
                         }
 
                         float textScale = 0.66f;
+                        boolean collapsed = entry.label != null && entry.label.startsWith("+ ");
+                        String marker = collapsed ? "+" : "=";
                         String name = entry.label == null ? "" : entry.label.substring(Math.min(2, entry.label.length()));
                         textX = iconX + textIconSize + 2;
                         int textH = (int) (Minecraft.getInstance().font.lineHeight * textScale);
                         int textY = top + (rowH - textH) / 2 + 1;
-                        int maxW = (getX() + width - 2) - textX - 2;
+                        int markerX = getX() + width - 7;
+                        int maxW = markerX - textX - 3;
                         int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
                         if (Minecraft.getInstance().font.width(name) > maxWUnscaled) {
                             name = Minecraft.getInstance().font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - Minecraft.getInstance().font.width("..."))) + "...";
@@ -552,6 +555,7 @@ public final class QuestEditorControls {
                         } else {
                             drawScaledString(gg, name, textScale, textX, textY, 0xD0D0D0);
                         }
+                        drawScaledString(gg, marker, textScale, markerX, textY, 0xD0D0D0);
                         yCursor += rowH + rowGap;
                         continue;
                     }

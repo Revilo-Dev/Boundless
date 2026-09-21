@@ -80,6 +80,11 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         this.textField.insertText(text);
     }
 
+    /** Inserts formatting around the selected text, leaving the cursor inside empty markers. */
+    public void wrapSelection(String prefix, String suffix) {
+        this.textField.wrapSelection(prefix, suffix);
+    }
+
     public boolean canUndo() {
         return this.textField.canUndo();
     }
@@ -379,12 +384,6 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
                     }
                     segment.setLength(0);
                 }
-                String escape = text.substring(i, Math.min(i + 2, text.length()));
-                if (guiGraphics != null) {
-                    drawX = guiGraphics.drawString(this.font, escape, drawX, y, 0xFF9A9A9A, false);
-                } else {
-                    drawX += this.font.width(escape);
-                }
                 char code = Character.toLowerCase(text.charAt(i + 1));
                 if (code == 'l') {
                     bold = !bold;
@@ -454,8 +453,8 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     private int drawEmoji(GuiGraphics guiGraphics, String name, int x, int y) {
-        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y - 3, 0, 0, 16, 16, 16, 16);
-        return x + 16;
+        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y - 1, 0, 0, 12, 12, 16, 16);
+        return x + 12;
     }
 
     private int drawStyledSegment(GuiGraphics guiGraphics, String text, int x, int y, int color,
@@ -730,6 +729,7 @@ final class ScaledTextField {
 
         this.cursor = Mth.clamp(this.cursor, 0, this.value.length());
         this.cursor = this.normalizeEmojiCursor(this.cursor, this.cursor >= previous);
+        this.cursor = this.normalizeColorTokenCursor(this.cursor, this.cursor >= previous);
         this.cursorListener.run();
         if (!this.selecting) {
             this.selectCursor = this.cursor;
@@ -945,7 +945,7 @@ final class ScaledTextField {
         char code = Character.toLowerCase(this.value.charAt(index + 1));
         return code == 'w' || code == 'r' || code == 'g' || code == 'b'
                 || code == 'y' || code == 'o' || code == 'a' || code == 'p' || code == 'x'
-                || code == 'l' || code == 'i' || code == 'e';
+                || code == 'l' || code == 'i' || code == 'e' || code == 'h';
     }
 
     private void onValueChange() {
@@ -1002,9 +1002,13 @@ final class ScaledTextField {
                     lastSpace = -1;
                     continue;
                 }
+                if (this.colorTokenAwareDeletion && isColorTokenAt(index)) {
+                    index += 2;
+                    continue;
+                }
                 int emojiEnd = QuestEditorEmojis.tokenEnd(this.value, index);
                 int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(this.value.codePointAt(index));
-                int glyphWidth = emojiEnd >= 0 ? 16 : this.font.width(this.value.substring(index, nextIndex));
+                int glyphWidth = emojiEnd >= 0 ? 12 : this.font.width(this.value.substring(index, nextIndex));
                 if (lineWidth + glyphWidth > safeWidth && index > lineStart) {
                     if (lastSpace >= lineStart) {
                         this.displayLines.add(new StringView(lineStart, lastSpace));
@@ -1031,12 +1035,29 @@ final class ScaledTextField {
         }
     }
 
+    public void wrapSelection(String prefix, String suffix) {
+        String safePrefix = prefix == null ? "" : prefix;
+        String safeSuffix = suffix == null ? "" : suffix;
+        StringView selected = this.getSelected();
+        String selectedText = this.value.substring(selected.beginIndex, selected.endIndex);
+        if (selectedText.isEmpty()) {
+            this.insertText(safePrefix);
+            return;
+        }
+        this.insertText(safePrefix + selectedText + safeSuffix);
+        this.seekCursor(Whence.RELATIVE, -safeSuffix.length());
+    }
+
     int visualWidth(String text) {
         int width = 0;
         for (int index = 0; index < text.length();) {
+            if (this.colorTokenAwareDeletion && isColorTokenAt(text, index)) {
+                index += 2;
+                continue;
+            }
             int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
             if (emojiEnd >= 0) {
-                width += 16;
+                width += 12;
                 index = emojiEnd + 1;
                 continue;
             }
@@ -1050,9 +1071,13 @@ final class ScaledTextField {
     private int indexAtVisualWidth(String text, int targetWidth) {
         int width = 0;
         for (int index = 0; index < text.length();) {
+            if (this.colorTokenAwareDeletion && isColorTokenAt(text, index)) {
+                index += 2;
+                continue;
+            }
             int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
             int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(text.codePointAt(index));
-            int glyphWidth = emojiEnd >= 0 ? 16 : this.font.width(text.substring(index, nextIndex));
+            int glyphWidth = emojiEnd >= 0 ? 12 : this.font.width(text.substring(index, nextIndex));
             if (width + glyphWidth > targetWidth) {
                 return emojiEnd >= 0 && targetWidth - width >= glyphWidth / 2 ? nextIndex : index;
             }
@@ -1073,6 +1098,24 @@ final class ScaledTextField {
             }
         }
         return position;
+    }
+
+    private int normalizeColorTokenCursor(int position, boolean forward) {
+        if (!this.colorTokenAwareDeletion) return position;
+        for (int index = 0; index + 1 < this.value.length(); index++) {
+            if (isColorTokenAt(index) && position == index + 1) {
+                return forward ? index + 2 : index;
+            }
+        }
+        return position;
+    }
+
+    private boolean isColorTokenAt(String text, int index) {
+        if (index < 0 || index + 1 >= text.length() || text.charAt(index) != '/') return false;
+        char code = Character.toLowerCase(text.charAt(index + 1));
+        return code == 'w' || code == 'r' || code == 'g' || code == 'b'
+                || code == 'y' || code == 'o' || code == 'a' || code == 'p' || code == 'x'
+                || code == 'l' || code == 'i' || code == 'e' || code == 'h';
     }
 
     private String truncateFullText(String fullText) {
