@@ -289,6 +289,11 @@ public final class QuestEditorRowControls {
             }
         }
 
+        public void selectAllText() {
+            setCursorPosition(0);
+            setHighlightPos(getValue().length());
+        }
+
         private void handleValueChanged(String value) {
             if (settingValue) return;
             String digits = safe(value).replaceAll("[^0-9]", "");
@@ -366,6 +371,18 @@ public final class QuestEditorRowControls {
 
         private String safe(String value) {
             return value == null ? "" : value;
+        }
+    }
+
+    // invisible text input used by the editor's icon picker overlay
+    public static final class IconPickerBox extends EditBox {
+        public IconPickerBox(Font font, Component message) {
+            super(font, 0, 0, 20, ENTRY_ROW_H, message);
+        }
+
+        @Override
+        public void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+            // The icon overlay is the visual control; never draw the icon id over it.
         }
     }
 }

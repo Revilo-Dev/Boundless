@@ -75,6 +75,8 @@ public final class CategoryTabsWidget extends AbstractWidget {
             if (c == null) continue;
             if ("all".equalsIgnoreCase(c.id)) continue;
             if (Config.disabledCategories().contains(c.id)) continue;
+            // Categories gated by a quest should not expose a tab until that quest is redeemed.
+            if (mc.player != null && !QuestData.isCategoryUnlocked(c, mc.player)) continue;
             categories.add(c);
         }
 

@@ -54,6 +54,7 @@ import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryCountBo
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryItemPickerButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryRemoveButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryTypeButton;
+import net.revilodev.boundless.client.editor.QuestEditorRowControls.IconPickerBox;
 import net.revilodev.boundless.client.editor.QuestEditorSuggestionCaches;
 import net.revilodev.boundless.client.editor.QuestEditorStateSignatures;
 import net.revilodev.boundless.client.editor.QuestEditorStateSignatures.SignatureFields;
@@ -356,6 +357,8 @@ public final class QuestEditorScreen extends Screen {
     private final Set<String> stagedDeletedPackNames = new LinkedHashSet<>();
     private final Set<String> collapsedQuestCategories = new HashSet<>();
     private final Set<String> collapsedQuestSubCategories = new HashSet<>();
+    private static final Map<String, Set<String>> QUEST_CATEGORY_COLLAPSE_STATES = new HashMap<>();
+    private static final Map<String, Set<String>> QUEST_SUBCATEGORY_COLLAPSE_STATES = new HashMap<>();
     // quest list cache
     private QuestListIndex questListIndexCache;
     private Path questListIndexPackRoot;
@@ -381,6 +384,7 @@ public final class QuestEditorScreen extends Screen {
     private String pendingDiscardEntryId = "";
     private Mode pendingDiscardMode;
     private EditorEntry pendingDiscardEntry;
+    private boolean pendingEditorExit;
     private BackupSnapshot pendingBackupRestore;
     private static final Map<String, QuestCategorySelection> LAST_QUEST_CATEGORY_SELECTIONS = new HashMap<>();
     private String questSearchQuery = "";
@@ -507,17 +511,13 @@ public final class QuestEditorScreen extends Screen {
     private void initFormFields() {
         packNameBox = createBox("Pack name", BOX_H);
         packNamespaceBox = createBox("Namespace", BOX_H);
-        packIconPathBox = createBox("Pack icon path", BOX_H);
-        packIconPathBox.setTextColor(0x00000000);
-        packIconPathBox.setTextColorUneditable(0x00000000);
+        packIconPathBox = createIconPickerBox("Pack icon path");
         packDescriptionBox = makeMultiBox("Pack description", BOX_H_TALL, false);
 
         catIdBox = createBox("Category id", BOX_H);
         catNameBox = createBox("Category name", BOX_H);
         catNameBox.setMaxLength(22);
-        catIconBox = createBox("Category icon", BOX_H);
-        catIconBox.setTextColor(0x00000000);
-        catIconBox.setTextColorUneditable(0x00000000);
+        catIconBox = createIconPickerBox("Category icon");
         catDependencyBox = createBox("Unlock quest", BOX_H);
         catAutoCompleteToggle = createToggle(false);
 
@@ -525,16 +525,12 @@ public final class QuestEditorScreen extends Screen {
         subCategoryBox = createBox("Parent category id", BOX_H);
         subNameBox = createBox("Sub-category name", BOX_H);
         subNameBox.setMaxLength(26);
-        subIconBox = createBox("Sub-category icon", BOX_H);
-        subIconBox.setTextColor(0x00000000);
-        subIconBox.setTextColorUneditable(0x00000000);
+        subIconBox = createIconPickerBox("Sub-category icon");
         subDefaultOpenToggle = createToggle(false);
 
         questIdBox = createBox("Quest id", BOX_H);
         questNameBox = createBox("Quest name", BOX_H);
-        questIconBox = createBox("Quest icon", BOX_H);
-        questIconBox.setTextColor(0x00000000);
-        questIconBox.setTextColorUneditable(0x00000000);
+        questIconBox = createIconPickerBox("Quest icon");
         questDescriptionBox = makeMultiBox("Quest description", BOX_H_TALL, true);
         questCategoryBox = createBox("Quest category", BOX_H);
         questSubCategoryBox = createBox("Quest sub-category", BOX_H);
@@ -607,6 +603,15 @@ public final class QuestEditorScreen extends Screen {
         return box;
     }
 
+    private EditBox createIconPickerBox(String hint) {
+        EditBox box = new IconPickerBox(font, Component.literal(hint));
+        box.setMaxLength(1024);
+        box.visible = false;
+        box.active = false;
+        addRenderableWidget(box);
+        return box;
+    }
+
     private ScaledMultiLineEditBox makeMultiBox(String hint, int height) {
         return makeMultiBox(hint, height, false);
     }
@@ -640,8 +645,7 @@ public final class QuestEditorScreen extends Screen {
     // switch the active editor mode
     private void setMode(Mode next) {
         if (next == Mode.QUEST_LIST && mode != Mode.QUEST_LIST) {
-            collapsedQuestCategories.clear();
-            collapsedQuestSubCategories.clear();
+            restoreQuestListCollapseState();
         }
         closeTransientMenus();
         mode = next;
@@ -663,6 +667,12 @@ public final class QuestEditorScreen extends Screen {
         float previousScroll = 0f;
         if (preserveScroll && leftList != null) {
             previousScroll = leftList.getScrollY();
+        }
+        // Quest files can be created, renamed, or deleted while this screen remains open.
+        // Rebuild the file-backed index before rendering the quest list so stale rows cannot
+        // survive a deletion and later fail to load when selected.
+        if (mode == Mode.QUEST_LIST) {
+            invalidateQuestListIndex();
         }
         List<EditorEntry> entries = switch (mode) {
             case PACK_LIST, PACK_CREATE -> buildPackEntries();
@@ -1077,11 +1087,13 @@ public final class QuestEditorScreen extends Screen {
     private void handleQuestEntry(EditorEntry entry) {
         if (entry.kind == EditorEntryKind.CATEGORY_HEADER) {
             if (!collapsedQuestCategories.add(entry.id)) collapsedQuestCategories.remove(entry.id);
+            rememberQuestListCollapseState();
             refreshLeftList();
             return;
         }
         if (entry.kind == EditorEntryKind.SUBCATEGORY_HEADER) {
             if (!collapsedQuestSubCategories.add(entry.id)) collapsedQuestSubCategories.remove(entry.id);
+            rememberQuestListCollapseState();
             refreshLeftList();
             return;
         }
@@ -1139,6 +1151,27 @@ public final class QuestEditorScreen extends Screen {
         refreshBackupButtons(pack);
         markCurrentEditorLoaded(true);
         updateBackButtonVisibility();
+    }
+
+    private String questListCollapseStateKey() {
+        if (currentPack == null || currentPack.root == null) return "";
+        return currentPack.root.toAbsolutePath().normalize().toString();
+    }
+
+    private void restoreQuestListCollapseState() {
+        String key = questListCollapseStateKey();
+        collapsedQuestCategories.clear();
+        collapsedQuestSubCategories.clear();
+        if (key.isBlank()) return;
+        collapsedQuestCategories.addAll(QUEST_CATEGORY_COLLAPSE_STATES.getOrDefault(key, Set.of()));
+        collapsedQuestSubCategories.addAll(QUEST_SUBCATEGORY_COLLAPSE_STATES.getOrDefault(key, Set.of()));
+    }
+
+    private void rememberQuestListCollapseState() {
+        String key = questListCollapseStateKey();
+        if (key.isBlank()) return;
+        QUEST_CATEGORY_COLLAPSE_STATES.put(key, new HashSet<>(collapsedQuestCategories));
+        QUEST_SUBCATEGORY_COLLAPSE_STATES.put(key, new HashSet<>(collapsedQuestSubCategories));
     }
 
     // this refreshes the five newest backups for this pack
@@ -1281,8 +1314,8 @@ public final class QuestEditorScreen extends Screen {
     private void applyQuestEditorFields() {
         float previousScroll = editorScroll;
         List<FormField> fields = new ArrayList<>();
-        if (Config.showIdField()) fields.add(field(trs("field.id_required"), questIdBox));
-        fields.add(field("Display *", questNameBox));
+        if (Config.showIdField()) fields.add(field(trs("field.id"), questIdBox));
+        fields.add(field("Display", questNameBox));
         fields.add(field(trs("field.description"), questDescriptionBox));
         fields.add(field(trs("field.category_required"), questCategoryBox));
         if (!dropdownBoxValue(questCategoryBox).isBlank()) {
@@ -1980,7 +2013,6 @@ public final class QuestEditorScreen extends Screen {
         if (!hasStagedChanges()) return;
         Minecraft mc = Minecraft.getInstance();
         QuestPack selectedPack = currentPack;
-        boolean changed = false;
         boolean singleplayerAuthority = isSingleplayerAuthoritySession();
 
         // apply staged deletes before staged writes
@@ -1988,12 +2020,12 @@ public final class QuestEditorScreen extends Screen {
             if (!singleplayerAuthority) {
                 QuestEditorPackFiles.sendDeleteQuestPackToServer(packName);
             }
-            changed |= QuestEditorPackFiles.deleteAppliedPackArtifactsSafe(packName);
+            QuestEditorPackFiles.deleteAppliedPackArtifactsSafe(packName);
         }
         for (QuestPack pack : new ArrayList<>(stagedPacks.values())) {
             if (pack == null) continue;
             currentPack = pack;
-            changed |= QuestEditorPackFiles.mirrorPackDirectorySafe(currentPack, singleplayerAuthority);
+            QuestEditorPackFiles.mirrorPackDirectorySafe(currentPack, singleplayerAuthority);
             if (!singleplayerAuthority) {
                 QuestEditorPackFiles.sendPack(currentPack, currentPack.enabled);
             }
@@ -2005,8 +2037,9 @@ public final class QuestEditorScreen extends Screen {
         currentPack = selectedPack;
         stagedPacks.clear();
         stagedDeletedPackNames.clear();
-        if (!changed) return;
 
+        // An edited pack can already be at the applied path, so no file copy is needed.
+        // It still needs a quest-data reload after the editor is closed.
         if (singleplayerAuthority) {
             QuestEditorPackFiles.reloadLater();
         }
@@ -2873,7 +2906,7 @@ public final class QuestEditorScreen extends Screen {
             markCurrentEditorUnsaved();
             return;
         }
-        questDescriptionBox.insertText(formatCode);
+        questDescriptionBox.wrapSelection(formatCode, "/x");
         questDescriptionBox.setFocused(true);
         markCurrentEditorUnsaved();
     }
@@ -3415,7 +3448,8 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private boolean isUnsavedChangesPopupOpen() {
-        return pendingBackupRestore != null || (pendingDiscardMode != null && !pendingDiscardEntryId.isBlank());
+        return pendingBackupRestore != null || pendingEditorExit
+                || (pendingDiscardMode != null && !pendingDiscardEntryId.isBlank());
     }
 
     private void renderUnsavedChangesPopup(GuiGraphics gg, int mouseX, int mouseY) {
@@ -4727,6 +4761,17 @@ public final class QuestEditorScreen extends Screen {
         Minecraft.getInstance().setScreen(parent);
     }
 
+    private void requestExitEditor() {
+        if (!hasUnsavedEditorChanges()) {
+            exitEditor();
+            return;
+        }
+        clearPendingDiscardState();
+        pendingEditorExit = true;
+        statusMessage = "";
+        statusColor = 0xFFD080;
+    }
+
     @Override
     public void onClose() {
         exitEditor();
@@ -4799,6 +4844,7 @@ public final class QuestEditorScreen extends Screen {
     private boolean handleUnsavedChangesPopupClick(double mouseX, double mouseY, int button) {
         if (button != 0) return true;
         boolean rollback = pendingBackupRestore != null;
+        boolean exitingEditor = pendingEditorExit;
         String save = rollback ? "Roll back" : "Save";
         String discard = rollback ? "Cancel" : "Discard";
         String message = rollback ? "Roll back " + pendingBackupRestore.timestamp() + "?" : "You have unsaved changes";
@@ -4819,7 +4865,12 @@ public final class QuestEditorScreen extends Screen {
             }
             saveCurrent();
             if (!hasUnsavedEditorChanges()) {
-                continuePendingDiscardNavigation();
+                if (exitingEditor) {
+                    pendingEditorExit = false;
+                    exitEditor();
+                } else {
+                    continuePendingDiscardNavigation();
+                }
             }
             return true;
         }
@@ -4828,7 +4879,12 @@ public final class QuestEditorScreen extends Screen {
                 pendingBackupRestore = null;
                 return true;
             }
-            continuePendingDiscardNavigation();
+            if (exitingEditor) {
+                pendingEditorExit = false;
+                exitEditor();
+            } else {
+                continuePendingDiscardNavigation();
+            }
             return true;
         }
         return true;
@@ -4969,8 +5025,10 @@ public final class QuestEditorScreen extends Screen {
     private boolean clickRowControls(EntryRowKind kind, double mouseX, double mouseY, int button) {
         for (EntryCountBox countBox : entryCountBoxes(kind)) {
             if (countBox != null && countBox.visible && countBox.active && countBox.isMouseOver(mouseX, mouseY)) {
+                clearEntryTextFocus();
                 countBox.mouseClicked(mouseX, mouseY, button);
                 countBox.setFocused(true);
+                countBox.selectAllText();
                 return true;
             }
         }
@@ -5087,6 +5145,11 @@ public final class QuestEditorScreen extends Screen {
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE && isItemPickerOpen()) {
             closeItemPicker();
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (isUnsavedChangesPopupOpen()) return true;
+            requestExitEditor();
             return true;
         }
         suppressIdSuggestions = false;
@@ -5243,7 +5306,7 @@ public final class QuestEditorScreen extends Screen {
             selectedItemIdsByBox.remove(box);
             selectedItemComponentsByBox.remove(box);
         }
-        entryCountByBox.put(box, 1);
+        entryCountByBox.putIfAbsent(box, 1);
         if (usesCompactEntryBody(kind, normalized)) {
             String display = entryRowDisplayValue(kind, normalized, parsed, current);
             if (!current.equals(display)) {
