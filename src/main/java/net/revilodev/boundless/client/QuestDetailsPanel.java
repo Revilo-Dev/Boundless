@@ -29,6 +29,7 @@ import net.revilodev.boundless.Config;
 import net.revilodev.boundless.compat.JeiCompat;
 import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.client.editor.QuestEditorEmojis;
+import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestItemSpec;
@@ -500,29 +501,15 @@ public final class QuestDetailsPanel extends AbstractWidget {
         int maxScroll = Math.max(0, measuredContentHeight + BOTTOM_PADDING - viewportH);
         scrollY = Mth.clamp(scrollY, 0f, maxScroll);
 
-        quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x + 4, y + 2));
+        if (QuestEditorItemIcons.hasRenderableIcon(quest.icon)) {
+            QuestEditorItemIcons.renderIcon(gg, quest.icon, x + 4, y + 2);
+        } else {
+            quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x + 4, y + 2));
+        }
 
         String title = quest.name;
         int nameWidth = w - 32 - 18;
-        float titleScale = textScale();
-        if (title != null && title.length() > 16) {
-            int textW = mc.font.width(title);
-            if (textW > 0) titleScale = Math.max(0.5f, Math.min(titleScale, (float) nameWidth / (float) textW));
-        }
-        if (titleScale < 1f) {
-            gg.pose().pushPose();
-            gg.pose().scale(titleScale, titleScale, 1f);
-            float inv = 1f / titleScale;
-            if (titleScale <= 0.5f && mc.font.width(title) * titleScale > nameWidth) {
-                int wrapW = (int) (nameWidth * inv);
-                gg.drawWordWrap(mc.font, Component.literal(title), (int) ((x + 26) * inv), (int) ((y + 6) * inv), wrapW, 0xFFFFFF);
-            } else {
-                gg.drawString(mc.font, title, (int) ((x + 26) * inv), (int) ((y + 6) * inv), 0xFFFFFF, false);
-            }
-            gg.pose().popPose();
-        } else {
-            gg.drawString(mc.font, title, x + 26, y + 6, 0xFFFFFF, false);
-        }
+        drawEmojiAwareHeaderTitle(gg, title, x + 26, y + 6, nameWidth);
 
         boolean showScrollButton = Config.enableQuestScrolls() && QuestTracker.canCreateScroll(quest, mc.player);
         boolean pinningEnabled = !Config.disableQuestPinning() && !showScrollButton;
@@ -603,25 +590,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 depRegions.add(region);
                 if (region.contains(mouseX, mouseY)) hoveredTooltips.add(Component.translatable("ui.boundless.questbook.view"));
 
-                curY[0] += scaledRowHeight();
-            }
-            curY[0] += 2;
-        }
-
-        List<QuestData.Category> unlockedCategories = cache.unlockedCategories;
-        if (!unlockedCategories.isEmpty()) {
-            Component unlocksLabel = Component.translatable("ui.boundless.questbook.unlocks_categories");
-            drawScaledWordWrap(gg, unlocksLabel, x + 4, curY[0], w - 8, 0x55CCFF);
-            curY[0] += scaledWrappedHeight(unlocksLabel, w - 8) + 2;
-
-            for (QuestData.Category category : unlockedCategories) {
-                int lineY = curY[0];
-                Item iconItem = resolveItem(category.icon);
-                if (iconItem != null) {
-                    renderScaledItem(gg, new ItemStack(iconItem), x + 4, lineY);
-                }
-                String categoryName = category.name == null || category.name.isBlank() ? category.id : category.name;
-                drawScaledString(gg, categoryName, x + 24, lineY + 4, 0xA8E8FF);
                 curY[0] += scaledRowHeight();
             }
             curY[0] += 2;
@@ -806,12 +774,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     boolean has = QuestTracker.hasEffect(mc.player, t.id);
                     int color = has ? 0x55FF55 : 0xFF5555;
 
-                    ResourceLocation tex = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
-                    if (textureExists(tex)) {
-                        renderScaledTextureIcon(gg, tex, x + 4, curY[0]);
-                    } else {
-                        renderScaledItem(gg, new ItemStack(Items.POTION), x + 4, curY[0]);
-                    }
+                    QuestEditorItemIcons.renderEffectPickerIcon(gg, QuestEditorItemIcons.effectIconStack(t.id), x + 4, curY[0]);
                     drawScaledString(gg, eName, x + 26, curY[0] + 6, color);
 
                     if (mouseX >= x + 4 && mouseX <= x + 20 && mouseY >= curY[0] && mouseY <= curY[0] + 18) {
@@ -920,6 +883,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 hoveredTooltips.add(region.stack.getHoverName());
                 break;
             }
+        }
+        List<QuestData.Category> unlockedCategories = cache.unlockedCategories;
+        if (!unlockedCategories.isEmpty()) {
+            for (QuestData.Category category : unlockedCategories) {
+                String categoryName = category.name == null || category.name.isBlank() ? category.id : category.name;
+                Component unlocksLabel = Component.literal("Unlocks the " + categoryName + " category");
+                drawScaledWordWrap(gg, unlocksLabel, x + 4, curY[0], w - 8, 0xFFD700);
+                curY[0] += scaledWrappedHeight(unlocksLabel, w - 8) + 2;
+            }
+            curY[0] += 2;
         }
         if (!hasAnyReward) {
             gg.disableScissor();
@@ -1197,11 +1170,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
             y += quest.dependencies.size() * scaledRowHeight() + 2;
         }
 
-        if (!unlockedCategories.isEmpty()) {
-            y += scaledWrappedHeight(Component.translatable("ui.boundless.questbook.unlocks_categories"), w - 8) + 2;
-            y += unlockedCategories.size() * scaledRowHeight() + 2;
-        }
-
         if (quest.completion != null && !quest.completion.targets.isEmpty()) {
             boolean printedCollectHeader = false;
             boolean printedSubmitHeader = false;
@@ -1248,6 +1216,14 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean hasAdvancementRewards = quest.rewards != null && quest.rewards.hasAdvancements();
         boolean hasToastRewards = quest.rewards != null && quest.rewards.hasToasts();
         boolean hasExpReward = quest.rewards != null && quest.rewards.hasExp();
+
+        if (!unlockedCategories.isEmpty()) {
+            for (QuestData.Category category : unlockedCategories) {
+                String categoryName = category.name == null || category.name.isBlank() ? category.id : category.name;
+                y += scaledWrappedHeight(Component.literal("Unlocks the " + categoryName + " category"), w - 8) + 2;
+            }
+            y += 2;
+        }
 
         if (hasItemRewards || hasCommandRewards || hasFunctionRewards || hasLootTableRewards || hasAdvancementRewards || hasToastRewards || hasExpReward) {
             y += scaledWrappedHeight(Component.translatable("ui.boundless.questbook.reward"), w - 8) + 4;
@@ -1389,6 +1365,36 @@ public final class QuestDetailsPanel extends AbstractWidget {
         gg.pose().popPose();
     }
 
+    private void drawEmojiAwareHeaderTitle(GuiGraphics gg, String title, int x, int y, int physicalWidth) {
+        List<StyledDescriptionChar> chars = parseDescriptionChars(title, 0xFFFFFF);
+        int titleWidth = descriptionLineWidth(chars);
+        float scale = textScale();
+        if (titleWidth > 0) scale = Math.max(0.5f, Math.min(scale, (float) physicalWidth / (float) titleWidth));
+
+        gg.pose().pushPose();
+        gg.pose().scale(scale, scale, 1f);
+        float inv = 1f / scale;
+        int drawX = (int) (x * inv);
+        int drawY = (int) (y * inv);
+        int maxX = drawX + (int) (physicalWidth * inv);
+        for (StyledDescriptionChar ch : chars) {
+            int charWidth = descriptionCharWidth(ch);
+            if (drawX + charWidth > maxX) break;
+            if (ch.emoji != null) {
+                gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 1, 0, 0, 12, 12, 16, 16);
+            } else {
+                gg.drawString(mc.font, Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
+                                .withColor(ch.color)
+                                .withBold(ch.bold)
+                                .withItalic(ch.italic)
+                                .withObfuscated(ch.encrypted)),
+                        drawX, drawY, ch.color, false);
+            }
+            drawX += charWidth;
+        }
+        gg.pose().popPose();
+    }
+
     private int drawFormattedDescription(GuiGraphics gg, List<DescriptionLine> lines, int x, int y, int physicalWidth) {
         if (physicalWidth <= 0) return 0;
         if (lines.isEmpty()) return scaledLineHeight();
@@ -1411,8 +1417,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
             for (StyledDescriptionChar ch : line.chars) {
                 int color = ch.highlight ? highlightColor(ch.color, globalIndex) : ch.color;
                 if (ch.emoji != null) {
-                    gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 3, 0, 0, 16, 16, 16, 16);
-                    drawX += 16;
+                    gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 1, 0, 0, 12, 12, 16, 16);
+                    drawX += 12;
                 } else {
                     drawX = gg.drawString(mc.font,
                             Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
@@ -1584,7 +1590,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private int descriptionCharWidth(StyledDescriptionChar ch) {
-        return ch.emoji != null ? 16 : mc.font.width(String.valueOf(ch.value));
+        return ch.emoji != null ? 12 : mc.font.width(String.valueOf(ch.value));
     }
 
     private int highlightColor(int baseColor, int index) {
@@ -2131,8 +2137,6 @@ public final class QuestDetailsPanel extends AbstractWidget {
         @Override
         public void onPress() {
             if (onPress != null) onPress.run();
-            this.active = false;
-            this.visible = false;
         }
 
         @Override

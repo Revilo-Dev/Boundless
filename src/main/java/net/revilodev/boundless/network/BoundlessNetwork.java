@@ -1120,12 +1120,9 @@ public final class BoundlessNetwork {
                     if (!QuestTracker.acknowledgeCheckObjectives(q, sp)) return;
                     sendObjectiveProgress(sp);
                     if (!QuestTracker.updateProgressAndCheckReady(q, sp)) return;
-                    if (Config.autoClaimQuestRewards()) {
-                        claimQuest(sp, q);
-                    } else {
-                        QuestTracker.setServerStatus(sp, q.id, QuestTracker.Status.COMPLETED);
-                        sendStatus(sp, q.id, QuestTracker.Status.COMPLETED.name());
-                    }
+                    // A player explicitly pressed the acknowledgement button, so claim the
+                    // quest now rather than requiring a second click when auto-claim is off.
+                    claimQuest(sp, q);
                     return;
                 }
                 if (!QuestTracker.updateProgressAndCheckReady(q, sp)) return;
@@ -1387,6 +1384,12 @@ public final class BoundlessNetwork {
         QuestData.loadServer(server, true);
         for (ServerPlayer player : players) {
             if (player == null) continue;
+            // A pack may have been disabled and re-enabled without the player changing
+            // inventory or world state. Discard cached evaluations so completed quests
+            // are recalculated and can be redeemed again after the new data is loaded.
+            QuestTracker.clearServerRuntimeState(player);
+            QuestTracker.markServerStateDirty(player);
+            QuestTracker.serverTickPlayer(player);
             clearObjectiveProgressCache(player);
             PacketDistributor.sendToPlayer(player, new SyncClear());
             sendConfig(player);

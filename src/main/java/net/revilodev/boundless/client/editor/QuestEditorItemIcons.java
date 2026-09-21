@@ -1,5 +1,6 @@
 package net.revilodev.boundless.client.editor;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -99,13 +100,31 @@ public final class QuestEditorItemIcons {
     // render effect picker icon
     public static void renderEffectPickerIcon(GuiGraphics gg, ItemStack stack, int x, int y) {
         String effectId = effectIdFromStack(stack, List.of());
-        ResourceLocation rl = ResourceLocation.tryParse(effectId);
-        if (rl != null) {
-            ResourceLocation tex = ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/effects/" + rl.getPath() + ".png");
+        ResourceLocation tex = effectTexture(effectId);
+        if (tex != null) {
             gg.blit(tex, x, y, 0, 0, 16, 16, 16, 16);
         } else {
             gg.renderItem(stack, x, y);
         }
+    }
+
+    private static ResourceLocation effectTexture(String effectId) {
+        ResourceLocation effect = ResourceLocation.tryParse(effectId);
+        if (effect == null) return null;
+        List<ResourceLocation> candidates = List.of(
+                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/effects/" + effect.getPath() + ".png"),
+                ResourceLocation.fromNamespaceAndPath(effect.getNamespace(), "textures/gui/effects/" + effect.getPath() + ".png"),
+                ResourceLocation.fromNamespaceAndPath(effect.getNamespace(), "textures/gui/mob_effect/" + effect.getPath() + ".png"),
+                ResourceLocation.fromNamespaceAndPath(effect.getNamespace(), "textures/mob_effect/" + effect.getPath() + ".png"),
+                ResourceLocation.fromNamespaceAndPath(effect.getNamespace(), "textures/mob_effects/" + effect.getPath() + ".png")
+        );
+        for (ResourceLocation candidate : candidates) {
+            try {
+                if (Minecraft.getInstance().getResourceManager().getResource(candidate).isPresent()) return candidate;
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
     }
 
     // effect icon stack
