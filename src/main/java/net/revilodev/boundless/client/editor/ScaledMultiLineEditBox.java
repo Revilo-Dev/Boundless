@@ -154,7 +154,10 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (!this.visible || !this.active) return false;
-        if (super.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+        // AbstractScrollWidget divides by its scroll range while dragging. Do not delegate
+        // unless this field actually has a scrollbar; otherwise a non-scrollable field can
+        // trigger a divide-by-zero before the custom text-selection path runs.
+        if (this.scrollbarVisible() && super.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         } else if (this.withinContentAreaPoint(mouseX, mouseY) && button == 0) {
             this.textField.setSelecting(true);
@@ -231,7 +234,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         boolean showCursor = this.isFocused() && (Util.getMillis() - this.focusedTime) / CURSOR_BLINK_INTERVAL_MS % 2L == 0L;
         boolean cursorInText = cursor < text.length();
         int drawX = baseX;
-        int activeColor = this.textColor;
+        FormatState activeFormat = new FormatState(this.textColor, false, false, false, false);
         double lineScreenY = this.getY() + this.innerPadding();
         double lastLineScreenY = lineScreenY;
         int cursorRenderX = -1;
@@ -240,18 +243,18 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         for (ScaledTextField.StringView line : this.textField.iterateLines()) {
             boolean visible = this.withinContentAreaTopBottom((int) lineScreenY, (int) (lineScreenY + this.lineHeight));
             String lineText = text.substring(line.beginIndex(), line.endIndex());
-            int lineInitialColor = activeColor;
+            FormatState lineInitialFormat = activeFormat;
             if (visible) {
                 int drawY = Math.round((float) (lineScreenY * invScale));
-                long lineRender = drawFormattedString(guiGraphics, lineText, baseX, drawY, activeColor);
-                drawX = unpackEndX(lineRender);
-                activeColor = unpackFinalColor(lineRender);
+                FormattedRenderResult lineRender = drawFormattedString(guiGraphics, lineText, baseX, drawY, activeFormat);
+                drawX = lineRender.endX();
+                activeFormat = lineRender.format();
                 if (cursor >= line.beginIndex() && cursor <= line.endIndex()) {
-                    cursorRenderX = cursorXForLine(text, line, cursor, baseX, lineInitialColor);
+                    cursorRenderX = cursorXForLine(text, line, cursor, baseX, lineInitialFormat);
                     cursorRenderY = drawY;
                 }
             } else {
-                activeColor = unpackFinalColor(drawFormattedString(null, lineText, baseX, 0, activeColor));
+                activeFormat = drawFormattedString(null, lineText, baseX, 0, activeFormat).format();
             }
 
             lastLineScreenY = lineScreenY;
@@ -327,10 +330,10 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         guiGraphics.fill(x, y - 1, x + 1, y + 1 + this.font.lineHeight, CURSOR_INSERT_COLOR);
     }
 
-    private int cursorXForLine(String fullText, ScaledTextField.StringView line, int cursor, int baseX, int initialColor) {
+    private int cursorXForLine(String fullText, ScaledTextField.StringView line, int cursor, int baseX, FormatState initialFormat) {
         int boundedCursor = Mth.clamp(cursor, line.beginIndex(), line.endIndex());
         String beforeCursor = fullText.substring(line.beginIndex(), boundedCursor);
-        return unpackEndX(drawFormattedString(null, beforeCursor, baseX, 0, initialColor));
+        return drawFormattedString(null, beforeCursor, baseX, 0, initialFormat).endX();
     }
 
     private void scrollToCursor() {
@@ -362,17 +365,17 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         return this.lineHeight <= 0.0 ? 0.0 : (double) (this.height - this.totalInnerPadding()) / this.lineHeight;
     }
 
-    private long drawFormattedString(GuiGraphics guiGraphics, String text, int x, int y, int initialColor) {
+    private FormattedRenderResult drawFormattedString(GuiGraphics guiGraphics, String text, int x, int y, FormatState initialFormat) {
         // ampersand color tokens are rendered here instead of being stored as Minecraft styles
         if (!this.allowColorFormatting) {
-            return packRenderResult(drawTextWithEmojis(guiGraphics, text, x, y, initialColor), initialColor);
+            return new FormattedRenderResult(drawTextWithEmojis(guiGraphics, text, x, y, initialFormat.color()), initialFormat);
         }
         int drawX = x;
-        int color = initialColor;
-        boolean bold = false;
-        boolean italic = false;
-        boolean encrypted = false;
-        boolean highlight = false;
+        int color = initialFormat.color();
+        boolean bold = initialFormat.bold();
+        boolean italic = initialFormat.italic();
+        boolean encrypted = initialFormat.encrypted();
+        boolean highlight = initialFormat.highlight();
         StringBuilder segment = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
             if (startsWithColorToken(text, i)) {
@@ -428,7 +431,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
                 drawX += this.font.width(segment.toString());
             }
         }
-        return packRenderResult(drawX, color);
+        return new FormattedRenderResult(drawX, new FormatState(color, bold, italic, encrypted, highlight));
     }
 
     private int drawTextWithEmojis(GuiGraphics guiGraphics, String text, int x, int y, int color) {
@@ -453,8 +456,8 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     private int drawEmoji(GuiGraphics guiGraphics, String name, int x, int y) {
-        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y - 1, 0, 0, 12, 12, 16, 16);
-        return x + 12;
+        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y, 0, 0, 10, 10, 10, 10);
+        return x + 10;
     }
 
     private int drawStyledSegment(GuiGraphics guiGraphics, String text, int x, int y, int color,
@@ -526,16 +529,10 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         };
     }
 
-    private long packRenderResult(int endX, int finalColor) {
-        return (((long) endX) << 32) | (finalColor & 0xFFFFFFFFL);
+    private record FormatState(int color, boolean bold, boolean italic, boolean encrypted, boolean highlight) {
     }
 
-    private int unpackEndX(long packed) {
-        return (int) (packed >> 32);
-    }
-
-    private int unpackFinalColor(long packed) {
-        return (int) packed;
+    private record FormattedRenderResult(int endX, FormatState format) {
     }
 
     private void seekCursorScreen(double mouseX, double mouseY) {
@@ -990,6 +987,7 @@ final class ScaledTextField {
         } else {
             int safeWidth = Math.max(1, this.width);
             int lineStart = 0;
+            int lastVisibleEnd = lineStart;
             int lineWidth = 0;
             int lastSpace = -1;
             for (int index = 0; index < this.value.length();) {
@@ -998,6 +996,7 @@ final class ScaledTextField {
                     this.displayLines.add(new StringView(lineStart, index));
                     index++;
                     lineStart = index;
+                    lastVisibleEnd = lineStart;
                     lineWidth = 0;
                     lastSpace = -1;
                     continue;
@@ -1008,21 +1007,27 @@ final class ScaledTextField {
                 }
                 int emojiEnd = QuestEditorEmojis.tokenEnd(this.value, index);
                 int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(this.value.codePointAt(index));
-                int glyphWidth = emojiEnd >= 0 ? 12 : this.font.width(this.value.substring(index, nextIndex));
-                if (lineWidth + glyphWidth > safeWidth && index > lineStart) {
+                int glyphWidth = emojiEnd >= 0 ? 10 : this.font.width(this.value.substring(index, nextIndex));
+                if (lineWidth + glyphWidth > safeWidth && lineWidth > 0) {
                     if (lastSpace >= lineStart) {
                         this.displayLines.add(new StringView(lineStart, lastSpace));
                         index = lastSpace + 1;
                     } else {
-                        this.displayLines.add(new StringView(lineStart, index));
+                        // Formatting tokens have no visual width. Keep tokens immediately before the
+                        // wrapped glyph on its line, rather than leaving an invisible cursor stop at
+                        // the end of the previous line.
+                        this.displayLines.add(new StringView(lineStart, lastVisibleEnd));
+                        index = lastVisibleEnd;
                     }
                     lineStart = index;
+                    lastVisibleEnd = lineStart;
                     lineWidth = 0;
                     lastSpace = -1;
                     continue;
                 }
                 lineWidth += glyphWidth;
                 if (Character.isWhitespace(current)) lastSpace = index;
+                lastVisibleEnd = nextIndex;
                 index = nextIndex;
             }
             if (lineStart < this.value.length()) this.displayLines.add(new StringView(lineStart, this.value.length()));
@@ -1057,7 +1062,7 @@ final class ScaledTextField {
             }
             int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
             if (emojiEnd >= 0) {
-                width += 12;
+                width += 10;
                 index = emojiEnd + 1;
                 continue;
             }
@@ -1077,7 +1082,7 @@ final class ScaledTextField {
             }
             int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
             int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(text.codePointAt(index));
-            int glyphWidth = emojiEnd >= 0 ? 12 : this.font.width(text.substring(index, nextIndex));
+            int glyphWidth = emojiEnd >= 0 ? 10 : this.font.width(text.substring(index, nextIndex));
             if (width + glyphWidth > targetWidth) {
                 return emojiEnd >= 0 && targetWidth - width >= glyphWidth / 2 ? nextIndex : index;
             }

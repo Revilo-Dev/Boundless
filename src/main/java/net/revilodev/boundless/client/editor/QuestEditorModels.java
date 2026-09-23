@@ -541,7 +541,11 @@ public final class QuestEditorModels {
 
         TAGS,
 
-        INVENTORY
+        INVENTORY,
+
+        ADVANCEMENTS,
+
+        RECIPES
 
     }
 
@@ -554,7 +558,9 @@ public final class QuestEditorModels {
 
         EFFECTS,
 
-        MOBS
+        MOBS,
+
+        ADVANCEMENTS
 
     }
 

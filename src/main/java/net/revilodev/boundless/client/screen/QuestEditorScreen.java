@@ -5,6 +5,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,6 +14,8 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.commands.arguments.item.ItemInput;
+import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -4198,6 +4202,11 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private boolean scrollEntryFields(double mouseX, double mouseY, double scrollY) {
+        if (questDescriptionBox != null && questDescriptionBox.visible
+                && questDescriptionBox.isMouseOver(mouseX, mouseY)
+                && questDescriptionBox.mouseScrolled(mouseX, mouseY, 0, scrollY)) {
+            return true;
+        }
         for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
             if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, 0, scrollY)) return true;
         }
@@ -5365,6 +5374,17 @@ public final class QuestEditorScreen extends Screen {
         itemPickerKind = kind;
         itemPickerRow = row;
         pickerMode = mode;
+        if (mode == PickerMode.ADVANCEMENTS
+                && itemPickerTab != ItemPickerTab.ADVANCEMENTS
+                && itemPickerTab != ItemPickerTab.RECIPES) {
+            itemPickerTab = ItemPickerTab.ADVANCEMENTS;
+        }
+        if (mode == PickerMode.ITEMS
+                && itemPickerTab != ItemPickerTab.CREATIVE
+                && itemPickerTab != ItemPickerTab.TAGS
+                && itemPickerTab != ItemPickerTab.INVENTORY) {
+            itemPickerTab = ItemPickerTab.CREATIVE;
+        }
         if (!itemPickerAllowsTags() && itemPickerTab == ItemPickerTab.TAGS) {
             itemPickerTab = ItemPickerTab.CREATIVE;
         }
@@ -5443,7 +5463,8 @@ public final class QuestEditorScreen extends Screen {
         if (itemPickerSearchBox != null && itemPickerSearchBox.isMouseOver(mouseX, mouseY)) {
             return itemPickerSearchBox.mouseClicked(mouseX, mouseY, 0);
         }
-        if ((pickerMode == PickerMode.ITEMS || itemPickerIconTarget != null) && clickPickerSideTab(mouseX, mouseY, x, y)) {
+        if ((pickerMode == PickerMode.ITEMS || pickerMode == PickerMode.ADVANCEMENTS || itemPickerIconTarget != null)
+                && clickPickerSideTab(mouseX, mouseY, x, y)) {
             return true;
         }
         if (itemPickerIconTarget != null && itemPickerTab == ItemPickerTab.CUSTOM
@@ -5475,6 +5496,8 @@ public final class QuestEditorScreen extends Screen {
                     if (idx < ids.size()) applyPickedItemTag(ids.get(idx));
                 } else if (pickerMode == PickerMode.MOBS) {
                     if (idx < ids.size()) applyPickedMob(ids.get(idx));
+                } else if (pickerMode == PickerMode.ADVANCEMENTS) {
+                    if (idx < ids.size()) applyPickedAdvancement(ids.get(idx));
                 } else if (itemPickerIconTarget != null && itemPickerTab == ItemPickerTab.EFFECTS) {
                     if (idx < ids.size()) {
                         String id = ids.get(idx);
@@ -5586,6 +5609,15 @@ public final class QuestEditorScreen extends Screen {
             } else if (statusColor == 0xFFFFFFFF) {
                 statusMessage = "";
             }
+            return true;
+        }
+        if (pickerMode == PickerMode.ADVANCEMENTS) {
+            if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.ADVANCEMENTS, false)) {
+                itemPickerTab = ItemPickerTab.ADVANCEMENTS;
+            } else if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.RECIPES, false)) {
+                itemPickerTab = ItemPickerTab.RECIPES;
+            } else return false;
+            itemPickerPage = 0;
             return true;
         }
         if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, itemPickerAllowsTags())) {
@@ -5765,18 +5797,53 @@ public final class QuestEditorScreen extends Screen {
         syncEntryBackingValues();
     }
 
+    private void applyPickedAdvancement(String advancementId) {
+        if (!isItemPickerOpen() || itemPickerKind == null) return;
+        List<ScaledMultiLineEditBox> rows = entryRows(itemPickerKind);
+        if (itemPickerRow < 0 || itemPickerRow >= rows.size()) return;
+        String normalized = QuestEditorEntryCodec.normalizeNamespacedId(advancementId, false);
+        if (normalized.isBlank()) return;
+        ScaledMultiLineEditBox box = rows.get(itemPickerRow);
+        selectedItemIdByBox.put(box, normalized);
+        selectedItemIdsByBox.put(box, List.of(normalized));
+        selectedItemComponentsByBox.remove(box);
+        box.setValue(normalized);
+        box.setFocused(true);
+        entryRowsDirty = true;
+        syncEntryBackingValues();
+    }
+
     private ItemStack selectedItemForRow(EntryRowKind kind, int row) {
         List<ScaledMultiLineEditBox> rows = entryRows(kind);
         if (row < 0 || row >= rows.size()) return ItemStack.EMPTY;
         ScaledMultiLineEditBox box = rows.get(row);
         String type = effectiveRowType(kind, box);
-        String idPart = safe(selectedItemIdByBox.get(box)).trim();
-        if (idPart.isBlank()) {
+        List<String> selectedIds = selectedItemIdsByBox.get(box);
+        String itemSpec = selectedIds != null && selectedIds.size() == 1 ? safe(selectedIds.getFirst()).trim() : "";
+        if (itemSpec.isBlank()) itemSpec = safe(selectedItemIdByBox.get(box)).trim();
+        if (itemSpec.isBlank()) {
             ParsedEntry parsed = QuestEditorEntryCodec.parseEntry(composeEntryRowLine(kind, box));
             if (parsed == null || parsed.id.isBlank()) return ItemStack.EMPTY;
-            idPart = QuestItemSpec.stripComponents(parsed.id.trim().split("\s+")[0]);
+            itemSpec = parsed.id.trim().split("\s+")[0];
         }
-        return QuestEditorItemIcons.selectedItemStack(idPart, type, itemPickerData.itemTagIconItemCache());
+        String components = safe(selectedItemComponentsByBox.get(box)).trim();
+        if (!components.isBlank() && componentStart(itemSpec) < 0) itemSpec += components;
+        String idPart = QuestItemSpec.stripComponents(itemSpec);
+        ItemStack icon = QuestEditorItemIcons.selectedItemStack(idPart, type, itemPickerData.itemTagIconItemCache());
+        if (icon.isEmpty() || "effect".equals(type) || "kill".equals(type) || "entity".equals(type)) return icon;
+        return itemIconWithComponents(itemSpec, icon);
+    }
+
+    private ItemStack itemIconWithComponents(String itemSpec, ItemStack fallback) {
+        QuestItemSpec spec = QuestItemSpec.parse(itemSpec);
+        if (spec.components.isBlank() || minecraft == null || minecraft.level == null) return fallback;
+        try {
+            ItemParser.ItemResult parsed = new ItemParser(minecraft.level.registryAccess())
+                    .parse(new StringReader(spec.commandSyntax()));
+            return new ItemInput(parsed.item(), parsed.components()).createItemStack(1, false);
+        } catch (CommandSyntaxException ignored) {
+            return fallback;
+        }
     }
 
     private boolean isIconBox(EditBox box) {

@@ -1381,7 +1381,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             int charWidth = descriptionCharWidth(ch);
             if (drawX + charWidth > maxX) break;
             if (ch.emoji != null) {
-                gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 1, 0, 0, 12, 12, 16, 16);
+                drawDescriptionEmoji(gg, ch.emoji, drawX, drawY);
             } else {
                 gg.drawString(mc.font, Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
                                 .withColor(ch.color)
@@ -1417,8 +1417,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
             for (StyledDescriptionChar ch : line.chars) {
                 int color = ch.highlight ? highlightColor(ch.color, globalIndex) : ch.color;
                 if (ch.emoji != null) {
-                    gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 1, 0, 0, 12, 12, 16, 16);
-                    drawX += 12;
+                    drawDescriptionEmoji(gg, ch.emoji, drawX, drawY);
+                    drawX += DESCRIPTION_EMOJI_SIZE;
                 } else {
                     drawX = gg.drawString(mc.font,
                             Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
@@ -1589,8 +1589,18 @@ public final class QuestDetailsPanel extends AbstractWidget {
         return chars;
     }
 
+    private static final int DESCRIPTION_EMOJI_SIZE = 8;
+    private static final int EMOJI_TEXTURE_SIZE = 16;
+
+    private void drawDescriptionEmoji(GuiGraphics gg, String emoji, int x, int lineY) {
+        int y = lineY + (mc.font.lineHeight - DESCRIPTION_EMOJI_SIZE) / 2;
+        gg.blit(QuestEditorEmojis.texture(emoji), x, y, 0, 0,
+                DESCRIPTION_EMOJI_SIZE, DESCRIPTION_EMOJI_SIZE,
+                EMOJI_TEXTURE_SIZE, EMOJI_TEXTURE_SIZE);
+    }
+
     private int descriptionCharWidth(StyledDescriptionChar ch) {
-        return ch.emoji != null ? 12 : mc.font.width(String.valueOf(ch.value));
+        return ch.emoji != null ? DESCRIPTION_EMOJI_SIZE : mc.font.width(String.valueOf(ch.value));
     }
 
     private int highlightColor(int baseColor, int index) {

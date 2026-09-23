@@ -86,11 +86,13 @@ public final class QuestEditorEntryTypes {
     // picker mode for type
     public static PickerMode pickerModeForType(EntryRowKind kind, String type) {
         if (kind == EntryRowKind.REWARD && "item".equals(type)) return PickerMode.ITEMS;
+        if (kind == EntryRowKind.REWARD && "advancement".equals(type)) return PickerMode.ADVANCEMENTS;
         if (kind != EntryRowKind.COMPLETION) return PickerMode.NONE;
         return switch (type) {
             case "collect", "submit" -> PickerMode.ITEMS;
             case "kill", "entity" -> PickerMode.MOBS;
             case "effect" -> PickerMode.EFFECTS;
+            case "achieve", "advancement" -> PickerMode.ADVANCEMENTS;
             default -> PickerMode.NONE;
         };
     }

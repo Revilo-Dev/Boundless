@@ -145,6 +145,18 @@ public final class QuestEditorItemPickerData {
                     matched++;
                 }
             }
+            case ADVANCEMENTS -> {
+                boolean recipes = request.itemPickerTab == ItemPickerTab.RECIPES;
+                for (String advancementId : request.suggestionCaches.advancementSuggestions()) {
+                    if (isRecipeAdvancement(advancementId) != recipes) continue;
+                    if (!query.isBlank() && !advancementId.toLowerCase(Locale.ROOT).contains(query)) continue;
+                    if (matched >= start && items.size() < request.pageSize) {
+                        items.add(new ItemStack(net.minecraft.world.item.Items.PAPER));
+                        ids.add(advancementId);
+                    }
+                    matched++;
+                }
+            }
             default -> {
             }
         }
@@ -154,6 +166,11 @@ public final class QuestEditorItemPickerData {
             itemPickerPageCache.put(cacheKey, created);
         }
         return new PickerPageResult(request.itemPickerPage, created);
+    }
+
+    private boolean isRecipeAdvancement(String advancementId) {
+        ResourceLocation id = ResourceLocation.tryParse(advancementId);
+        return id != null && id.getPath().startsWith("recipes/");
     }
 
     private TagPageResult currentTagPageData(int itemPickerPage, String itemPickerSearchQuery, int pageSize, QuestEditorSuggestionCaches suggestionCaches) {

@@ -539,7 +539,7 @@ public final class QuestEditorControls {
 
                         float textScale = 0.66f;
                         boolean collapsed = entry.label != null && entry.label.startsWith("+ ");
-                        String marker = collapsed ? "+" : "=";
+                        String marker = collapsed ? "+" : "-";
                         String name = entry.label == null ? "" : entry.label.substring(Math.min(2, entry.label.length()));
                         textX = iconX + textIconSize + 2;
                         int textH = (int) (Minecraft.getInstance().font.lineHeight * textScale);

@@ -108,6 +108,7 @@ public final class QuestEditorItemPickerRenderer {
         } : switch (request.pickerMode) {
             case EFFECTS -> "Effect Browser";
             case MOBS -> "Mob Browser";
+            case ADVANCEMENTS -> request.itemPickerTab == ItemPickerTab.RECIPES ? "Recipe Browser" : "Advancement Browser";
             default -> request.itemPickerTab == ItemPickerTab.TAGS ? "Item groups" : "Item Browser";
         };
         gg.drawString(font, title, x + (ITEM_PICKER_W - font.width(title)) / 2, y + 4, 0xFF000000, false);
@@ -120,6 +121,9 @@ public final class QuestEditorItemPickerRenderer {
             renderSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, request.allowsTags);
             if (request.allowsTags) renderSideTab(gg, x, y, ItemPickerTab.TAGS, QUEST_TAB_SCROLL_ICON_TEX, 16, 16, request.itemPickerTab, true);
             renderSideTab(gg, x, y, ItemPickerTab.INVENTORY, BROWSER_TAB_INVENTORY_TEX, 16, 16, request.itemPickerTab, request.allowsTags);
+        } else if (request.pickerMode == PickerMode.ADVANCEMENTS) {
+            renderSideTab(gg, x, y, ItemPickerTab.ADVANCEMENTS, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, false);
+            renderSideTab(gg, x, y, ItemPickerTab.RECIPES, QUEST_TAB_SCROLL_ICON_TEX, 16, 16, request.itemPickerTab, false);
         }
         if (request.searchBox != null && !(request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM)) {
             request.searchBox.setX(x + ITEM_PICKER_SEARCH_X);
@@ -170,6 +174,13 @@ public final class QuestEditorItemPickerRenderer {
                     String emoji = QuestEditorEmojis.nameFromIconId(selectedId);
                     if (emoji != null) gg.blit(QuestEditorEmojis.texture(emoji), sx + 1, sy + 1, 0, 0, 16, 16, 16, 16);
                     else QuestEditorItemIcons.renderEffectPickerIcon(gg, stack, sx + 1, sy + 1);
+                } else if (request.pickerMode == PickerMode.ADVANCEMENTS) {
+                    String label = font.plainSubstrByWidth(selectedId, (int) ((ITEM_PICKER_CELL - 2) / 0.5f));
+                    gg.pose().pushPose();
+                    gg.pose().translate(sx + 1, sy + 7, 0.0f);
+                    gg.pose().scale(0.5f, 0.5f, 1.0f);
+                    gg.drawString(font, label, 0, 0, 0xFFFFFFFF, false);
+                    gg.pose().popPose();
                 } else {
                     gg.renderItem(stack, sx + 1, sy + 1);
                 }
@@ -201,6 +212,8 @@ public final class QuestEditorItemPickerRenderer {
             request.gg.renderTooltip(font, QuestEditorItemIcons.mobDisplayNameForMobId(hoveredId), request.mouseX, request.mouseY);
         } else if (request.pickerMode == PickerMode.EFFECTS) {
             request.gg.renderTooltip(font, QuestEditorItemIcons.effectDisplayNameForPickerItem(hovered, request.effectIds), request.mouseX, request.mouseY);
+        } else if (request.pickerMode == PickerMode.ADVANCEMENTS) {
+            request.gg.renderTooltip(font, Component.literal(hoveredId), request.mouseX, request.mouseY);
         } else {
             request.gg.renderTooltip(font, hovered, request.mouseX, request.mouseY);
         }
@@ -211,6 +224,14 @@ public final class QuestEditorItemPickerRenderer {
             if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) request.gg.renderTooltip(request.font, Component.literal("Items"), request.mouseX, request.mouseY);
             else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS, false)) request.gg.renderTooltip(request.font, Component.literal("Icons"), request.mouseX, request.mouseY);
             else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM, false)) request.gg.renderTooltip(request.font, Component.literal("Custom Assets"), request.mouseX, request.mouseY);
+            return;
+        }
+        if (request.pickerMode == PickerMode.ADVANCEMENTS) {
+            if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.ADVANCEMENTS, false)) {
+                request.gg.renderTooltip(request.font, Component.literal("Advancements"), request.mouseX, request.mouseY);
+            } else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.RECIPES, false)) {
+                request.gg.renderTooltip(request.font, Component.literal("Recipes"), request.mouseX, request.mouseY);
+            }
             return;
         }
         if (request.pickerMode != PickerMode.ITEMS) return;
@@ -266,8 +287,8 @@ public final class QuestEditorItemPickerRenderer {
 
     private static int sideTabY(int pickerY, ItemPickerTab tab, boolean allowsTags) {
         int index = switch (tab) {
-            case CREATIVE -> 0;
-            case EFFECTS, TAGS -> 1;
+            case CREATIVE, ADVANCEMENTS -> 0;
+            case EFFECTS, TAGS, RECIPES -> 1;
             case CUSTOM -> 2;
             case INVENTORY -> allowsTags ? 2 : 1;
         };
