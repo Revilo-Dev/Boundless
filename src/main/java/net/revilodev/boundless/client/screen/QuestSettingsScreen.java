@@ -203,9 +203,9 @@ public final class QuestSettingsScreen extends Screen {
 
     @Override
     protected void init() {
-        // Settings are server-managed, so only operators can open this screen.
+        // Local world owners and multiplayer operators can manage settings.
         var mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.hasPermissions(2)) {
+        if (mc.player == null || (!mc.hasSingleplayerServer() && !mc.player.hasPermissions(2))) {
             mc.setScreen(parent);
             return;
         }

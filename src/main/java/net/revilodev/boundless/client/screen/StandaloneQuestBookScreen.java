@@ -14,6 +14,7 @@ import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.QuestDetailsPanel;
 import net.revilodev.boundless.client.QuestFilterBar;
 import net.revilodev.boundless.client.QuestListWidget;
+import net.revilodev.boundless.client.QuestTreeWidget;
 import net.revilodev.boundless.quest.QuestData;
 
 @OnlyIn(Dist.CLIENT)
@@ -38,6 +39,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     private CategoryTabsWidget tabs;
     private CategoryHeaderWidget header;
     private QuestListWidget list;
+    private QuestTreeWidget tree;
     private QuestDetailsPanel details;
     private QuestFilterBar filter;
     private SettingsButton settingsButton;
@@ -77,6 +79,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             selectedCategory = id;
             lastSelectedCategory = id;
             list.setCategory(id);
+            refreshTree();
             showingDetails = false;
             updateVisibility();
         });
@@ -113,6 +116,13 @@ public final class StandaloneQuestBookScreen extends Screen {
         list.setCategory(selectedCategory);
         list.setSearchQuery(searchQuery);
 
+        tree = new QuestTreeWidget(pxLeft, py, pw, ph, q -> {
+            details.setQuest(q);
+            showingDetails = true;
+            updateVisibility();
+        });
+        refreshTree();
+
         details = new QuestDetailsPanel(pxRight, py, pw, ph, () -> {
             showingDetails = false;
             updateVisibility();
@@ -121,7 +131,7 @@ public final class StandaloneQuestBookScreen extends Screen {
 
         int filterX = pxLeft;
         filter = new QuestFilterBar(filterX, 0, () -> {
-            if (minecraft == null || minecraft.player == null || !minecraft.player.hasPermissions(2)) return;
+            if (!canAccessSettings()) return;
             minecraft.setScreen(new QuestSettingsScreen(this));
         });
         int filterY = topY + panelHeight - filter.getPreferredHeight() + 29;
@@ -130,13 +140,14 @@ public final class StandaloneQuestBookScreen extends Screen {
         header = new CategoryHeaderWidget(leftX, topY, panelWidth, this::sectionTitle);
         header.setPanelBounds(leftX, topY, panelWidth);
         settingsButton = new SettingsButton(leftX - 22, topY + panelHeight - 20, () -> {
-            if (minecraft == null || minecraft.player == null || !minecraft.player.hasPermissions(2)) return;
+            if (!canAccessSettings()) return;
             minecraft.setScreen(new QuestSettingsScreen(this));
         });
 
         addRenderableWidget(tabs);
         addRenderableWidget(header);
         addRenderableWidget(list);
+        addRenderableWidget(tree);
         addRenderableWidget(details);
         addRenderableWidget(details.backButton());
         addRenderableWidget(details.completeButton());
@@ -151,11 +162,14 @@ public final class StandaloneQuestBookScreen extends Screen {
 
     // swap between list and details
     private void updateVisibility() {
-        list.visible = true;
-        list.active = true;
+        boolean treeView = usesTreeView();
+        list.visible = !treeView;
+        list.active = !treeView;
+        tree.visible = treeView;
+        tree.active = treeView;
 
         if (searchBox != null) {
-            boolean showSearch = Config.enableQuestSearchBox();
+            boolean showSearch = !treeView && Config.enableQuestSearchBox();
             searchBox.visible = showSearch;
             searchBox.active = showSearch;
         }
@@ -191,8 +205,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             filter.active = showFilters;
         }
         if (settingsButton != null) {
-            boolean canAccessSettings = minecraft != null && minecraft.player != null && minecraft.player.hasPermissions(2);
-            boolean showSettings = !Config.displayFiltersAsTabs() && canAccessSettings;
+            boolean showSettings = !Config.displayFiltersAsTabs() && canAccessSettings();
             settingsButton.visible = showSettings;
             settingsButton.active = showSettings;
         }
@@ -210,6 +223,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             list.setCategory(selectedCategory);
             list.setSearchQuery(searchQuery);
         }
+        refreshTree();
 
         if (tabs != null) {
             if (!Config.disableCategories()) {
@@ -221,10 +235,12 @@ public final class StandaloneQuestBookScreen extends Screen {
                 }
                 lastSelectedCategory = selectedCategory;
                 if (list != null) list.setCategory(selectedCategory);
+                refreshTree();
             } else {
                 selectedCategory = "all";
                 lastSelectedCategory = "all";
                 if (list != null) list.setCategory("all");
+                refreshTree();
             }
         }
 
@@ -263,6 +279,11 @@ public final class StandaloneQuestBookScreen extends Screen {
                 if (list.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
             }
         }
+        if (tree.visible && tree.active
+                && mouseX >= tree.getX() && mouseX <= tree.getX() + tree.getWidth()
+                && mouseY >= tree.getY() && mouseY <= tree.getY() + tree.getHeight()) {
+            if (tree.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) return true;
+        }
         if (details.visible && details.active) {
             if (mouseX >= details.getX() && mouseX <= details.getX() + details.getWidth()
                     && mouseY >= details.getY() && mouseY <= details.getY() + details.getHeight()) {
@@ -275,6 +296,38 @@ public final class StandaloneQuestBookScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    private void refreshTree() {
+        if (tree == null) return;
+        java.util.List<QuestData.Quest> quests = new java.util.ArrayList<>();
+        for (QuestData.Quest quest : QuestData.all()) {
+            if ("all".equalsIgnoreCase(selectedCategory) || selectedCategory.equalsIgnoreCase(quest.category)) {
+                quests.add(quest);
+            }
+        }
+        tree.setQuests(quests);
+    }
+
+    private boolean usesTreeView() {
+        if ("all".equalsIgnoreCase(selectedCategory)) {
+            for (QuestData.Category category : QuestData.categoriesOrdered()) {
+                if (category.treeLayout) return true;
+            }
+        } else {
+            QuestData.Category category = QuestData.categoryById(selectedCategory).orElse(null);
+            if (category != null && category.treeLayout) return true;
+        }
+        for (QuestData.Quest quest : QuestData.all()) {
+            if (("all".equalsIgnoreCase(selectedCategory) || selectedCategory.equalsIgnoreCase(quest.category))
+                    && (quest.treeX != -1 || quest.treeY != -1)) return true;
+        }
+        return false;
+    }
+
+    private boolean canAccessSettings() {
+        return minecraft != null && minecraft.player != null
+                && (minecraft.hasSingleplayerServer() || minecraft.player.hasPermissions(2));
     }
 
     private static final class SettingsButton extends AbstractButton {

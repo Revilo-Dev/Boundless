@@ -14,7 +14,9 @@ import net.revilodev.boundless.quest.QuestTracker;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 // shared quest tree canvas
@@ -23,12 +25,11 @@ public final class QuestTreeWidget extends AbstractWidget {
     private static final ResourceLocation ZOOM_IN = texture("button-zoom-in");
     private static final ResourceLocation ZOOM_OUT = texture("button-zoom-out");
     private static final ResourceLocation ZOOM_CENTRE = texture("button-zoom-centre");
-    private static final ResourceLocation CONNECTOR_COMPLETE = texture("connector-complete");
-    private static final ResourceLocation CONNECTOR_INCOMPLETE = texture("connector-incomplete");
     private static final ResourceLocation ICON_COMPLETE = texture("icon-complete");
     private static final ResourceLocation ICON_ATTENTION = texture("icon-attention");
     private static final int NODE_SIZE = 32;
-    private static final int CONNECTOR_W = 6;
+    private static final int CONNECTOR_OUTER_WIDTH = 5;
+    private static final int CONNECTOR_INNER_WIDTH = 3;
 
     private final Minecraft minecraft = Minecraft.getInstance();
     private final Consumer<QuestData.Quest> onQuestSelected;
@@ -37,6 +38,7 @@ public final class QuestTreeWidget extends AbstractWidget {
     private float panX;
     private float panY;
     private boolean dragging;
+    private String selectedQuestId = "";
 
     public QuestTreeWidget(int x, int y, int width, int height, Consumer<QuestData.Quest> onQuestSelected) {
         super(x, y, width, height, Component.empty());
@@ -51,18 +53,29 @@ public final class QuestTreeWidget extends AbstractWidget {
     // reset view to the canvas centre
     public void centreView() {
         zoom = 1f;
-        panX = 0f;
-        panY = 0f;
+        QuestData.Quest origin = quests.stream().filter(quest -> quest.treeOrigin).findFirst().orElse(null);
+        panX = origin == null ? 0f : -origin.treeX;
+        panY = origin == null ? 0f : -origin.treeY;
     }
 
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         if (!visible) return;
+        QuestData.Quest hovered = questAt(mouseX, mouseY);
         gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
+        gg.pose().pushPose();
+        applyCanvasTransform(gg);
         renderConnectors(gg);
-        renderNodes(gg, mouseX, mouseY);
+        renderNodes(gg);
+        gg.pose().popPose();
         gg.disableScissor();
         renderZoomButtons(gg);
+        if (hovered != null) {
+            gg.pose().pushPose();
+            gg.pose().translate(0, 0, 900);
+            gg.renderTooltip(minecraft.font, Component.literal(hovered.name), mouseX, mouseY);
+            gg.pose().popPose();
+        }
     }
 
     private void renderConnectors(GuiGraphics gg) {
@@ -70,36 +83,37 @@ public final class QuestTreeWidget extends AbstractWidget {
             for (String dependencyId : quest.dependencies) {
                 QuestData.Quest dependency = QuestData.byId(dependencyId).orElse(null);
                 if (dependency == null) continue;
-                int x1 = nodeX(dependency) + nodeSize() / 2;
-                int y1 = nodeY(dependency) + nodeSize();
-                int x2 = nodeX(quest) + nodeSize() / 2;
-                int y2 = nodeY(quest);
-                boolean complete = isComplete(dependency);
-                ResourceLocation texture = complete ? CONNECTOR_COMPLETE : CONNECTOR_INCOMPLETE;
-                drawStraightConnector(gg, x1, y1, x2, y2, complete ? 0xFFFFD700 : 0xFF808080);
+                int x1 = nodeX(dependency) + NODE_SIZE / 2;
+                int y1 = nodeY(dependency) + NODE_SIZE / 2;
+                int x2 = nodeX(quest) + NODE_SIZE / 2;
+                int y2 = nodeY(quest) + NODE_SIZE / 2;
+                boolean highlighted = selectedQuestId.isBlank()
+                        || selectedQuestId.equals(quest.id) || selectedQuestId.equals(dependencyId);
+                drawConnector(gg, connector(x1, y1, x2, y2),
+                        quest.incompatibleDependencies.contains(dependencyId), highlighted);
             }
         }
     }
 
-    private void renderNodes(GuiGraphics gg, int mouseX, int mouseY) {
+    private void renderNodes(GuiGraphics gg) {
         for (QuestData.Quest quest : quests) {
             int x = nodeX(quest);
             int y = nodeY(quest);
             boolean complete = isComplete(quest);
-            int nodeSize = nodeSize();
-            gg.blit(nodeTexture(quest.treeBackground, complete), x, y, 0, 0, nodeSize, nodeSize, NODE_SIZE, NODE_SIZE);
-            quest.iconItem().ifPresent(item -> renderNodeItem(gg, new net.minecraft.world.item.ItemStack(item), x, y));
+            gg.blit(nodeTexture(quest.treeBackground, complete), x, y, 0, 0, NODE_SIZE, NODE_SIZE, NODE_SIZE, NODE_SIZE);
+            quest.iconItem().ifPresent(item -> gg.renderItem(new net.minecraft.world.item.ItemStack(item), x + 8, y + 8));
             if (complete) {
-                gg.blit(ICON_COMPLETE, x + Mth.floor(18 * zoom), y + Mth.floor(18 * zoom), 0, 0,
-                        Math.max(1, Mth.floor(11 * zoom)), Math.max(1, Mth.floor(11 * zoom)), 11, 11);
+                gg.blit(ICON_COMPLETE, x + 18, y + 18, 0, 0, 11, 11, 11, 11);
             } else if (minecraft.player != null && !QuestTracker.dependenciesMet(quest, minecraft.player)) {
-                gg.blit(ICON_ATTENTION, x + Mth.floor(23 * zoom), y + Mth.floor(10 * zoom), 0, 0,
-                        Math.max(1, Mth.floor(6 * zoom)), Math.max(1, Mth.floor(13 * zoom)), 6, 13);
-            }
-            if (mouseX >= x && mouseX <= x + nodeSize && mouseY >= y && mouseY <= y + nodeSize) {
-                gg.renderTooltip(minecraft.font, Component.literal(quest.name), mouseX, mouseY);
+                gg.blit(ICON_ATTENTION, x + 23, y + 10, 0, 0, 6, 13, 6, 13);
             }
         }
+    }
+
+    private void applyCanvasTransform(GuiGraphics gg) {
+        gg.pose().translate(getX() + width / 2f, getY() + height / 2f, 0);
+        gg.pose().scale(zoom, zoom, 1f);
+        gg.pose().translate(panX, panY, 0);
     }
 
     private void renderZoomButtons(GuiGraphics gg) {
@@ -112,57 +126,89 @@ public final class QuestTreeWidget extends AbstractWidget {
 
     private int nodeX(QuestData.Quest quest) {
         int index = quests.indexOf(quest);
-        int baseX = quest.treeX >= 0 ? quest.treeX : (index % 4) * 46;
-        return getX() + Mth.floor((baseX + panX) * zoom);
+        int baseX = quest.treeX != -1 ? quest.treeX : (index % 4 - 2) * 48;
+        return baseX - NODE_SIZE / 2;
     }
 
     private int nodeY(QuestData.Quest quest) {
         int index = quests.indexOf(quest);
-        int baseY = quest.treeY >= 0 ? quest.treeY : (index / 4) * 54;
-        return getY() + Mth.floor((baseY + panY) * zoom);
-    }
-
-    private int nodeSize() {
-        return Math.max(1, Mth.floor(NODE_SIZE * zoom));
-    }
-
-    private void renderNodeItem(GuiGraphics gg, net.minecraft.world.item.ItemStack item, int x, int y) {
-        gg.pose().pushPose();
-        gg.pose().translate(x + 8 * zoom, y + 8 * zoom, 0);
-        gg.pose().scale(zoom, zoom, 1f);
-        gg.renderItem(item, 0, 0);
-        gg.pose().popPose();
+        int baseY = quest.treeY != -1 ? quest.treeY : (index / 4) * 48;
+        return baseY - NODE_SIZE / 2;
     }
 
     private void zoomAt(double mouseX, double mouseY, float targetZoom) {
         float nextZoom = Mth.clamp(targetZoom, .15f, 2f);
         if (nextZoom == zoom) return;
-        float canvasX = (float) ((mouseX - getX()) / zoom - panX);
-        float canvasY = (float) ((mouseY - getY()) / zoom - panY);
+        float centerX = getX() + width / 2f;
+        float centerY = getY() + height / 2f;
+        float canvasX = (float) ((mouseX - centerX) / zoom - panX);
+        float canvasY = (float) ((mouseY - centerY) / zoom - panY);
         zoom = nextZoom;
-        panX = (float) ((mouseX - getX()) / zoom - canvasX);
-        panY = (float) ((mouseY - getY()) / zoom - canvasY);
+        panX = (float) ((mouseX - centerX) / zoom - canvasX);
+        panY = (float) ((mouseY - centerY) / zoom - canvasY);
     }
 
-    private void drawStraightConnector(GuiGraphics gg, int x0, int y0, int x1, int y1, int color) {
-        int dx = Math.abs(x1 - x0);
-        int sx = x0 < x1 ? 1 : -1;
-        int dy = -Math.abs(y1 - y0);
-        int sy = y0 < y1 ? 1 : -1;
+    private Connector connector(int x1, int y1, int x2, int y2) {
+        int dx = x2 - x1;
+        int dy = y2 - y1;
+        List<Point> points = new ArrayList<>();
+        points.add(new Point(x1, y1));
+        if (dx != 0 && dy != 0 && !isDiagonal(dx, dy)) points.add(new Point(x2, y1));
+        points.add(new Point(x2, y2));
+        return new Connector(List.copyOf(points));
+    }
+
+    private void drawConnector(GuiGraphics gg, Connector connector, boolean incompatible, boolean highlighted) {
+        Set<Long> outer = new HashSet<>();
+        Set<Long> inner = new HashSet<>();
+        for (int index = 1; index < connector.points.size(); index++) {
+            Point start = connector.points.get(index - 1);
+            Point end = connector.points.get(index);
+            rasterLine(start.x, start.y, end.x, end.y, outer, inner);
+        }
+        for (long packed : outer) {
+            if (inner.contains(packed)) continue;
+            int x = (int) (packed >> 32);
+            int y = (int) packed;
+            gg.fill(x, y, x + 1, y + 1, 0xFF000000);
+        }
+        int color = incompatible
+                ? (highlighted ? 0xFFFF3030 : 0xFF681C1C)
+                : (highlighted ? 0xFFFFFFFF : 0xFF686868);
+        for (long packed : inner) {
+            int x = (int) (packed >> 32);
+            int y = (int) packed;
+            gg.fill(x, y, x + 1, y + 1, color);
+        }
+    }
+
+    private static void rasterLine(int x1, int y1, int x2, int y2, Set<Long> outer, Set<Long> inner) {
+        int dx = Math.abs(x2 - x1);
+        int sx = x1 < x2 ? 1 : -1;
+        int dy = -Math.abs(y2 - y1);
+        int sy = y1 < y2 ? 1 : -1;
         int error = dx + dy;
         while (true) {
-            gg.fill(x0 - 1, y0 - 1, x0 + 2, y0 + 2, 0xFF000000);
-            gg.fill(x0, y0, x0 + 1, y0 + 1, color);
-            if (x0 == x1 && y0 == y1) return;
-            int twiceError = error * 2;
-            if (twiceError >= dy) { error += dy; x0 += sx; }
-            if (twiceError <= dx) { error += dx; y0 += sy; }
+            addBrush(outer, x1, y1, CONNECTOR_OUTER_WIDTH / 2);
+            addBrush(inner, x1, y1, CONNECTOR_INNER_WIDTH / 2);
+            if (x1 == x2 && y1 == y2) return;
+            int twice = error * 2;
+            if (twice >= dy) { error += dy; x1 += sx; }
+            if (twice <= dx) { error += dx; y1 += sy; }
+        }
+    }
+
+    private static void addBrush(Set<Long> pixels, int centerX, int centerY, int radius) {
+        for (int y = centerY - radius; y <= centerY + radius; y++) {
+            for (int x = centerX - radius; x <= centerX + radius; x++) {
+                pixels.add(((long) x << 32) | (y & 0xFFFFFFFFL));
+            }
         }
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!active || !visible || button != 0) return false;
+        if (!active || !visible || button != 0 || !isMouseOver(mouseX, mouseY)) return false;
         int zoomX = getX() + width - 31;
         int zoomY = getY() + 3;
         if (mouseY >= zoomY - 1 && mouseY <= zoomY + 9) {
@@ -172,13 +218,11 @@ public final class QuestTreeWidget extends AbstractWidget {
             else return false;
             return true;
         }
-        for (QuestData.Quest quest : quests) {
-            int x = nodeX(quest);
-            int y = nodeY(quest);
-            if (mouseX >= x && mouseX <= x + nodeSize() && mouseY >= y && mouseY <= y + nodeSize()) {
-                if (onQuestSelected != null) onQuestSelected.accept(quest);
-                return true;
-            }
+        QuestData.Quest quest = questAt(mouseX, mouseY);
+        if (quest != null) {
+            selectedQuestId = quest.id;
+            if (onQuestSelected != null) onQuestSelected.accept(quest);
+            return true;
         }
         dragging = true;
         setFocused(true);
@@ -240,6 +284,37 @@ public final class QuestTreeWidget extends AbstractWidget {
         if (minecraft.player == null) return false;
         QuestTracker.Status status = QuestTracker.getStatus(quest, minecraft.player);
         return status == QuestTracker.Status.COMPLETED || status == QuestTracker.Status.REDEEMED;
+    }
+
+    private static boolean isDiagonal(int dx, int dy) {
+        int longest = Math.max(Math.abs(dx), Math.abs(dy));
+        return Math.abs(Math.abs(dx) - Math.abs(dy)) <= Math.max(12, longest / 5);
+    }
+
+    private QuestData.Quest questAt(double mouseX, double mouseY) {
+        double canvasX = canvasX(mouseX);
+        double canvasY = canvasY(mouseY);
+        for (int index = quests.size() - 1; index >= 0; index--) {
+            QuestData.Quest quest = quests.get(index);
+            int x = nodeX(quest);
+            int y = nodeY(quest);
+            if (canvasX >= x && canvasX <= x + NODE_SIZE && canvasY >= y && canvasY <= y + NODE_SIZE) return quest;
+        }
+        return null;
+    }
+
+    private double canvasX(double screenX) {
+        return (screenX - (getX() + width / 2D)) / zoom - panX;
+    }
+
+    private double canvasY(double screenY) {
+        return (screenY - (getY() + height / 2D)) / zoom - panY;
+    }
+
+    private record Point(int x, int y) {
+    }
+
+    private record Connector(List<Point> points) {
     }
 
     @Override

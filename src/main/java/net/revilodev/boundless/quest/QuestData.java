@@ -69,6 +69,7 @@ public final class QuestData {
         public final String icon;
         public final String description;
         public final List<String> dependencies;
+        public final List<String> incompatibleDependencies;
         public final boolean lockAfterDependency;
         public final boolean optional;
         public final boolean repeatable;
@@ -83,6 +84,7 @@ public final class QuestData {
         public final int treeX;
         public final int treeY;
         public final String treeBackground;
+        public final boolean treeOrigin;
 
         public Quest(String id, String name, String icon, String description,
                      List<String> dependencies, boolean lockAfterDependency, boolean optional, boolean repeatable,
@@ -99,12 +101,28 @@ public final class QuestData {
                      boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
                      String type, Completion completion, String category, String subCategory, String sourcePath,
                      int treeX, int treeY, String treeBackground) {
+            this(id, name, icon, description, dependencies,
+                    lockAfterDependency && dependencies != null ? dependencies : List.of(), lockAfterDependency,
+                    optional, repeatable, autoComplete, hiddenUnderDependency, rewards, type, completion,
+                    category, subCategory, sourcePath, treeX, treeY, treeBackground, false);
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     List<String> dependencies, List<String> incompatibleDependencies,
+                     boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground, boolean treeOrigin) {
 
             this.id = Objects.requireNonNull(id);
             this.name = name == null ? id : name;
             this.icon = icon == null || icon.isBlank() ? "boundless:quest_book" : icon;
             this.description = description == null ? "" : description;
             this.dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
+            this.incompatibleDependencies = lockAfterDependency
+                    && (incompatibleDependencies == null || incompatibleDependencies.isEmpty())
+                    ? this.dependencies
+                    : incompatibleDependencies == null ? List.of() : List.copyOf(incompatibleDependencies);
             this.lockAfterDependency = lockAfterDependency;
             this.optional = optional;
             this.repeatable = repeatable;
@@ -119,6 +137,7 @@ public final class QuestData {
             this.treeX = treeX;
             this.treeY = treeY;
             this.treeBackground = normalizeTreeBackground(treeBackground);
+            this.treeOrigin = treeOrigin;
         }
 
         private static String normalizeTreeBackground(String raw) {
@@ -338,9 +357,15 @@ public final class QuestData {
         public final boolean excludeFromAll;
         public final String dependency;
         public final boolean autoComplete;
+        public final boolean treeLayout;
 
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, false);
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete, boolean treeLayout) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
             this.name = name == null || name.isBlank() ? id : name;
@@ -348,6 +373,7 @@ public final class QuestData {
             this.excludeFromAll = excludeFromAll;
             this.dependency = dependency == null ? "" : dependency;
             this.autoComplete = autoComplete;
+            this.treeLayout = treeLayout;
         }
 
         public Optional<Item> iconItem() {
@@ -509,8 +535,9 @@ public final class QuestData {
                 String dependency = optString(obj, "dependency");
                 boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                         parseBoolFlexible(obj, "autoComplete", false));
+                boolean treeLayout = "tree".equalsIgnoreCase(optString(obj, "layout"));
 
-                data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
+                data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete, treeLayout));
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("category-parse:" + entry.getKey(), 5_000L,
                         "could not parse category {}", entry.getKey(), e);
@@ -610,18 +637,19 @@ public final class QuestData {
     }
 
     private static void loadModQuestPackData(Path packRoot, DataStore data) {
+        boolean treeLayout = readTreeLayout(packRoot.resolve("boundless").resolve("pack.json"));
         Path dataRoot = packRoot.resolve("data");
         if (!Files.isDirectory(dataRoot)) {
             String namespace = namespaceFromPackRoot(packRoot);
             Path directQuestsRoot = packRoot.resolve("quests");
             if (Files.isDirectory(directQuestsRoot)) {
-                loadQuestNamespace(directQuestsRoot, namespace, data);
+                loadQuestNamespace(directQuestsRoot, namespace, data, treeLayout);
             }
             try (DirectoryStream<Path> namespaces = Files.newDirectoryStream(packRoot)) {
                 for (Path namespaceDir : namespaces) {
                     if (!Files.isDirectory(namespaceDir)) continue;
                     if (!Files.isDirectory(namespaceDir.resolve("quests"))) continue;
-                    loadQuestNamespace(namespaceDir.resolve("quests"), normalizeNamespace(namespaceDir.getFileName().toString()), data);
+                    loadQuestNamespace(namespaceDir.resolve("quests"), normalizeNamespace(namespaceDir.getFileName().toString()), data, treeLayout);
                 }
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("questpack-data:" + packRoot.getFileName(), 5_000L,
@@ -638,7 +666,7 @@ public final class QuestData {
                 Path questsRoot = namespaceDir.resolve("quests");
                 if (!Files.isDirectory(questsRoot)) continue;
 
-                loadQuestNamespace(questsRoot, ns, data);
+                loadQuestNamespace(questsRoot, ns, data, treeLayout);
             }
         } catch (Exception e) {
             BoundlessDebug.warnRateLimited("questpack-data:" + packRoot.getFileName(), 5_000L,
@@ -646,11 +674,11 @@ public final class QuestData {
         }
     }
 
-    private static void loadQuestNamespace(Path questsRoot, String namespace, DataStore data) {
+    private static void loadQuestNamespace(Path questsRoot, String namespace, DataStore data, boolean treeLayout) {
         if (!Files.isDirectory(questsRoot)) return;
         String ns = normalizeNamespace(namespace);
         // instance packs may use the boundless namespace without being built in data
-        loadCategoriesFromPath(questsRoot.resolve("categories"), ns, data);
+        loadCategoriesFromPath(questsRoot.resolve("categories"), ns, data, treeLayout);
         loadSubCategoriesFromPath(questsRoot.resolve("subcategories"), ns, data);
         loadSubCategoriesFromPath(questsRoot.resolve("sub_category"), ns, data);
         loadSubCategoriesFromPath(questsRoot.resolve("subcategory"), ns, data);
@@ -677,7 +705,7 @@ public final class QuestData {
         return out.isEmpty() ? "boundless_pack" : out.toString();
     }
 
-    private static void loadCategoriesFromPath(Path categoriesDir, String namespace, DataStore data) {
+    private static void loadCategoriesFromPath(Path categoriesDir, String namespace, DataStore data, boolean packTreeLayout) {
         if (!Files.isDirectory(categoriesDir)) return;
         try (DirectoryStream<Path> files = Files.newDirectoryStream(categoriesDir, "*.json")) {
             for (Path file : files) {
@@ -693,13 +721,25 @@ public final class QuestData {
                     String dependency = optString(obj, "dependency");
                     boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                             parseBoolFlexible(obj, "autoComplete", false));
-                    data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete));
+                    boolean treeLayout = packTreeLayout || "tree".equalsIgnoreCase(optString(obj, "layout"));
+                    data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete, treeLayout));
                 } catch (Exception e) {
                     BoundlessDebug.warnRateLimited("category-file:" + file, 5_000L,
                             "could not parse category file {}", file, e);
                 }
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean readTreeLayout(Path metaPath) {
+        if (metaPath == null || !Files.exists(metaPath)) return false;
+        try (Reader reader = Files.newBufferedReader(metaPath, StandardCharsets.UTF_8)) {
+            JsonObject root = safeObject(reader);
+            if (root == null || !root.has("boundless") || !root.get("boundless").isJsonObject()) return false;
+            return "tree".equalsIgnoreCase(optString(root.getAsJsonObject("boundless"), "layout"));
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
@@ -1037,6 +1077,7 @@ public final class QuestData {
         String description = optString(obj, "description");
 
         List<String> deps = parseDependencies(obj);
+        List<String> incompatibleDeps = parseStringList(obj, "incompatible_dependencies");
         boolean optional = parseBoolFlexible(obj, "optional", false);
         boolean repeatable = parseBoolFlexible(obj, "repeatable", false);
         boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
@@ -1061,10 +1102,22 @@ public final class QuestData {
         int treeX = parseIntFlexible(obj, "tree_x", -1);
         int treeY = parseIntFlexible(obj, "tree_y", -1);
         String treeBackground = optString(obj, "tree_background");
+        boolean treeOrigin = parseBoolFlexible(obj, "tree_origin", false);
 
-        return new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
+        return new Quest(id, name, icon, description, deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                 rewards, type, completion,
-                category, subCategory, sourcePath, treeX, treeY, treeBackground);
+                category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin);
+    }
+
+    private static List<String> parseStringList(JsonObject obj, String key) {
+        if (obj == null || !obj.has(key) || !obj.get(key).isJsonArray()) return List.of();
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        for (JsonElement element : obj.getAsJsonArray(key)) {
+            if (!element.isJsonPrimitive()) continue;
+            String value = element.getAsString().trim();
+            if (!value.isBlank()) values.add(value);
+        }
+        return List.copyOf(values);
     }
 
     private static List<String> parseDependencies(JsonObject obj) {
@@ -1623,8 +1676,9 @@ public final class QuestData {
                     String dependency = optString(o, "dependency");
                     boolean autoComplete = parseBoolFlexible(o, "auto_complete",
                             parseBoolFlexible(o, "autoComplete", false));
+                    boolean treeLayout = parseBoolFlexible(o, "treeLayout", false);
 
-                    parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency, autoComplete));
+                    parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout));
                 }
             }
 
@@ -1680,6 +1734,7 @@ public final class QuestData {
                             }
                         }
                     }
+                    List<String> incompatibleDeps = parseStringList(o, "incompatibleDependencies");
 
                     boolean optional = parseBoolFlexible(o, "optional", false);
                     boolean repeatable = parseBoolFlexible(o, "repeatable", false);
@@ -1829,11 +1884,12 @@ public final class QuestData {
                     int treeX = parseIntFlexible(o, "treeX", -1);
                     int treeY = parseIntFlexible(o, "treeY", -1);
                     String treeBackground = optString(o, "treeBackground");
+                    boolean treeOrigin = parseBoolFlexible(o, "treeOrigin", false);
 
-                    Quest q = new Quest(id, name, icon, description, deps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
+                    Quest q = new Quest(id, name, icon, description, deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                             rewards, type, completion,
-                            category, subCategory, sourcePath, treeX, treeY, treeBackground);
-                    if (!isQuestDisabled(q)) QUESTS.put(q.id, q);
+                            category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin);
+                    if (!isQuestDisabled(q)) parsed.quests.put(q.id, q);
                 }
             }
 

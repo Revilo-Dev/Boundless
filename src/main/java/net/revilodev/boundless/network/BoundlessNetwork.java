@@ -901,6 +901,7 @@ public final class BoundlessNetwork {
             o.addProperty("excludeFromAll", c.excludeFromAll);
             o.addProperty("dependency", c.dependency);
             o.addProperty("autoComplete", c.autoComplete);
+            o.addProperty("treeLayout", c.treeLayout);
             cats.add(o);
         }
         root.add("categories", cats);
@@ -938,9 +939,14 @@ public final class BoundlessNetwork {
             for (String d : q.dependencies) deps.add(d);
             o.add("dependencies", deps);
 
+            JsonArray incompatibleDeps = new JsonArray();
+            for (String d : q.incompatibleDependencies) incompatibleDeps.add(d);
+            o.add("incompatibleDependencies", incompatibleDeps);
+
             o.addProperty("optional", q.optional);
             o.addProperty("repeatable", q.repeatable);
             o.addProperty("hiddenUnderDependency", q.hiddenUnderDependency);
+            o.addProperty("lockAfterDependency", q.lockAfterDependency);
 
             if (q.rewards != null) {
                 JsonObject ro = new JsonObject();
@@ -1055,9 +1061,10 @@ public final class BoundlessNetwork {
             if (q.sourcePath != null && !q.sourcePath.isBlank()) {
                 o.addProperty("sourcePath", q.sourcePath);
             }
-            if (q.treeX >= 0) o.addProperty("treeX", q.treeX);
-            if (q.treeY >= 0) o.addProperty("treeY", q.treeY);
+            if (q.treeX != -1) o.addProperty("treeX", q.treeX);
+            if (q.treeY != -1) o.addProperty("treeY", q.treeY);
             o.addProperty("treeBackground", q.treeBackground);
+            o.addProperty("treeOrigin", q.treeOrigin);
 
             qs.add(o);
         }
@@ -1314,13 +1321,13 @@ public final class BoundlessNetwork {
                 synchronized (uploadLock) {
                     writeUploadedQuestPack(id, zipBytes);
                     Config.setQuestPackApplied(id, session.enabled);
-                    reloadAndSyncAll(sp);
+                    reloadAndSyncAll(sp.server);
                 }
             } catch (IOException ignored) {
-                QuestPackStorage.recoverStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
+                QuestPackStorage.cleanupStagedQuestPacks(INSTANCE_QUEST_PACKS_ROOT);
                 if (Files.isDirectory(INSTANCE_QUEST_PACKS_ROOT.resolve(id))) {
                     Config.setQuestPackApplied(id, session.enabled);
-                    reloadAndSyncAll(sp);
+                    reloadAndSyncAll(sp.server);
                 }
             }
         });

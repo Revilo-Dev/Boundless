@@ -178,6 +178,7 @@ public final class QuestEditorJsonFiles {
         data.category = optString(obj, "category", "");
         data.subCategory = optString(obj, "sub-category", optString(obj, "subCategory", ""));
         data.dependencies = formatDependenciesLines(obj.get("dependencies"));
+        data.incompatibleDependencies = formatDependenciesLines(obj.get("incompatible_dependencies"));
         data.lockAfterDependency = optStringFlexible(obj, "lock_after_dependency",
                 optStringFlexible(obj, "lockAfterDependency", ""));
         data.optional = optStringFlexible(obj, "optional", "");
@@ -192,6 +193,7 @@ public final class QuestEditorJsonFiles {
         data.treeX = optStringFlexible(obj, "tree_x", "");
         data.treeY = optStringFlexible(obj, "tree_y", "");
         data.treeBackground = optString(obj, "tree_background", "square");
+        data.treeOrigin = optStringFlexible(obj, "tree_origin", "");
         return data;
     }
 

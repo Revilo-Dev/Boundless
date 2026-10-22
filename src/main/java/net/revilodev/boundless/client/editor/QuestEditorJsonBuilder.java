@@ -80,9 +80,10 @@ public final class QuestEditorJsonBuilder {
         obj.addProperty("auto_complete", fields.autoComplete);
         obj.addProperty("hiddenUnderDependency", fields.hiddenUnderDependency);
         obj.addProperty("lock_after_dependency", fields.lockAfterDependency);
-        if (fields.treeX >= 0) obj.addProperty("tree_x", fields.treeX);
-        if (fields.treeY >= 0) obj.addProperty("tree_y", fields.treeY);
+        if (fields.treeX != -1) obj.addProperty("tree_x", fields.treeX);
+        if (fields.treeY != -1) obj.addProperty("tree_y", fields.treeY);
         obj.addProperty("tree_background", normalizeTreeBackground(fields.treeBackground));
+        if (fields.treeOrigin) obj.addProperty("tree_origin", true);
         if (!safe(fields.loadedQuestType).isBlank()) {
             obj.addProperty("type", fields.loadedQuestType);
         }
@@ -93,6 +94,11 @@ public final class QuestEditorJsonBuilder {
             JsonArray arr = new JsonArray();
             for (String dependency : fields.dependencies) arr.add(dependency);
             obj.add("dependencies", arr);
+        }
+        if (fields.incompatibleDependencies != null && !fields.incompatibleDependencies.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (String dependency : fields.incompatibleDependencies) arr.add(dependency);
+            obj.add("incompatible_dependencies", arr);
         }
 
         String completionRaw = safe(fields.completionRaw).trim();
@@ -149,10 +155,12 @@ public final class QuestEditorJsonBuilder {
         public boolean lockAfterDependency;
         public String loadedQuestType = "";
         public List<String> dependencies = List.of();
+        public List<String> incompatibleDependencies = List.of();
         public String completionRaw = "";
         public String rewardRaw = "";
         public int treeX = -1;
         public int treeY = -1;
         public String treeBackground = "square";
+        public boolean treeOrigin;
     }
 }

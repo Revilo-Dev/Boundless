@@ -266,6 +266,7 @@ public final class QuestEditorModels {
         public String category = "";
         public String subCategory = "";
         public String dependencies = "";
+        public String incompatibleDependencies = "";
         public String lockAfterDependency = "";
         public String optional = "";
         public String repeatable = "";
@@ -277,6 +278,7 @@ public final class QuestEditorModels {
         public String treeX = "";
         public String treeY = "";
         public String treeBackground = "square";
+        public String treeOrigin = "";
     }
 
     // index name
@@ -511,6 +513,8 @@ public final class QuestEditorModels {
         public String questDependencies = "";
 
         public boolean questLockAfterDependency = false;
+        public String questIncompatibleDependencies = "";
+        public boolean questTreeOrigin = false;
 
         public boolean questOptional = false;
 

@@ -412,21 +412,29 @@ public final class QuestTracker {
 
     public static boolean dependenciesMet(QuestData.Quest q, Player player) {
         // Optional dependencies still influence visibility, but do not block completion.
-        if (q == null || q.dependencies.isEmpty()) return true;
-        if (q.lockAfterDependency) {
-            for (String depId : q.dependencies) {
-                QuestData.Quest dep = questByIdForPlayer(depId, player);
-                if (dep == null) return false;
-                if (hasEverClaimed(dep, player)) return false;
-            }
-            return true;
-        }
+        if (q == null) return true;
         for (String depId : q.dependencies) {
             QuestData.Quest dep = questByIdForPlayer(depId, player);
             if (dep == null) return false;
+            if (q.incompatibleDependencies.contains(depId)) {
+                if (isCompletedOrClaimed(dep, player)) return false;
+                continue;
+            }
             if (!hasEverClaimed(dep, player)) return false;
         }
+        Collection<QuestData.Quest> quests = player instanceof ServerPlayer serverPlayer
+                ? QuestData.allServer(serverPlayer.server)
+                : QuestData.all();
+        for (QuestData.Quest other : quests) {
+            if (other == q || !other.incompatibleDependencies.contains(q.id)) continue;
+            if (isCompletedOrClaimed(other, player)) return false;
+        }
         return true;
+    }
+
+    private static boolean isCompletedOrClaimed(QuestData.Quest quest, Player player) {
+        Status status = getStatus(quest, player);
+        return status == Status.COMPLETED || status == Status.REDEEMED || hasEverClaimed(quest, player);
     }
 
     private static QuestData.Quest questByIdForPlayer(String questId, Player player) {

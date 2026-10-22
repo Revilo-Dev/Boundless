@@ -525,9 +525,17 @@ public final class QuestPanelClient {
 
     private static boolean usesTreeView(State st) {
         if (st == null) return false;
+        if ("all".equalsIgnoreCase(st.selectedCategory)) {
+            for (QuestData.Category category : QuestData.categoriesOrdered()) {
+                if (category.treeLayout) return true;
+            }
+        } else {
+            QuestData.Category category = QuestData.categoryById(st.selectedCategory).orElse(null);
+            if (category != null && category.treeLayout) return true;
+        }
         for (QuestData.Quest quest : QuestData.all()) {
             if (("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category))
-                    && (quest.treeX >= 0 || quest.treeY >= 0)) return true;
+                    && (quest.treeX != -1 || quest.treeY != -1)) return true;
         }
         return false;
     }
@@ -607,8 +615,7 @@ public final class QuestPanelClient {
             st.filter.active = showFilters;
         }
         if (st.settingsButton != null) {
-            boolean canAccessSettings = Minecraft.getInstance().player != null
-                    && Minecraft.getInstance().player.hasPermissions(2);
+            boolean canAccessSettings = canAccessSettings();
             boolean showSettings = st.open && !Config.displayFiltersAsTabs() && canAccessSettings;
             st.settingsButton.visible = showSettings;
             st.settingsButton.active = showSettings;
@@ -642,8 +649,13 @@ public final class QuestPanelClient {
     // open the settings screen for admins
     private static void openSettings(InventoryScreen inv) {
         var mc = Minecraft.getInstance();
-        if (mc.player == null || !mc.player.hasPermissions(2)) return;
+        if (!canAccessSettings()) return;
         mc.setScreen(new QuestSettingsScreen(inv));
+    }
+
+    private static boolean canAccessSettings() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc.player != null && (mc.hasSingleplayerServer() || mc.player.hasPermissions(2));
     }
 
     // reapply the saved category after reopening the panel
