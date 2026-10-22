@@ -1,40 +1,52 @@
 # Operator Tools
 
-Boundless exposes operator-facing tools for maintaining and editing quest content in-game.
+## Access
 
-## Access Level
+Boundless commands and server-side editor/config mutations require operator permission level `2`. Multiplayer progress and pack storage remain server-authoritative.
 
-Most admin features require permission level `2`.
+## Quest Settings
 
-## Quest Settings Screen
+The settings screen groups options into All, Style, UI, and Features views. It supports direct six-digit color entry, cycling enumerated values/scales, per-tab reset, save/apply, and links to the Quest Editor. See [Settings Guide](Settings-Guide).
 
-Use this for runtime behavior tuning without touching files directly.
+## Quest Editor Features
 
-## Quest Editor Screen
+- Create and configure list/tree quest packs.
+- Enable/disable the built-in pack and instance packs.
+- Create, edit, duplicate, reorder, multi-select, and delete categories, sub-categories, and quests.
+- Place tree quests visually and assign dependencies from the tree.
+- Choose `square`, `rounded_square`, `circle`, or `diamond` tree nodes.
+- Search quests and browse item, item-tag, inventory, mob, and effect suggestions.
+- Add every supported completion/reward row type with validation.
+- Format descriptions with the color/style toolbar and preview behavior.
+- Upload full pack snapshots to a multiplayer server.
+- View and restore recent automatic backups.
+- Export a pack zip without overwriting older exports.
+- Warn before discarding unsaved edits.
 
-The editor supports:
+## Recommended Authoring Workflow
 
-- Creating quest packs
-- Importing packs
-- Editing pack options
-- Creating/editing categories
-- Creating/editing sub-categories
-- Creating/editing quests
-- Reordering entries
-- Duplicating and deleting entries
-- Exporting a pack zip
+1. Create a normalized pack name and choose `list` or `tree`.
+2. Create categories and decide category ordering/dependencies.
+3. For a list pack, add sub-categories and default-open behavior.
+4. Create quests with stable IDs and exact namespaced target IDs.
+5. Add dependencies as individual IDs, not a comma-separated string.
+6. Add completion targets, then rewards.
+7. Test normal claim, auto-claim, submit consumption, repeat, reject, and dependency behavior.
+8. Inspect the automatic backup list and export a release zip.
+9. Deploy to a test server before production.
 
-## Editor Workflow (Recommended)
+## Tree Authoring
 
-1. Create or select a pack.
-2. Define categories.
-3. Define sub-categories.
-4. Create quests and dependencies.
-5. Test progression in normal gameplay.
-6. Export backup zip before major changes.
+Tree packs store `tree_x` and `tree_y` in each quest. In tree placement mode, left-click places a quest and right-clicking existing quests selects dependencies. Dependency lines are generated from quest IDs. Keep adequate spacing for titles and use node background shapes consistently.
 
-## Safety Notes
+## File Safety
 
-- Treat production server packs like source code: back them up.
-- Validate ids and dependencies before publishing.
-- Reload after external file operations.
+- Editor JSON saves are written through a temporary file and replaced atomically when possible.
+- Existing live packs are archived before full-directory replacement.
+- Normal snapshots retain the five newest per pack.
+- Deletion and bulk operations require confirmation/hold interactions in the editor.
+- Do not treat automatic retention as source control; export releases and keep external backups.
+
+## Security
+
+Command and function rewards execute as the player with command permission level `4`. Only install trusted quest packs and review all `commands`, `functions`, loot tables, and uploaded pack contents.

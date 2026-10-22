@@ -1,40 +1,58 @@
 # Using Questpacks on Servers
 
-This page shows the simple way to move questpacks between servers.
+## Server Location
 
-## Where questpacks go
+Install unpacked quest packs in:
 
-Put questpacks in:
+`<server>/config/boundless/questpacks/<pack-id>/`
 
-`config/boundless/questpacks/`
+The pack directory itself must directly contain `boundless/pack.json` and/or `pack.mcmeta`, plus `data/<namespace>/quests/`. Do not leave an extra nested `<pack-id>/<pack-id>/` level after extracting a zip.
 
-This is inside your server folder.
+## Deploy an Export
 
-## Export a pack from client
+1. In the client/editor, select the pack and click **Export**.
+2. Find the generated zip in `config/boundless/exports/`.
+3. Stop the destination server for the safest filesystem deployment.
+4. Extract the zip into `config/boundless/questpacks/<pack-id>/`.
+5. Start the server.
+6. Run `/boundless questpack list`.
+7. If needed, run `/boundless questpack enable <pack-id>`.
+8. Run `/boundless reload` after any live manual changes.
+9. Join with a matching Boundless client and test progression/rewards.
 
-1. Join world with operator permissions.
-2. Open the Boundless Quest Editor.
-3. Select the pack you want.
-4. Click **Export**.
-5. Boundless opens packs directory, copy this file.
+## Multiplayer Editor Upload
 
+An authorized client editor can zip the selected pack and upload it to the server in approximately 60 KB chunks. The server stages the upload, archives any current live pack, installs the completed upload, applies enabled state, reloads, and syncs players. Interrupted staging directories are recovered or hidden by pack discovery logic.
 
-## Use that pack on a server
+## Enable-State Rules
 
-1. Copy the exported pack to the server config folder directory.
-2. Place it in `config/boundless/questpacks/`.
-3. Start the server (or keep it running).
+Server config overrides pack metadata:
+
+1. `disabledQuestPacks` forces off.
+2. `appliedQuestPacks` forces on if not forced off.
+3. Otherwise the pack metadata default is used.
+
+Use `/boundless questpack enable|disable` rather than editing both lists manually. The built-in pack has its own `UI.enableBuiltinQuestPack` switch.
+
+## Server Authority
+
+The server controls loaded definitions, progression, item/XP submission, status, reward delivery, scroll state, and pack toggles. It synchronizes definitions and progress to clients. Keep server and client versions aligned to avoid incompatible payloads or UI expectations.
+
+## Updating a Live Pack
+
+1. Export and retain the known-good version.
+2. Make/test changes in a staging world or server.
+3. Deploy through the editor upload or replace the server directory while stopped.
 4. Run `/boundless reload`.
-5. Make sure the pack is enabled.
+5. Verify category visibility, dependencies, existing player progress, submit targets, and privileged reward commands.
+6. Confirm a timestamped backup exists in `config/boundless/backups/questpacks/<pack-id>/`.
 
-## Quick check
+## Validation Checklist
 
-- The pack appears in questpack tools/commands.
-- Quests and categories appear in-game.
-- Quest progress works as expected.
-
-## If it does not show up
-
-- Check the folder path again.
-- Check that the pack is enabled.
-- Run `/boundless reload` again.
+- `/boundless questpack list` shows the expected effective state.
+- No JSON/load warnings appear in the server log.
+- Categories/sub-categories are present and ordered.
+- Locked quests unlock only after prerequisites are claimed.
+- Objective progress updates on the server.
+- Rewards are delivered once and overflow behavior is acceptable.
+- Untrusted packs contain no unsafe command/function rewards.
