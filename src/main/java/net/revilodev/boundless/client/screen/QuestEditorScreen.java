@@ -17,8 +17,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.client.editor.ScaledMultiLineEditBox;
@@ -3090,7 +3090,7 @@ public final class QuestEditorScreen extends Screen {
         pendingInitUntil = 0L;
     }
     @Override
-    public void renderBackground(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics gg) {
     }
 
     @Override
@@ -3996,7 +3996,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
         if (scrollTypeMenu(mouseX, mouseY, scrollY)) {
             return true;
         }
@@ -4019,18 +4019,18 @@ public final class QuestEditorScreen extends Screen {
                 return true;
             }
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     private boolean scrollEntryFields(double mouseX, double mouseY, double scrollY) {
         for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
-            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, 0, scrollY)) return true;
+            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, scrollY)) return true;
         }
         for (ScaledMultiLineEditBox box : completionEntryBoxes) {
-            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, 0, scrollY)) return true;
+            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, scrollY)) return true;
         }
         for (ScaledMultiLineEditBox box : rewardEntryBoxes) {
-            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, 0, scrollY)) return true;
+            if (box != null && box.visible && box.isMouseOver(mouseX, mouseY) && box.mouseScrolled(mouseX, mouseY, scrollY)) return true;
         }
         return false;
     }

@@ -16,10 +16,8 @@ import java.util.function.Function;
 
 // item picker rendering
 public final class QuestEditorItemPickerRenderer {
-    private static final ResourceLocation VANILLA_BUTTON_SPRITE =
-            ResourceLocation.withDefaultNamespace("widget/button");
-    private static final ResourceLocation VANILLA_BUTTON_DISABLED_SPRITE =
-            ResourceLocation.withDefaultNamespace("widget/button_disabled");
+    private static final ResourceLocation VANILLA_WIDGETS_TEX =
+            ResourceLocation.withDefaultNamespace("textures/gui/widgets.png");
     private static final ResourceLocation TAB_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
@@ -210,8 +208,7 @@ public final class QuestEditorItemPickerRenderer {
     }
 
     private static void renderVanillaFooterButton(GuiGraphics gg, Font font, int x, int y, int width, int height, String text, boolean enabled, boolean selected) {
-        ResourceLocation sprite = enabled ? VANILLA_BUTTON_SPRITE : VANILLA_BUTTON_DISABLED_SPRITE;
-        gg.blitSprite(sprite, x, y, width, height);
+        gg.blit(VANILLA_WIDGETS_TEX, x, y, 0, enabled ? 66 : 46, width, height, 256, 256);
         if (selected) {
             gg.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0x6637A24A);
         }

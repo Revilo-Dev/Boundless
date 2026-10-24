@@ -54,13 +54,13 @@ public final class QuestEditorItemIcons {
             if (!matching.isEmpty()) {
                 int index = (int) ((System.currentTimeMillis() / 900L) % matching.size());
                 ItemStack stack = new ItemStack(matching.get(index));
-                stack.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(tagId));
+                stack.setHoverName(Component.literal(tagId));
                 return stack;
             }
         } catch (Exception ignored) {
         }
         ItemStack fallback = new ItemStack(net.minecraft.world.item.Items.PAPER);
-        fallback.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(tagId));
+        fallback.setHoverName(Component.literal(tagId));
         return fallback;
     }
 
@@ -84,7 +84,7 @@ public final class QuestEditorItemIcons {
                     "textures/gui/effects/" + rl.getPath() + ".png");
             ItemStack stack = new ItemStack(net.minecraft.world.item.Items.POTION);
             if (tex != null) {
-                stack.set(net.minecraft.core.component.DataComponents.ITEM_NAME, Component.literal(effectId));
+                stack.setHoverName(Component.literal(effectId));
             }
             return stack;
         }

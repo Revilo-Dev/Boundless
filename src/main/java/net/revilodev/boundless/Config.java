@@ -157,6 +157,16 @@ public final class Config {
         BUILDER.pop();
     }
 
+    static {
+        BUILDER.push("Development");
+    }
+    public static final ForgeConfigSpec.ConfigValue<Boolean> DEV_MODE =
+            BUILDER.comment("Enables Boundless development performance diagnostics. Keep false during normal play.")
+                    .define("devMode", false);
+    static {
+        BUILDER.pop();
+    }
+
     public static final ForgeConfigSpec SPEC = BUILDER.build();
 
     // boundless config root under the game directory
@@ -176,6 +186,10 @@ public final class Config {
 
     public static int questPackBackupLimit() {
         return QUEST_PACK_BACKUP_LIMIT;
+    }
+
+    public static boolean devMode() {
+        return DEV_MODE.get();
     }
 
     public static List<? extends String> disabledCategories() {

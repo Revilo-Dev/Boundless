@@ -53,10 +53,8 @@ public final class QuestEditorControls {
     private static final int BACK_TAB_W = 27;
     private static final int BACK_TAB_H = 17;
     private static final int FORMAT_BAR_H = 9;
-    private static final ResourceLocation VANILLA_BUTTON_SPRITE =
-            ResourceLocation.withDefaultNamespace("widget/button");
-    private static final ResourceLocation VANILLA_BUTTON_HIGHLIGHTED_SPRITE =
-            ResourceLocation.withDefaultNamespace("widget/button_highlighted");
+    private static final ResourceLocation VANILLA_WIDGETS_TEX =
+            ResourceLocation.withDefaultNamespace("textures/gui/widgets.png");
     private static final ResourceLocation MOVE_UP_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_up.png");
     private static final ResourceLocation MOVE_DOWN_TEX =
@@ -507,7 +505,8 @@ public final class QuestEditorControls {
                     int buttonY = top + (rowH - buttonHeight) / 2;
                     boolean hovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth
                             && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
-                    gg.blitSprite(hovered ? VANILLA_BUTTON_HIGHLIGHTED_SPRITE : VANILLA_BUTTON_SPRITE, buttonX, buttonY, buttonWidth, buttonHeight);
+                    gg.blit(VANILLA_WIDGETS_TEX, buttonX, buttonY, 0, hovered ? 86 : 66,
+                            buttonWidth, buttonHeight, 256, 256);
                     Font font = Minecraft.getInstance().font;
                     gg.drawCenteredString(font, entry.label, buttonX + buttonWidth / 2, buttonY + (buttonHeight - font.lineHeight) / 2 + 1, 0xFFFFFF);
                 } else {
@@ -683,11 +682,6 @@ public final class QuestEditorControls {
             if (contentHeight <= height) return false;
             scrollY = Math.max(0f, Math.min(scrollY - (float) (delta * 12), contentHeight - height));
             return true;
-        }
-
-        @Override
-        public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-            return mouseScrolled(mouseX, mouseY, deltaY);
         }
 
         @Override

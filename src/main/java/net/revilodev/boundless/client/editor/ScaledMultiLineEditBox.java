@@ -1,6 +1,7 @@
 package net.revilodev.boundless.client.editor;
 
 import net.minecraft.Util;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -167,7 +168,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (this.visible && this.isFocused() && StringUtil.isAllowedChatCharacter(codePoint)) {
+        if (this.visible && this.isFocused() && SharedConstants.isAllowedChatCharacter(codePoint)) {
             this.textField.insertText(Character.toString(codePoint));
             return true;
         }
@@ -175,7 +176,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaY) {
         if (!this.visible || !this.active || !this.isMouseOver(mouseX, mouseY)) return false;
         double maxScroll = Math.max(0.0, this.getInnerHeight() - (this.height - this.totalInnerPadding()));
         if (maxScroll <= 0.0) return false;
@@ -597,7 +598,7 @@ final class ScaledTextField {
     public void insertText(String text) {
         if (!text.isEmpty() || this.hasSelection()) {
             pushUndoState();
-            String filtered = this.truncateInsertionText(StringUtil.filterText(text, true));
+            String filtered = this.truncateInsertionText(SharedConstants.filterText(text, true));
             StringView selected = this.getSelected();
             int len = this.value.length();
             int begin = Mth.clamp(selected.beginIndex, 0, len);

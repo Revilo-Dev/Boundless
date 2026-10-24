@@ -8,7 +8,6 @@ import com.google.gson.JsonParser;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestPackStorage;
@@ -267,7 +266,7 @@ public final class QuestEditorPackFiles {
     // send a pack enabled change to the server
     public static boolean sendPackEnabled(String id, boolean enabled, boolean builtin) {
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.SetQuestPackEnabled(id, enabled, builtin));
             return true;
         } catch (Throwable ignored) {
             return false;
@@ -288,7 +287,7 @@ public final class QuestEditorPackFiles {
                 int start = i * chunkSize;
                 int end = Math.min(zipBytes.length, start + chunkSize);
                 byte[] part = java.util.Arrays.copyOfRange(zipBytes, start, end);
-                PacketDistributor.sendToServer(new BoundlessNetwork.UploadQuestPackChunk(
+                BoundlessNetwork.sendToServer(new BoundlessNetwork.UploadQuestPackChunk(
                         pack.name,
                         enabled,
                         uploadId,
@@ -308,7 +307,7 @@ public final class QuestEditorPackFiles {
         String normalizedName = safe(packName).trim();
         if (normalizedName.isBlank()) return false;
         try {
-            PacketDistributor.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
+            BoundlessNetwork.sendToServer(new BoundlessNetwork.DeleteQuestPack(normalizedName));
             return true;
         } catch (Throwable ignored) {
             return false;
