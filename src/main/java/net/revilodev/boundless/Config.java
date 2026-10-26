@@ -95,6 +95,9 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
                     .define("enableQuestSearchBox", false);
+    public static final ModConfigSpec.ConfigValue<Boolean> CUSTOM_BACKGROUNDS =
+            BUILDER.comment("If true, renders custom category backgrounds in quest lists and trees.")
+                    .define("customBackgrounds", true);
     public static final ModConfigSpec.ConfigValue<Boolean> STICKY_SUBCATEGORY_HEADERS =
             BUILDER.comment("If true, keeps the current sub-category header visible while scrolling quest lists.")
                     .define("stickySubCategoryHeaders", true);
@@ -290,6 +293,7 @@ public final class Config {
             double questTextScale,
             double questIconScale,
             boolean enableQuestSearchBox,
+            boolean customBackgrounds,
             boolean enableDescriptionColors,
             String questWidgetTextColor,
             String descriptionTextColor,
@@ -318,6 +322,7 @@ public final class Config {
         QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
+        CUSTOM_BACKGROUNDS.set(customBackgrounds);
         ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
         QUEST_WIDGET_TEXT_COLOR.set(normalizeHexColor(questWidgetTextColor, "FFFFFF"));
         DESCRIPTION_TEXT_COLOR.set(normalizeHexColor(descriptionTextColor, "CFCFCF"));
@@ -446,6 +451,10 @@ public final class Config {
 
     public static boolean enableQuestSearchBox() {
         return ENABLE_QUEST_SEARCH_BOX.get();
+    }
+
+    public static boolean customBackgrounds() {
+        return CUSTOM_BACKGROUNDS.get();
     }
 
     public static boolean enableDescriptionColors() {

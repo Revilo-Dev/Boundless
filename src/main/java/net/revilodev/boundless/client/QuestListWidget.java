@@ -58,6 +58,8 @@ public final class QuestListWidget extends AbstractWidget {
     // cached visible rows
     private String category = "all";
     private String background = "";
+    private boolean backgroundDarkening;
+    private float backgroundDarkeningOpacity = 0.45f;
     private boolean bypassFilters = false;
     private List<RowEntry> cachedRows = List.of();
     private int cachedContentHeight = 0;
@@ -88,7 +90,10 @@ public final class QuestListWidget extends AbstractWidget {
     // filter the list to one category or all
     public void setCategory(String cat) {
         category = cat == null ? "all" : cat;
-        background = QuestData.categoryById(category).map(value -> value.background).orElse("");
+        QuestData.Category categoryData = QuestData.categoryById(category).orElse(null);
+        background = categoryData == null ? "" : categoryData.background;
+        backgroundDarkening = categoryData != null && categoryData.backgroundDarkening;
+        backgroundDarkeningOpacity = categoryData == null ? 0.45f : categoryData.backgroundDarkeningOpacity;
         scrollY = 0;
         invalidateRowsCache();
     }
@@ -401,7 +406,8 @@ public final class QuestListWidget extends AbstractWidget {
         if (!visible || mc.player == null) return;
 
         RenderSystem.enableBlend();
-        QuestCategoryBackgroundRenderer.render(gg, background, getX(), getY(), width, height);
+        QuestCategoryBackgroundRenderer.render(gg, background, backgroundDarkening, backgroundDarkeningOpacity,
+                getX(), getY(), width, height);
         int contentTop = getY() + topInset;
         int viewportHeight = Math.max(0, height - topInset);
         gg.enableScissor(getX(), contentTop, getX() + width, contentTop + viewportHeight);

@@ -359,6 +359,8 @@ public final class QuestData {
         public final boolean autoComplete;
         public final boolean treeLayout;
         public final String background;
+        public final boolean backgroundDarkening;
+        public final float backgroundDarkeningOpacity;
 
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete) {
@@ -373,6 +375,13 @@ public final class QuestData {
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete,
                         boolean treeLayout, String background) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, background, false, 0.45f);
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, boolean backgroundDarkening,
+                        float backgroundDarkeningOpacity) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
             this.name = name == null || name.isBlank() ? id : name;
@@ -382,6 +391,8 @@ public final class QuestData {
             this.autoComplete = autoComplete;
             this.treeLayout = treeLayout;
             this.background = background == null ? "" : background;
+            this.backgroundDarkening = backgroundDarkening;
+            this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, backgroundDarkeningOpacity));
         }
 
         public Optional<Item> iconItem() {
@@ -545,9 +556,11 @@ public final class QuestData {
                         parseBoolFlexible(obj, "autoComplete", false));
                 boolean treeLayout = "tree".equalsIgnoreCase(optString(obj, "layout"));
                 String background = optString(obj, "background");
+                boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
+                float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
 
                 data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
-                        autoComplete, treeLayout, background));
+                        autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity));
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("category-parse:" + entry.getKey(), 5_000L,
                         "could not parse category {}", entry.getKey(), e);
@@ -733,8 +746,10 @@ public final class QuestData {
                             parseBoolFlexible(obj, "autoComplete", false));
                     boolean treeLayout = packTreeLayout || "tree".equalsIgnoreCase(optString(obj, "layout"));
                     String background = optString(obj, "background");
+                    boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
+                    float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
                     data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
-                            autoComplete, treeLayout, background));
+                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity));
                 } catch (Exception e) {
                     BoundlessDebug.warnRateLimited("category-file:" + file, 5_000L,
                             "could not parse category file {}", file, e);
@@ -1690,9 +1705,11 @@ public final class QuestData {
                             parseBoolFlexible(o, "autoComplete", false));
                     boolean treeLayout = parseBoolFlexible(o, "treeLayout", false);
                     String background = optString(o, "background");
+                    boolean backgroundDarkening = parseBoolFlexible(o, "backgroundDarkening", false);
+                    float backgroundDarkeningOpacity = parseFloatFlexible(o, "backgroundDarkeningOpacity", 0.45f);
 
                     parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency,
-                            autoComplete, treeLayout, background));
+                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity));
                 }
             }
 
@@ -1968,6 +1985,15 @@ public final class QuestData {
         if (p == null) return def;
         if (p.isBoolean()) return p.getAsBoolean();
         try { return Boolean.parseBoolean(p.getAsString()); } catch (Exception ignored) { return def; }
+    }
+
+    private static float parseFloatFlexible(JsonObject o, String key, float def) {
+        if (o == null || !o.has(key) || o.get(key).isJsonNull()) return def;
+        try {
+            return o.get(key).getAsFloat();
+        } catch (RuntimeException ignored) {
+            return def;
+        }
     }
 
     private static JsonObject safeObject(Reader reader) {

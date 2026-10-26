@@ -336,8 +336,10 @@ public final class StandaloneQuestBookScreen extends Screen {
             }
         }
         tree.setQuests(quests);
-        tree.setBackground(QuestData.categoryById(selectedCategory)
-                .map(category -> category.background).orElse(""));
+        QuestData.Category category = QuestData.categoryById(selectedCategory).orElse(null);
+        tree.setBackground(category == null ? "" : category.background,
+                category != null && category.backgroundDarkening,
+                category == null ? 0.45f : category.backgroundDarkeningOpacity);
     }
 
     private boolean usesTreeView() {

@@ -605,8 +605,10 @@ public final class QuestPanelClient {
             if ("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category)) quests.add(quest);
         }
         st.tree.setQuests(quests);
-        st.tree.setBackground(QuestData.categoryById(st.selectedCategory)
-                .map(category -> category.background).orElse(""));
+        QuestData.Category category = QuestData.categoryById(st.selectedCategory).orElse(null);
+        st.tree.setBackground(category == null ? "" : category.background,
+                category != null && category.backgroundDarkening,
+                category == null ? 0.45f : category.backgroundDarkeningOpacity);
     }
 
     private static boolean usesTreeView(State st) {

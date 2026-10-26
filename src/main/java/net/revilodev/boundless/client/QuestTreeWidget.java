@@ -40,6 +40,8 @@ public final class QuestTreeWidget extends AbstractWidget {
     private boolean dragging;
     private String selectedQuestId = "";
     private String background = "";
+    private boolean backgroundDarkening;
+    private float backgroundDarkeningOpacity = 0.45f;
     private boolean tooltipSuppressed;
 
     public QuestTreeWidget(int x, int y, int width, int height, Consumer<QuestData.Quest> onQuestSelected) {
@@ -53,7 +55,13 @@ public final class QuestTreeWidget extends AbstractWidget {
     }
 
     public void setBackground(String background) {
+        setBackground(background, false, 0.45f);
+    }
+
+    public void setBackground(String background, boolean darkening, float darkeningOpacity) {
         this.background = background == null ? "" : background;
+        this.backgroundDarkening = darkening;
+        this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, darkeningOpacity));
     }
 
     public void setTooltipSuppressed(boolean tooltipSuppressed) {
@@ -72,7 +80,8 @@ public final class QuestTreeWidget extends AbstractWidget {
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         if (!visible) return;
         QuestData.Quest hovered = tooltipSuppressed || isOverZoomControls(mouseX, mouseY) ? null : questAt(mouseX, mouseY);
-        QuestCategoryBackgroundRenderer.render(gg, background, getX(), getY(), width, height);
+        QuestCategoryBackgroundRenderer.render(gg, background, backgroundDarkening, backgroundDarkeningOpacity,
+                getX(), getY(), width, height);
         gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
         gg.pose().pushPose();
         applyCanvasTransform(gg);
