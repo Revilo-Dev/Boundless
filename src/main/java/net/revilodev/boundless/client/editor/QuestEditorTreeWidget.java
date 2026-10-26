@@ -9,14 +9,20 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.Util;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import net.revilodev.boundless.client.QuestCategoryBackgroundRenderer;
 import net.revilodev.boundless.client.editor.QuestEditorModels.QuestEntryData;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -44,6 +50,11 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private final DependencyChanged onDependencyChanged;
     private final BiConsumer<QuestEntryData, String> onIncompatibilityToggle;
     private List<QuestEntryData> quests = List.of();
+    private Map<String, QuestEntryData> questsById = Map.of();
+    private Map<QuestEntryData, Integer> questIndexes = Map.of();
+    private Map<QuestEntryData, ItemStack> questIcons = Map.of();
+    private List<RenderedConnector> renderedConnectors = List.of();
+    private String background = "";
     private float zoom = 1f;
     private float panX;
     private float panY;
@@ -54,6 +65,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private Tool tool = Tool.NONE;
     private String lastShiftEdgeKey = "";
     private long lastShiftEdgeClickMs;
+    private boolean tooltipSuppressed;
 
     public QuestEditorTreeWidget(int x, int y, int width, int height, Consumer<QuestEntryData> onSelect,
                                  BiConsumer<Integer, Integer> onPlace, NodeMoved onMoved,
@@ -70,7 +82,16 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     public void setQuests(List<QuestEntryData> quests) {
         this.quests = quests == null ? List.of() : List.copyOf(quests);
+        rebuildCaches();
         if (connectorSource != null && questById(connectorSource.id) == null) connectorSource = null;
+    }
+
+    public void setBackground(String background) {
+        this.background = background == null ? "" : background;
+    }
+
+    public void setTooltipSuppressed(boolean tooltipSuppressed) {
+        this.tooltipSuppressed = tooltipSuppressed;
     }
 
     public void setTool(Tool tool) {
@@ -106,7 +127,8 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-        QuestEntryData hovered = questAt(mouseX, mouseY);
+        QuestEntryData hovered = tooltipSuppressed || isOverZoomControls(mouseX, mouseY) ? null : questAt(mouseX, mouseY);
+        QuestCategoryBackgroundRenderer.render(gg, background, getX(), getY(), width, height);
         gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
         gg.pose().pushPose();
         applyCanvasTransform(gg);
@@ -116,20 +138,14 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         gg.disableScissor();
         renderZoomButtons(gg);
         if (hovered != null) renderTreeTooltip(gg, Component.literal(displayName(hovered)), mouseX, mouseY);
-        if (tool == Tool.CONNECT && connectorSource != null && isMouseOver(mouseX, mouseY)) {
+        else if (tool == Tool.CONNECT && connectorSource != null && isMouseOver(mouseX, mouseY)) {
             renderTreeTooltip(gg, Component.literal("Select the quest that should depend on "
                     + displayName(connectorSource)), mouseX, mouseY - 14);
         }
     }
 
     private void renderConnectors(GuiGraphics gg) {
-        for (QuestEntryData quest : quests) {
-            for (String dependencyId : dependencies(quest)) {
-                QuestEntryData dependency = questById(dependencyId);
-                if (dependency == null) continue;
-                drawConnector(gg, connector(dependency, quest), incompatibleDependencies(quest).contains(dependencyId));
-            }
-        }
+        for (RenderedConnector connector : renderedConnectors) drawConnector(gg, connector);
     }
 
     private void renderNodes(GuiGraphics gg) {
@@ -138,7 +154,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             int y = nodeY(quest);
             gg.blit(texture(normalizeBackground(quest.treeBackground) + "-incomplete"),
                     x, y, 0, 0, NODE_SIZE, NODE_SIZE, NODE_SIZE, NODE_SIZE);
-            var icon = QuestEditorItemIcons.iconStackFromId(quest.icon);
+            ItemStack icon = questIcons.getOrDefault(quest, ItemStack.EMPTY);
             if (!icon.isEmpty()) gg.renderItem(icon, x + 8, y + 8);
             if (quest == connectorSource) drawNodeSelection(gg, x, y, 0xFFFFFFFF);
             if (parseBoolean(quest.treeOrigin)) drawNodeSelection(gg, x, y, 0xFFFFC040);
@@ -175,6 +191,12 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         gg.blit(ZOOM_OUT, x, y, 0, 0, 7, 7, 7, 7);
         gg.blit(ZOOM_CENTRE, x + 10, y - 1, 0, 0, 9, 9, 9, 9);
         gg.blit(ZOOM_IN, x + 22, y, 0, 0, 7, 7, 7, 7);
+    }
+
+    private boolean isOverZoomControls(double mouseX, double mouseY) {
+        int x = getX() + width - 31;
+        int y = getY() + 2;
+        return mouseX >= x && mouseX <= x + 29 && mouseY >= y && mouseY <= y + 10;
     }
 
     @Override
@@ -249,12 +271,20 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             if (onPlace != null) onPlace.accept(position[0], position[1]);
             return true;
         }
+        draggingCanvas = true;
+        setFocused(true);
         return true;
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (!active || !visible || button != 0 || tool != Tool.MOVE) return false;
+        if (!active || !visible || button != 0) return false;
+        if (draggingCanvas) {
+            panX += (float) dragX / zoom;
+            panY += (float) dragY / zoom;
+            return true;
+        }
+        if (tool != Tool.MOVE) return false;
         if (draggedQuest != null) {
             int[] position = snapPosition(canvasNodeX(mouseX), canvasNodeY(mouseY), draggedQuest);
             int nextX = position[0];
@@ -263,12 +293,8 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
                 draggedQuest.treeX = Integer.toString(nextX);
                 draggedQuest.treeY = Integer.toString(nextY);
                 draggedQuestMoved = true;
+                rebuildConnectorCache();
             }
-            return true;
-        }
-        if (draggingCanvas) {
-            panX += (float) dragX / zoom;
-            panY += (float) dragY / zoom;
             return true;
         }
         return false;
@@ -343,14 +369,9 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private DependencyEdge edgeAt(double mouseX, double mouseY) {
         double canvasX = canvasX(mouseX);
         double canvasY = canvasY(mouseY);
-        for (QuestEntryData quest : quests) {
-            for (String dependencyId : dependencies(quest)) {
-                QuestEntryData dependency = questById(dependencyId);
-                if (dependency == null) continue;
-                Connector connector = connector(dependency, quest);
-                if (connectorHit(connector, canvasX, canvasY)) {
-                    return new DependencyEdge(dependency, quest);
-                }
+        for (RenderedConnector rendered : renderedConnectors) {
+            if (connectorHit(rendered.connector, canvasX, canvasY)) {
+                return new DependencyEdge(rendered.dependency, rendered.quest);
             }
         }
         return null;
@@ -375,18 +396,17 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private QuestEntryData questById(String id) {
-        for (QuestEntryData quest : quests) if (quest.id.equals(id)) return quest;
-        return null;
+        return questsById.get(id);
     }
 
     private int nodeX(QuestEntryData quest) {
-        int index = quests.indexOf(quest);
+        int index = questIndexes.getOrDefault(quest, 0);
         int base = parse(quest.treeX, (index % 4 - 2) * 48);
         return base - NODE_SIZE / 2;
     }
 
     private int nodeY(QuestEntryData quest) {
-        int index = quests.indexOf(quest);
+        int index = questIndexes.getOrDefault(quest, 0);
         int base = parse(quest.treeY, (index / 4) * 48);
         return base - NODE_SIZE / 2;
     }
@@ -419,7 +439,18 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         return new Connector(List.copyOf(points));
     }
 
-    private void drawConnector(GuiGraphics gg, Connector connector, boolean incompatible) {
+    private void drawConnector(GuiGraphics gg, RenderedConnector connector) {
+        for (PixelSpan span : connector.outerSpans) {
+            gg.fill(span.x, span.y, span.x + span.width, span.y + 1, 0xFF000000);
+        }
+        int color = connector.incompatible ? 0xFFFF3030 : 0xFFFFFFFF;
+        for (PixelSpan span : connector.innerSpans) {
+            gg.fill(span.x, span.y, span.x + span.width, span.y + 1, color);
+        }
+    }
+
+    private RenderedConnector renderedConnector(QuestEntryData dependency, QuestEntryData quest, boolean incompatible) {
+        Connector connector = connector(dependency, quest);
         Set<Long> outer = new HashSet<>();
         Set<Long> inner = new HashSet<>();
         for (int index = 1; index < connector.points.size(); index++) {
@@ -427,18 +458,59 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             Point end = connector.points.get(index);
             rasterLine(start.x, start.y, end.x, end.y, outer, inner);
         }
-        for (long packed : outer) {
-            if (inner.contains(packed)) continue;
-            int x = (int) (packed >> 32);
-            int y = (int) packed;
-            gg.fill(x, y, x + 1, y + 1, 0xFF000000);
+        outer.removeAll(inner);
+        return new RenderedConnector(dependency, quest, connector, incompatible,
+                horizontalSpans(outer), horizontalSpans(inner));
+    }
+
+    private static List<PixelSpan> horizontalSpans(Set<Long> pixels) {
+        List<Point> points = new ArrayList<>(pixels.size());
+        for (long packed : pixels) points.add(new Point((int) (packed >> 32), (int) packed));
+        points.sort(Comparator.comparingInt(Point::y).thenComparingInt(Point::x));
+        List<PixelSpan> spans = new ArrayList<>();
+        int index = 0;
+        while (index < points.size()) {
+            Point first = points.get(index++);
+            int endX = first.x;
+            while (index < points.size()) {
+                Point next = points.get(index);
+                if (next.y != first.y || next.x != endX + 1) break;
+                endX = next.x;
+                index++;
+            }
+            spans.add(new PixelSpan(first.x, first.y, endX - first.x + 1));
         }
-        int color = incompatible ? 0xFFFF3030 : 0xFFFFFFFF;
-        for (long packed : inner) {
-            int x = (int) (packed >> 32);
-            int y = (int) packed;
-            gg.fill(x, y, x + 1, y + 1, color);
+        return List.copyOf(spans);
+    }
+
+    private void rebuildCaches() {
+        Map<String, QuestEntryData> byId = new HashMap<>();
+        Map<QuestEntryData, Integer> indexes = new IdentityHashMap<>();
+        Map<QuestEntryData, ItemStack> icons = new IdentityHashMap<>();
+        for (int index = 0; index < quests.size(); index++) {
+            QuestEntryData quest = quests.get(index);
+            if (quest.id != null && !quest.id.isBlank()) byId.put(quest.id, quest);
+            indexes.put(quest, index);
+            icons.put(quest, QuestEditorItemIcons.iconStackFromId(quest.icon));
         }
+        questsById = byId;
+        questIndexes = indexes;
+        questIcons = icons;
+        rebuildConnectorCache();
+    }
+
+    private void rebuildConnectorCache() {
+        List<RenderedConnector> connectors = new ArrayList<>();
+        for (QuestEntryData quest : quests) {
+            Set<String> incompatible = new HashSet<>(incompatibleDependencies(quest));
+            for (String dependencyId : dependencies(quest)) {
+                QuestEntryData dependency = questById(dependencyId);
+                if (dependency != null) {
+                    connectors.add(renderedConnector(dependency, quest, incompatible.contains(dependencyId)));
+                }
+            }
+        }
+        renderedConnectors = List.copyOf(connectors);
     }
 
     private static void rasterLine(int x1, int y1, int x2, int y2, Set<Long> outer, Set<Long> inner) {
@@ -560,6 +632,13 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private record DependencyEdge(QuestEntryData dependency, QuestEntryData quest) {
+    }
+
+    private record RenderedConnector(QuestEntryData dependency, QuestEntryData quest, Connector connector,
+                                     boolean incompatible, List<PixelSpan> outerSpans, List<PixelSpan> innerSpans) {
+    }
+
+    private record PixelSpan(int x, int y, int width) {
     }
 
     @FunctionalInterface

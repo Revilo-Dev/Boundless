@@ -127,6 +127,7 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow functionalityDisablePinningRow;
     private ConfigRow functionalityAutoClaimRow;
     private ConfigRow functionalityQuestScrollsRow;
+    private ConfigRow functionalityQuickEditRow;
     private ConfigRow gameplayDisableQuestBookRow;
     private ConfigRow gameplaySpawnWithBookRow;
 
@@ -165,6 +166,7 @@ public final class QuestSettingsScreen extends Screen {
     private int functionalityDisablePinningBaseY;
     private int functionalityAutoClaimBaseY;
     private int functionalityQuestScrollsBaseY;
+    private int functionalityQuickEditBaseY;
     private int gameplayDisableQuestBookBaseY;
     private int gameplaySpawnWithBookBaseY;
 
@@ -192,6 +194,7 @@ public final class QuestSettingsScreen extends Screen {
     private boolean disableQuestPinning;
     private boolean autoClaimQuestRewards;
     private boolean enableQuestScrolls;
+    private boolean quickEdit;
     private boolean disableQuestBook;
     private boolean spawnWithQuestBook;
     private ConfigTab configTab = ConfigTab.ALL;
@@ -267,7 +270,8 @@ public final class QuestSettingsScreen extends Screen {
         functionalityDisablePinningBaseY = functionalityHeaderBaseY + 10;
         functionalityAutoClaimBaseY = functionalityDisablePinningBaseY + rowGap;
         functionalityQuestScrollsBaseY = functionalityAutoClaimBaseY + rowGap;
-        gameplayHeaderBaseY = functionalityQuestScrollsBaseY + rowGap + 2;
+        functionalityQuickEditBaseY = functionalityQuestScrollsBaseY + rowGap;
+        gameplayHeaderBaseY = functionalityQuickEditBaseY + rowGap + 2;
         gameplayDisableQuestBookBaseY = gameplayHeaderBaseY + 10;
         gameplaySpawnWithBookBaseY = gameplayDisableQuestBookBaseY + rowGap;
 
@@ -368,6 +372,10 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.quest_scrolls.subtitle"),
                 () -> trs(enableQuestScrolls ? "state.on" : "state.off"),
                 () -> enableQuestScrolls = !enableQuestScrolls);
+        functionalityQuickEditRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, "Quick edit",
+                "Show an operator-only edit button on quest pages.",
+                () -> trs(quickEdit ? "state.on" : "state.off"),
+                () -> quickEdit = !quickEdit);
 
         gameplayDisableQuestBookRow = new ConfigRow(px, gameplayDisableQuestBookBaseY, pw, trs("row.quest_book"),
                 trs("row.quest_book.subtitle"),
@@ -407,6 +415,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(functionalityDisablePinningRow, ConfigTab.FEATURES);
         addConfigRow(functionalityAutoClaimRow, ConfigTab.FEATURES);
         addConfigRow(functionalityQuestScrollsRow, ConfigTab.FEATURES);
+        addConfigRow(functionalityQuickEditRow, ConfigTab.FEATURES);
         addConfigRow(gameplayDisableQuestBookRow, ConfigTab.FEATURES);
         addConfigRow(gameplaySpawnWithBookRow, ConfigTab.FEATURES);
 
@@ -546,6 +555,8 @@ public final class QuestSettingsScreen extends Screen {
         functionalityAutoClaimRow.active = config;
         functionalityQuestScrollsRow.visible = config;
         functionalityQuestScrollsRow.active = config;
+        functionalityQuickEditRow.visible = config;
+        functionalityQuickEditRow.active = config;
         gameplayDisableQuestBookRow.visible = config;
         gameplayDisableQuestBookRow.active = config;
         gameplaySpawnWithBookRow.visible = config;
@@ -598,6 +609,7 @@ public final class QuestSettingsScreen extends Screen {
         disableQuestPinning = Config.disableQuestPinning();
         autoClaimQuestRewards = Config.autoClaimQuestRewards();
         enableQuestScrolls = Config.enableQuestScrolls();
+        quickEdit = Config.quickEdit();
         disableQuestBook = Config.disableQuestBook();
         spawnWithQuestBook = Config.spawnWithQuestBook();
     }
@@ -722,6 +734,7 @@ public final class QuestSettingsScreen extends Screen {
         Config.DISABLE_QUEST_PINNING.set(disableQuestPinning);
         Config.AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
         Config.ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
+        Config.QUICK_EDIT.set(quickEdit);
         Config.DISABLE_QUEST_BOOK.set(disableQuestBook);
         Config.SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
         Config.SPEC.save();
@@ -757,6 +770,7 @@ public final class QuestSettingsScreen extends Screen {
                     disableQuestPinning,
                     autoClaimQuestRewards,
                     enableQuestScrolls,
+                    quickEdit,
                     disableQuestBook,
                     spawnWithQuestBook
             ));
@@ -801,6 +815,7 @@ public final class QuestSettingsScreen extends Screen {
             disableQuestPinning = false;
             autoClaimQuestRewards = false;
             enableQuestScrolls = true;
+            quickEdit = false;
             disableQuestBook = false;
             spawnWithQuestBook = false;
         }

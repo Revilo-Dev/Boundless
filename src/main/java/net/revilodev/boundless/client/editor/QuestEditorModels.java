@@ -243,6 +243,7 @@ public final class QuestEditorModels {
         public String order = "";
         public String dependency = "";
         public String autoComplete = "";
+        public String background = "";
     }
 
     // sub category data
@@ -483,6 +484,8 @@ public final class QuestEditorModels {
         public String catName = "";
 
         public String catIcon = "";
+
+        public String catBackground = "";
 
         public String catDependency = "";
 

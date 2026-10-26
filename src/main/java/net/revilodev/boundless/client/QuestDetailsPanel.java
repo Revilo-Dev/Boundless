@@ -30,6 +30,7 @@ import net.revilodev.boundless.compat.JeiCompat;
 import net.revilodev.boundless.compat.LevelUpCompat;
 import net.revilodev.boundless.client.editor.QuestEditorEmojis;
 import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
+import net.revilodev.boundless.client.screen.QuestEditorScreen;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestItemSpec;
@@ -64,6 +65,10 @@ public final class QuestDetailsPanel extends AbstractWidget {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/unpin-hovered.png");
     private static final ResourceLocation TEX_SCROLL =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
+    private static final ResourceLocation TEX_EDIT =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/edit.png");
+    private static final ResourceLocation TEX_EDIT_HOVER =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/edit-hover.png");
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
     // tag items reused by reward previews
     private static final Map<ResourceLocation, List<Item>> TAG_ITEM_CACHE = new HashMap<>();
@@ -76,6 +81,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private final CompleteButton complete;
     private final RejectButton reject;
     private final PinButton pin;
+    private final EditButton edit;
     private final ScrollButton scroll;
     private final Runnable onBack;
 
@@ -267,6 +273,15 @@ public final class QuestDetailsPanel extends AbstractWidget {
         this.pin.visible = false;
         this.pin.active = false;
 
+        this.edit = new EditButton(getX(), getY(), () -> {
+            if (quest != null && canQuickEdit()) {
+                QuestPanelClient.rememberQuickEditReturn(mc.screen, quest.id);
+                mc.setScreen(new QuestEditorScreen(mc.screen, quest));
+            }
+        });
+        this.edit.visible = false;
+        this.edit.active = false;
+
         this.scroll = new ScrollButton(getX(), getY(), () -> {
             if (quest != null && mc.player != null) {
                 PacketDistributor.sendToServer(new BoundlessNetwork.CreateScroll(quest.id));
@@ -431,6 +446,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     public AbstractButton completeButton() { return complete; }
     public AbstractButton rejectButton() { return reject; }
     public AbstractButton pinButton() { return pin; }
+    public AbstractButton editButton() { return edit; }
     public AbstractButton scrollButton() { return scroll; }
 
     // hide the back button in standalone views
@@ -455,6 +471,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         int actionY = y + 4;
         pin.setPosition(actionX, actionY);
         scroll.setPosition(actionX, actionY);
+        edit.setPosition(actionX - edit.getWidth() - 2, actionY);
     }
 
     // load a new quest into the details panel
@@ -511,6 +528,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         boolean showScrollButton = stickyHeader && Config.enableQuestScrolls() && QuestTracker.canCreateScroll(quest, mc.player);
         boolean pinningEnabled = stickyHeader && !Config.disableQuestPinning() && !showScrollButton;
+        boolean quickEditEnabled = stickyHeader && canQuickEdit();
         pin.visible = pinningEnabled;
         pin.active = pinningEnabled;
         if (pinningEnabled) {
@@ -520,6 +538,14 @@ public final class QuestDetailsPanel extends AbstractWidget {
         scroll.active = showScrollButton;
         if (showScrollButton) {
             scroll.render(gg, mouseX, mouseY, partialTick);
+        }
+        edit.visible = quickEditEnabled;
+        edit.active = quickEditEnabled;
+        if (quickEditEnabled) {
+            edit.render(gg, mouseX, mouseY, partialTick);
+            if (edit.isMouseOver(mouseX, mouseY)) {
+                hoveredTooltips.add(Component.literal("Edit quest"));
+            }
         }
         }
 
@@ -1971,6 +1997,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
             return true;
         }
 
+        if (edit.visible && edit.active && edit.isMouseOver(mouseX, mouseY)) {
+            edit.onPress();
+            return true;
+        }
+
         if (scroll.visible && scroll.active && scroll.isMouseOver(mouseX, mouseY)) {
             scroll.onPress();
             return true;
@@ -2055,6 +2086,39 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         @Override
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
+    }
+
+    private boolean canQuickEdit() {
+        return Config.quickEdit() && mc.player != null
+                && (mc.hasSingleplayerServer() || mc.player.hasPermissions(2));
+    }
+
+    private static final class EditButton extends AbstractButton {
+        private final Runnable onPress;
+
+        private EditButton(int x, int y, Runnable onPress) {
+            super(x, y, 10, 10, Component.empty());
+            this.onPress = onPress;
+        }
+
+        @Override
+        public void onPress() {
+            if (onPress != null) onPress.run();
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            ResourceLocation texture = isMouseOver(mouseX, mouseY) ? TEX_EDIT_HOVER : TEX_EDIT;
+            graphics.pose().pushPose();
+            graphics.pose().translate(getX(), getY(), 0);
+            graphics.pose().scale(0.5f, 0.5f, 1.0f);
+            graphics.blit(texture, 0, 0, 0, 0, 20, 20, 20, 20);
+            graphics.pose().popPose();
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {
+        }
     }
 
     // create quest completion scrolls from the details panel

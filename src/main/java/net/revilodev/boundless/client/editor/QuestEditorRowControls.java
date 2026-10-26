@@ -377,7 +377,7 @@ public final class QuestEditorRowControls {
     // invisible text input used by the editor's icon picker overlay
     public static final class IconPickerBox extends EditBox {
         public IconPickerBox(Font font, Component message) {
-            super(font, 0, 0, 20, ENTRY_ROW_H, message);
+            super(font, 0, 0, 20, 20, message);
         }
 
         @Override

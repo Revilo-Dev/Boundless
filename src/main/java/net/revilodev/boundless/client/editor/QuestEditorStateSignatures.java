@@ -20,6 +20,7 @@ public final class QuestEditorStateSignatures {
             case CATEGORY -> "category|" + safe(fields.categoryId)
                     + "|" + safe(fields.categoryName)
                     + "|" + safe(fields.categoryIcon)
+                    + "|" + safe(fields.categoryBackground)
                     + "|" + safe(fields.categoryDependency)
                     + "|" + fields.categoryAutoComplete;
             case SUBCATEGORY -> "subcategory|" + safe(fields.subCategoryId)
@@ -61,6 +62,7 @@ public final class QuestEditorStateSignatures {
         public String categoryId = "";
         public String categoryName = "";
         public String categoryIcon = "";
+        public String categoryBackground = "";
         public String categoryDependency = "";
         public boolean categoryAutoComplete;
         public String subCategoryId = "";

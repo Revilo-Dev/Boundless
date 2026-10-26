@@ -2,10 +2,12 @@ package net.revilodev.boundless.client.editor;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.BlockItem;
 import net.revilodev.boundless.client.editor.QuestEditorModels.ItemPickerTab;
 import net.revilodev.boundless.client.editor.QuestEditorModels.PickerMode;
 import net.revilodev.boundless.client.editor.QuestEditorModels.PickerPageData;
@@ -101,7 +103,7 @@ public final class QuestEditorItemPickerRenderer {
         gg.pose().pushPose();
         gg.pose().translate(0.0f, 0.0f, 700.0f);
         gg.blit(BROWSER_GUI_TEX, x, y, 0, 0, ITEM_PICKER_W, ITEM_PICKER_H, ITEM_PICKER_W, ITEM_PICKER_H);
-        String title = request.iconPicker ? switch (request.itemPickerTab) {
+        String title = request.blockTexturePicker ? "Block Textures" : request.iconPicker ? switch (request.itemPickerTab) {
             case EFFECTS -> "Icons";
             case CUSTOM -> "Custom Assets";
             default -> "Item Icons";
@@ -112,7 +114,11 @@ public final class QuestEditorItemPickerRenderer {
         };
         gg.drawString(font, title, x + (ITEM_PICKER_W - font.width(title)) / 2, y + 4, 0xFF000000, false);
         gg.blit(X_BUTTON_TEX, closeX(x), closeY(y), 0, 0, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE);
-        if (request.iconPicker) {
+        if (request.blockTexturePicker) {
+            renderSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, false);
+        } else if (request.backgroundAssetPicker) {
+            renderSideTab(gg, x, y, ItemPickerTab.CUSTOM, ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png"), 16, 16, request.itemPickerTab, false);
+        } else if (request.iconPicker) {
             renderSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, false);
             renderSideTab(gg, x, y, ItemPickerTab.EFFECTS, QUEST_TAB_SCROLL_ICON_TEX, 16, 16, request.itemPickerTab, false);
             renderSideTab(gg, x, y, ItemPickerTab.CUSTOM, ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png"), 16, 16, request.itemPickerTab, false);
@@ -163,7 +169,11 @@ public final class QuestEditorItemPickerRenderer {
             if (i < items.size()) {
                 ItemStack stack = items.get(i);
                 String selectedId = i < ids.size() ? ids.get(i) : request.selectionId.apply(stack);
-                if (request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM) {
+                if (request.blockTexturePicker && stack.getItem() instanceof BlockItem blockItem) {
+                    var sprite = Minecraft.getInstance().getBlockRenderer().getBlockModelShaper()
+                            .getParticleIcon(blockItem.getBlock().defaultBlockState());
+                    gg.blit(sx + 1, sy + 1, 0, 16, 16, sprite);
+                } else if (request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM) {
                     ResourceLocation texture = QuestEditorCustomIcons.texture(selectedId);
                     if (texture != null) gg.blit(texture, sx + 1, sy + 1, 0, 0, 16, 16, 16, 16);
                 } else if (request.pickerMode == PickerMode.EFFECTS || (request.iconPicker && request.itemPickerTab == ItemPickerTab.EFFECTS)) {
@@ -207,6 +217,18 @@ public final class QuestEditorItemPickerRenderer {
     }
 
     private static void renderSideTabTooltip(RenderRequest request, int pickerX, int pickerY) {
+        if (request.blockTexturePicker) {
+            if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) {
+                request.gg.renderTooltip(request.font, Component.literal("Full block textures"), request.mouseX, request.mouseY);
+            }
+            return;
+        }
+        if (request.backgroundAssetPicker) {
+            if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM, false)) {
+                request.gg.renderTooltip(request.font, Component.literal("Custom background assets"), request.mouseX, request.mouseY);
+            }
+            return;
+        }
         if (request.iconPicker) {
             if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) request.gg.renderTooltip(request.font, Component.literal("Items"), request.mouseX, request.mouseY);
             else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS, false)) request.gg.renderTooltip(request.font, Component.literal("Icons"), request.mouseX, request.mouseY);
@@ -301,11 +323,13 @@ public final class QuestEditorItemPickerRenderer {
         public final PickerPageData page;
         public final List<String> effectIds;
         public final Function<ItemStack, String> selectionId;
+        public final boolean blockTexturePicker;
+        public final boolean backgroundAssetPicker;
 
         public RenderRequest(GuiGraphics gg, Font font, EditBox searchBox, int screenWidth, int screenHeight, int mouseX, int mouseY,
                              PickerMode pickerMode, ItemPickerTab itemPickerTab, boolean iconPicker, boolean allowsTags, boolean multiToggleAvailable,
                              boolean multiSelect, Set<String> pendingSelection, PickerPageData page, List<String> effectIds,
-                             Function<ItemStack, String> selectionId) {
+                             Function<ItemStack, String> selectionId, boolean blockTexturePicker, boolean backgroundAssetPicker) {
             this.gg = gg;
             this.font = font;
             this.searchBox = searchBox;
@@ -323,6 +347,8 @@ public final class QuestEditorItemPickerRenderer {
             this.page = page;
             this.effectIds = effectIds == null ? List.of() : effectIds;
             this.selectionId = selectionId == null ? stack -> "" : selectionId;
+            this.blockTexturePicker = blockTexturePicker;
+            this.backgroundAssetPicker = backgroundAssetPicker;
         }
     }
 }

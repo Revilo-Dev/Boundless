@@ -39,6 +39,8 @@ public final class QuestTreeWidget extends AbstractWidget {
     private float panY;
     private boolean dragging;
     private String selectedQuestId = "";
+    private String background = "";
+    private boolean tooltipSuppressed;
 
     public QuestTreeWidget(int x, int y, int width, int height, Consumer<QuestData.Quest> onQuestSelected) {
         super(x, y, width, height, Component.empty());
@@ -48,6 +50,14 @@ public final class QuestTreeWidget extends AbstractWidget {
     // update the visible quest nodes
     public void setQuests(List<QuestData.Quest> quests) {
         this.quests = quests == null ? List.of() : List.copyOf(quests);
+    }
+
+    public void setBackground(String background) {
+        this.background = background == null ? "" : background;
+    }
+
+    public void setTooltipSuppressed(boolean tooltipSuppressed) {
+        this.tooltipSuppressed = tooltipSuppressed;
     }
 
     // reset view to the canvas centre
@@ -61,7 +71,8 @@ public final class QuestTreeWidget extends AbstractWidget {
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         if (!visible) return;
-        QuestData.Quest hovered = questAt(mouseX, mouseY);
+        QuestData.Quest hovered = tooltipSuppressed || isOverZoomControls(mouseX, mouseY) ? null : questAt(mouseX, mouseY);
+        QuestCategoryBackgroundRenderer.render(gg, background, getX(), getY(), width, height);
         gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
         gg.pose().pushPose();
         applyCanvasTransform(gg);
@@ -146,6 +157,12 @@ public final class QuestTreeWidget extends AbstractWidget {
         zoom = nextZoom;
         panX = (float) ((mouseX - centerX) / zoom - canvasX);
         panY = (float) ((mouseY - centerY) / zoom - canvasY);
+    }
+
+    private boolean isOverZoomControls(double mouseX, double mouseY) {
+        int x = getX() + width - 31;
+        int y = getY() + 2;
+        return mouseX >= x && mouseX <= x + 29 && mouseY >= y && mouseY <= y + 10;
     }
 
     private Connector connector(int x1, int y1, int x2, int y2) {

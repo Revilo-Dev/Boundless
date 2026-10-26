@@ -150,6 +150,9 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
             BUILDER.comment("If true, quest completion scrolls can be created and used.")
                     .define("enableQuestScrolls", true);
+    public static final ModConfigSpec.ConfigValue<Boolean> QUICK_EDIT =
+            BUILDER.comment("If true, operators can open a quest directly in the editor from its quest-book page.")
+                    .define("quickEdit", false);
     // questPackBackupInterval controls automatic full pack backups
     public static final ModConfigSpec.ConfigValue<String> QUEST_PACK_BACKUP_INTERVAL =
             BUILDER.comment("Automatic questpack backup interval: 1m, 5m, 10m, 30m, off.")
@@ -297,6 +300,7 @@ public final class Config {
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
             boolean enableQuestScrolls,
+            boolean quickEdit,
             boolean disableQuestBook,
             boolean spawnWithQuestBook) {
         DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
@@ -324,6 +328,7 @@ public final class Config {
         DISABLE_QUEST_PINNING.set(disableQuestPinning);
         AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
         ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
+        QUICK_EDIT.set(quickEdit);
         DISABLE_QUEST_BOOK.set(disableQuestBook);
         SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
     }
@@ -492,6 +497,10 @@ public final class Config {
 
     public static boolean enableQuestScrolls() {
         return ENABLE_QUEST_SCROLLS.get();
+    }
+
+    public static boolean quickEdit() {
+        return QUICK_EDIT.get();
     }
 
     public static boolean disableQuestBook() {

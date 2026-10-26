@@ -12,16 +12,23 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.EmptyBlockGetter;
+import net.minecraft.world.level.block.Block;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
+import net.revilodev.boundless.client.QuestPanelBackgroundRenderer;
+import net.revilodev.boundless.client.QuestPanelExpandButton;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.client.editor.ScaledMultiLineEditBox;
 import net.revilodev.boundless.client.editor.QuestEditorControls.ActionButton;
@@ -124,6 +131,8 @@ public final class QuestEditorScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/duplicate_button-hovered.png");
     private static final ResourceLocation DELETE_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter.png");
+    private static final ResourceLocation DELETE_ENABLED_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter_hovered.png");
     private static final ResourceLocation DELETE_CONFIRM_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/are_you_sure_button.png");
     private static final ResourceLocation DELETE_CONFIRM_TEX_HOVER =
@@ -144,14 +153,15 @@ public final class QuestEditorScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/icon-list-quest.png");
     private static final ResourceLocation PACK_TREE_TYPE_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/icon-tree-quest.png");
-    private static final ResourceLocation PIN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pin.png");
-    private static final ResourceLocation PIN_HOVER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pin-hovered.png");
+    private static final ResourceLocation ORIGIN_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/origin.png");
+    private static final ResourceLocation ORIGIN_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/origin-hover.png");
 
     // layout and spacing
     private static final int TOGGLE_SIZE = 20;
     private static final int SMALL_BTN_SIZE = 20;
+    private static final int HEADER_ICON_SIZE = 10;
     private static final int SMALL_BTN_GAP = 4;
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
@@ -247,6 +257,8 @@ public final class QuestEditorScreen extends Screen {
     private static long pendingInitUntil = 0L;
 
     private final Screen parent;
+    private boolean returnToParentOnBack;
+    private String initialQuestId = "";
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     private final QuestEditorSuggestionCaches suggestionCaches = new QuestEditorSuggestionCaches();
 
@@ -257,8 +269,13 @@ public final class QuestEditorScreen extends Screen {
     private int pxRight;
     private int py;
     private int pw;
+    private int leftPw;
     private int ph;
     private int listH;
+    private int panelWidth = PANEL_W;
+    private int editorPanelWidth = PANEL_W;
+    private int panelHeight = PANEL_H;
+    private boolean treePanelExpanded;
     private BackButton backButton;
     private EditBox questSearchBox;
     private Button createPackButton;
@@ -266,6 +283,7 @@ public final class QuestEditorScreen extends Screen {
     private TreeToolButton treeMoveButton;
     private TreeToolButton treeDeleteButton;
     private TreeToolButton treeConnectorButton;
+    private QuestPanelExpandButton treeExpandButton;
     private IconButton importQuestPackButton;
     private EditorTabButton categoriesTabButton;
     private EditorTabButton subCategoriesTabButton;
@@ -275,6 +293,8 @@ public final class QuestEditorScreen extends Screen {
     private Mode mode = Mode.PACK_LIST;
     private EditorType editorType = EditorType.NONE;
     private QuestPack currentPack;
+    private QuestPack cachedLayoutPack;
+    private boolean cachedTreeLayout;
     private String selectedEntryId = "";
 
     // main editor buttons
@@ -287,7 +307,7 @@ public final class QuestEditorScreen extends Screen {
     private Button exportPackButton;
     private IconButton duplicateButton;
     private IconButton deleteQuestButton;
-    private IconButton originButton;
+    private ScaledIconButton originButton;
     private List<QuestPackStorage.Snapshot> packBackups = List.of();
     private final List<BackupRowHitbox> backupRowHitboxes = new ArrayList<>();
 
@@ -313,6 +333,10 @@ public final class QuestEditorScreen extends Screen {
     private EditBox catIdBox;
     private EditBox catNameBox;
     private EditBox catIconBox;
+    private EditBox catBackgroundBox;
+    private Button catBackgroundModeButton;
+    private Button catBackgroundAssetButton;
+    private CategoryBackgroundMode catBackgroundMode = CategoryBackgroundMode.TILEABLE;
     private EditBox catDependencyBox;
     private ToggleButton catAutoCompleteToggle;
 
@@ -415,6 +439,7 @@ public final class QuestEditorScreen extends Screen {
     private Mode pendingDiscardMode;
     private EditorEntry pendingDiscardEntry;
     private boolean pendingEditorExit;
+    private boolean pendingBackNavigation;
     private Runnable pendingTreeDeleteAction;
     private String pendingTreeDeleteMessage = "";
     private static final Map<String, QuestCategorySelection> LAST_QUEST_CATEGORY_SELECTIONS = new HashMap<>();
@@ -451,26 +476,39 @@ public final class QuestEditorScreen extends Screen {
     public QuestEditorScreen(Screen parent) {
         super(tr("title"));
         this.parent = parent;
+        this.returnToParentOnBack = false;
+    }
+
+    public QuestEditorScreen(Screen parent, QuestData.Quest quest) {
+        this(parent);
+        this.initialQuestId = quest == null ? "" : safe(quest.id);
+        this.returnToParentOnBack = true;
     }
 
     @Override
     // build the editor layout
     protected void init() {
         closeTransientMenus();
-        leftX = (width / 2) - PANEL_W - 2;
-        rightX = (width / 2) + 2;
-        topY = (height / 2) - PANEL_H / 2;
+        int maxPanelWidth = Math.max(100, (width - TAB_W - 12) / 2);
+        panelWidth = Math.min(treePanelExpanded ? 220 : PANEL_W, maxPanelWidth);
+        editorPanelWidth = Math.min(PANEL_W, maxPanelWidth);
+        panelHeight = Math.min(PANEL_H, Math.max(120, height - 26));
+        int centerX = width / 2 + (TAB_W - SIDE_TAB_X_OFFSET) / 2;
+        leftX = centerX - panelWidth - 2;
+        rightX = centerX + 2;
+        topY = (height / 2) - panelHeight / 2;
         pxLeft = leftX + 10;
         pxRight = rightX + 10;
         py = topY + 10;
-        pw = 127;
-        int interiorH = PANEL_H - 20;
+        leftPw = panelWidth - 20;
+        pw = editorPanelWidth - 20;
+        int interiorH = panelHeight - 20;
         listH = interiorH - BOTTOM_BAR_H;
         ph = listH;
 
-        leftList = new EditorListWidget(pxLeft, py, pw, listH, this::handleLeftClick, this::handleLeftAction, this::handleLeftSecondaryClick, this::handleEntryMoveAction, QuestEditorItemIcons::iconStackFromId);
+        leftList = new EditorListWidget(pxLeft, py, leftPw, listH, this::handleLeftClick, this::handleLeftAction, this::handleLeftSecondaryClick, this::handleEntryMoveAction, QuestEditorItemIcons::iconStackFromId);
         addRenderableWidget(leftList);
-        questTree = new QuestEditorTreeWidget(pxLeft, py, pw, listH, this::openTreeQuest,
+        questTree = new QuestEditorTreeWidget(pxLeft, py, leftPw, listH, this::openTreeQuest,
                 this::placeTreeQuest, this::saveTreePosition, this::requestDeleteTreeNode,
                 this::requestTreeDependencyChange, this::toggleTreeIncompatibility);
         questTree.visible = false;
@@ -498,10 +536,10 @@ public final class QuestEditorScreen extends Screen {
         addRenderableWidget(duplicateButton);
         addRenderableWidget(deleteQuestButton);
 
-        backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
+        backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + panelHeight - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
         addRenderableWidget(backButton);
         createPackButton = Button.builder(tr("create_new"), button -> openPackCreate())
-                .bounds(pxLeft + 2, barY, pw - SMALL_BTN_SIZE - SMALL_BTN_GAP - 4, 20)
+                .bounds(pxLeft + 2, barY, leftPw - SMALL_BTN_SIZE - SMALL_BTN_GAP - 4, 20)
                 .build();
         addRenderableWidget(createPackButton);
         createEntryButton = new IconButton(pxLeft + 2, barY, SMALL_BTN_SIZE, PLUS_BUTTON_TEX, PLUS_BUTTON_HOVER_TEX, this::requestCreateEntryForCurrentMode);
@@ -520,8 +558,15 @@ public final class QuestEditorScreen extends Screen {
         treeConnectorButton.visible = false;
         treeConnectorButton.active = false;
         addRenderableWidget(treeConnectorButton);
-        originButton = new IconButton(pxRight + pw - SMALL_BTN_SIZE, py, SMALL_BTN_SIZE,
-                PIN_TEX, PIN_HOVER_TEX, this::makeCurrentQuestOrigin);
+        treeExpandButton = new QuestPanelExpandButton(0, 0, () -> treePanelExpanded, () -> {
+            treePanelExpanded = !treePanelExpanded;
+            resize(minecraft, width, height);
+        });
+        treeExpandButton.visible = false;
+        treeExpandButton.active = false;
+        addRenderableWidget(treeExpandButton);
+        originButton = new ScaledIconButton(pxRight + pw - HEADER_ICON_SIZE, py,
+                ORIGIN_TEX, ORIGIN_HOVER_TEX, this::makeCurrentQuestOrigin);
         originButton.visible = false;
         originButton.active = false;
         addRenderableWidget(originButton);
@@ -531,7 +576,7 @@ public final class QuestEditorScreen extends Screen {
         categoriesTabButton = new EditorTabButton(trs("categories"), "boundless:quest_book", Mode.CATEGORY_LIST, () -> currentPack != null, () -> mode, this::setMode);
         subCategoriesTabButton = new EditorTabButton(trs("subcategories"), "minecraft:book", Mode.SUBCATEGORY_LIST, () -> currentPack != null, () -> mode, this::setMode);
         questsTabButton = new EditorTabButton(trs("quests"), QUEST_TAB_SCROLL_ICON_TEX, Mode.QUEST_LIST, () -> currentPack != null, () -> mode, this::setMode);
-        questSearchBox = new EditBox(font, pxLeft + 2, barY, pw - 4, 20, tr("search_quests"));
+        questSearchBox = new EditBox(font, pxLeft + 2, barY, leftPw - 4, 20, tr("search_quests"));
         questSearchBox.setMaxLength(128);
         questSearchBox.setHint(tr("search_quests"));
         questSearchBox.setValue(questSearchQuery);
@@ -554,7 +599,24 @@ public final class QuestEditorScreen extends Screen {
             restoreState(initState);
             return;
         }
+        if (!initialQuestId.isBlank() && openInitialQuest()) return;
         setMode(Mode.PACK_LIST);
+    }
+
+    private boolean openInitialQuest() {
+        String questId = initialQuestId;
+        initialQuestId = "";
+        for (QuestPack pack : QuestEditorPackFiles.listPacks()) {
+            QuestEntryData data = QuestEditorJsonFiles.loadQuest(pack, questId);
+            if (data == null) continue;
+            currentPack = pack;
+            selectedEntryId = questId;
+            setMode(Mode.QUEST_LIST);
+            showQuestEditor(data, data.path);
+            if (leftList != null) leftList.setSelectedId(questId);
+            return true;
+        }
+        return false;
     }
 
     // create all reusable form widgets
@@ -570,6 +632,17 @@ public final class QuestEditorScreen extends Screen {
         catNameBox = createBox("Category name", BOX_H);
         catNameBox.setMaxLength(22);
         catIconBox = createIconPickerBox("Category icon");
+        catBackgroundBox = createIconPickerBox("Category background");
+        catBackgroundModeButton = Button.builder(Component.empty(), button -> cycleCategoryBackgroundMode())
+                .bounds(0, 0, 40, BOX_H).build();
+        catBackgroundModeButton.visible = false;
+        catBackgroundModeButton.active = false;
+        addRenderableWidget(catBackgroundModeButton);
+        catBackgroundAssetButton = Button.builder(Component.literal("Select"), button -> openCategoryBackgroundPicker())
+                .bounds(0, 0, 38, BOX_H).build();
+        catBackgroundAssetButton.visible = false;
+        catBackgroundAssetButton.active = false;
+        addRenderableWidget(catBackgroundAssetButton);
         catDependencyBox = createBox("Unlock quest", BOX_H);
         catAutoCompleteToggle = createToggle(false);
 
@@ -755,13 +828,19 @@ public final class QuestEditorScreen extends Screen {
 
     private boolean isTreePack() {
         if (currentPack == null) return false;
-        return "tree".equalsIgnoreCase(QuestEditorPackFiles.readPackMeta(currentPack.root, currentPack.name).layout);
+        if (cachedLayoutPack != currentPack) {
+            cachedLayoutPack = currentPack;
+            cachedTreeLayout = "tree".equalsIgnoreCase(
+                    QuestEditorPackFiles.readPackMeta(currentPack.root, currentPack.name).layout);
+        }
+        return cachedTreeLayout;
     }
 
     private void refreshQuestTree() {
         if (questTree == null) return;
         if (mode != Mode.QUEST_LIST || !isTreePack()) {
             questTree.setQuests(List.of());
+            questTree.setBackground("");
             return;
         }
         List<QuestEntryData> quests = new ArrayList<>();
@@ -769,6 +848,8 @@ public final class QuestEditorScreen extends Screen {
             if (item.data != null && (treeCategoryId.isBlank() || treeCategoryId.equals(item.data.category))) quests.add(item.data);
         }
         questTree.setQuests(quests);
+        CategoryData category = QuestEditorJsonFiles.loadCategory(currentPack, treeCategoryId);
+        questTree.setBackground(category == null ? "" : category.background);
     }
 
     private void refreshCategoryWorkspaceTabs() {
@@ -1598,18 +1679,21 @@ public final class QuestEditorScreen extends Screen {
         catIdBox.setValue(safe(data.id));
         catNameBox.setValue(safe(data.name));
         catIconBox.setValue(safe(data.icon));
+        setCategoryBackgroundValue(data.background);
         catDependencyBox.setValue(safe(data.dependency));
         catAutoCompleteToggle.setState(parseBool(data.autoComplete, false));
 
         if (isTreePack()) {
             setActiveFields(List.of(
                     field(trs("field.id"), catIdBox),
-                    field("Display", catNameBox)
+                    field("Display", catNameBox),
+                    field("Background (Tile a full block texture, tile a custom asset, or use a full 121x150 image.)", catBackgroundBox)
             ));
         } else {
             setActiveFields(List.of(
                     field(trs("field.id"), catIdBox),
                     field("Display", catNameBox),
+                    field("Background (Tile a full block texture, tile a custom asset, or use a full 121x150 image.)", catBackgroundBox),
                     field("Unlock quest", catDependencyBox),
                     field(trs("field.auto_complete") + " (" + trs("tooltip.auto_complete_category") + ")", catAutoCompleteToggle)
             ));
@@ -1619,6 +1703,53 @@ public final class QuestEditorScreen extends Screen {
         saveButton.active = true;
         markCurrentEditorLoaded(sourcePath != null);
         updateBackButtonVisibility();
+    }
+
+    private void setCategoryBackgroundValue(String encoded) {
+        String value = safe(encoded).trim();
+        if (value.startsWith("custom_tile:")) {
+            catBackgroundMode = CategoryBackgroundMode.CUSTOM_TILEABLE;
+            value = value.substring("custom_tile:".length());
+        } else if (value.startsWith("full:")) {
+            catBackgroundMode = CategoryBackgroundMode.FULL_IMAGE;
+            value = value.substring("full:".length());
+        } else {
+            catBackgroundMode = CategoryBackgroundMode.TILEABLE;
+            if (value.startsWith("tile:")) value = value.substring("tile:".length());
+        }
+        if (catBackgroundBox != null) catBackgroundBox.setValue(value);
+    }
+
+    private String encodedCategoryBackground() {
+        String value = safe(catBackgroundBox == null ? "" : catBackgroundBox.getValue()).trim();
+        return switch (catBackgroundMode) {
+            case TILEABLE -> value;
+            case CUSTOM_TILEABLE -> "custom_tile:" + value;
+            case FULL_IMAGE -> "full:" + value;
+        };
+    }
+
+    private void cycleCategoryBackgroundMode() {
+        catBackgroundMode = switch (catBackgroundMode) {
+            case TILEABLE -> CategoryBackgroundMode.CUSTOM_TILEABLE;
+            case CUSTOM_TILEABLE -> CategoryBackgroundMode.FULL_IMAGE;
+            case FULL_IMAGE -> CategoryBackgroundMode.TILEABLE;
+        };
+        if (catBackgroundBox != null) catBackgroundBox.setValue("");
+        markCurrentEditorUnsaved();
+    }
+
+    private void openCategoryBackgroundPicker() {
+        openIconItemPicker(catBackgroundBox);
+        itemPickerTab = catBackgroundMode == CategoryBackgroundMode.TILEABLE
+                ? ItemPickerTab.CREATIVE : ItemPickerTab.CUSTOM;
+        if (catBackgroundMode == CategoryBackgroundMode.FULL_IMAGE) {
+            statusMessage = "Use a 121x150 PNG for a full-image category background.";
+            statusColor = 0xFFFFFFFF;
+        } else if (catBackgroundMode == CategoryBackgroundMode.CUSTOM_TILEABLE) {
+            statusMessage = "Choose a seamless PNG to tile across the category background.";
+            statusColor = 0xFFFFFFFF;
+        }
     }
 
     private void showSubCategoryEditor(SubCategoryData data, Path sourcePath) {
@@ -1767,7 +1898,7 @@ public final class QuestEditorScreen extends Screen {
             pack.ensureDirs();
             currentPack = pack;
             JsonObject firstCategory = QuestEditorJsonBuilder.buildCategory(
-                    namespace, name, iconPath, 0, "", false, this::setError);
+                    namespace, name, iconPath, 0, "", false, "", this::setError);
             if (firstCategory == null) return;
             if ("tree".equals(layout)) firstCategory.addProperty("layout", "tree");
             QuestPackStorage.writeJsonAtomically(gson, firstCategory, pack.categoriesDir.resolve(namespace + ".json"));
@@ -1896,6 +2027,7 @@ public final class QuestEditorScreen extends Screen {
                 resolveCategoryOrder(id),
                 catDependencyBox.getValue(),
                 catAutoCompleteToggle.isOn(),
+                encodedCategoryBackground(),
                 this::setError
         );
         if (category != null && isTreePack()) category.addProperty("layout", "tree");
@@ -3432,6 +3564,7 @@ public final class QuestEditorScreen extends Screen {
         fields.categoryId = safe(catIdBox == null ? "" : catIdBox.getValue());
         fields.categoryName = safe(catNameBox == null ? "" : catNameBox.getValue());
         fields.categoryIcon = safe(catIconBox == null ? "" : catIconBox.getValue());
+        fields.categoryBackground = encodedCategoryBackground();
         fields.categoryDependency = safe(catDependencyBox == null ? "" : catDependencyBox.getValue());
         fields.categoryAutoComplete = catAutoCompleteToggle != null && catAutoCompleteToggle.isOn();
         fields.subCategoryId = safe(subIdBox == null ? "" : subIdBox.getValue());
@@ -3557,6 +3690,7 @@ public final class QuestEditorScreen extends Screen {
         state.catId = safe(catIdBox == null ? "" : catIdBox.getValue());
         state.catName = safe(catNameBox == null ? "" : catNameBox.getValue());
         state.catIcon = safe(catIconBox == null ? "" : catIconBox.getValue());
+        state.catBackground = encodedCategoryBackground();
         state.catDependency = safe(catDependencyBox == null ? "" : catDependencyBox.getValue());
         state.catAutoComplete = catAutoCompleteToggle != null && catAutoCompleteToggle.isOn();
 
@@ -3635,6 +3769,7 @@ public final class QuestEditorScreen extends Screen {
                 data.id = state.catId;
                 data.name = state.catName;
                 data.icon = state.catIcon;
+                data.background = state.catBackground;
                 data.dependency = state.catDependency;
                 data.autoComplete = state.catAutoComplete ? "true" : "false";
                 showCategoryEditor(data, state.editingPath);
@@ -3728,8 +3863,8 @@ public final class QuestEditorScreen extends Screen {
         }
         updateDeleteHold(mouseX, mouseY);
         gg.fill(0, 0, this.width, this.height, 0xA0000000);
-        gg.blit(PANEL_TEX, leftX, topY, 0, 0, PANEL_W, PANEL_H, PANEL_W, PANEL_H);
-        gg.blit(PANEL_TEX, rightX, topY, 0, 0, PANEL_W, PANEL_H, PANEL_W, PANEL_H);
+        QuestPanelBackgroundRenderer.render(gg, PANEL_TEX, leftX, topY, panelWidth, panelHeight);
+        QuestPanelBackgroundRenderer.render(gg, PANEL_TEX, rightX, topY, editorPanelWidth, panelHeight);
 
         gg.enableScissor(pxRight, py, pxRight + pw, py + ph);
         renderEditorFields(gg, mouseX, mouseY);
@@ -3749,6 +3884,7 @@ public final class QuestEditorScreen extends Screen {
         boolean treeMoveVisible = treeMoveButton != null && treeMoveButton.visible;
         boolean treeDeleteVisible = treeDeleteButton != null && treeDeleteButton.visible;
         boolean treeConnectorVisible = treeConnectorButton != null && treeConnectorButton.visible;
+        boolean treeExpandVisible = treeExpandButton != null && treeExpandButton.visible;
         if (leftList != null) leftList.visible = false;
         if (questTree != null) questTree.visible = false;
         if (backButton != null) backButton.visible = false;
@@ -3760,6 +3896,7 @@ public final class QuestEditorScreen extends Screen {
         if (treeMoveButton != null) treeMoveButton.visible = false;
         if (treeDeleteButton != null) treeDeleteButton.visible = false;
         if (treeConnectorButton != null) treeConnectorButton.visible = false;
+        if (treeExpandButton != null) treeExpandButton.visible = false;
 
         gg.enableScissor(pxRight, py, pxRight + pw, py + ph);
         super.render(gg, mouseX, mouseY, partialTick);
@@ -3776,9 +3913,13 @@ public final class QuestEditorScreen extends Screen {
         if (treeMoveButton != null) treeMoveButton.visible = treeMoveVisible;
         if (treeDeleteButton != null) treeDeleteButton.visible = treeDeleteVisible;
         if (treeConnectorButton != null) treeConnectorButton.visible = treeConnectorVisible;
+        if (treeExpandButton != null) treeExpandButton.visible = treeExpandVisible;
 
         if (leftList != null && leftList.visible) leftList.render(gg, mouseX, mouseY, partialTick);
-        if (questTree != null && questTree.visible) questTree.render(gg, mouseX, mouseY, partialTick);
+        if (questTree != null && questTree.visible) {
+            questTree.setTooltipSuppressed(isTreeTooltipCovered(mouseX, mouseY));
+            questTree.render(gg, mouseX, mouseY, partialTick);
+        }
         for (CategoryWorkspaceTab tab : categoryWorkspaceTabs) {
             if (tab.visible) tab.render(gg, mouseX, mouseY, partialTick);
         }
@@ -3792,6 +3933,7 @@ public final class QuestEditorScreen extends Screen {
         if (treeMoveButton != null && treeMoveButton.visible) treeMoveButton.render(gg, mouseX, mouseY, partialTick);
         if (treeDeleteButton != null && treeDeleteButton.visible) treeDeleteButton.render(gg, mouseX, mouseY, partialTick);
         if (treeConnectorButton != null && treeConnectorButton.visible) treeConnectorButton.render(gg, mouseX, mouseY, partialTick);
+        if (treeExpandButton != null && treeExpandButton.visible) treeExpandButton.render(gg, mouseX, mouseY, partialTick);
         if (createPackButton != null && createPackButton.visible) createPackButton.render(gg, mouseX, mouseY, partialTick);
         if (importQuestPackButton != null && importQuestPackButton.visible) importQuestPackButton.render(gg, mouseX, mouseY, partialTick);
         renderIconOverlays(gg);
@@ -3806,7 +3948,7 @@ public final class QuestEditorScreen extends Screen {
         if (!statusMessage.isBlank()) {
             int msgW = font.width(statusMessage);
             int msgX = (this.width - msgW) / 2;
-            gg.drawString(font, statusMessage, msgX, topY + PANEL_H + 8, statusColor, false);
+            gg.drawString(font, statusMessage, msgX, topY + panelHeight + 8, statusColor, false);
         }
         renderSavedState(gg);
         renderIdSuggestions(gg, mouseX, mouseY);
@@ -3849,14 +3991,14 @@ public final class QuestEditorScreen extends Screen {
 
     private void updateLeftPaneLayout() {
         if (leftList != null) {
-            leftList.setBounds(pxLeft, py, pw, listH);
+            leftList.setBounds(pxLeft, py, leftPw, listH);
         }
         boolean showTree = mode == Mode.QUEST_LIST && isTreePack();
         if (questTree != null) {
-            questTree.setX(pxLeft);
-            questTree.setY(py);
-            questTree.setWidth(pw);
-            questTree.setHeight(listH);
+            questTree.setX(leftX + 8);
+            questTree.setY(topY + 8);
+            questTree.setWidth(panelWidth - 17);
+            questTree.setHeight(panelHeight - 17);
             questTree.visible = showTree;
             questTree.active = showTree;
             if (questTree.tool() != treeTool) questTree.setTool(treeTool);
@@ -3867,7 +4009,7 @@ public final class QuestEditorScreen extends Screen {
         }
         if (backButton != null) {
             backButton.setX(leftX - TAB_W + BACK_TAB_X_OFFSET);
-            backButton.setY(topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN);
+            backButton.setY(topY + panelHeight - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN);
         }
         int barY = py + ph + (BOTTOM_BAR_H - 20) / 2;
         if (saveButton != null) {
@@ -3877,7 +4019,7 @@ public final class QuestEditorScreen extends Screen {
         if (createPackButton != null) {
             createPackButton.setX(pxLeft + 2);
             createPackButton.setY(barY);
-            createPackButton.setWidth(pw - SMALL_BTN_SIZE - SMALL_BTN_GAP - 4);
+            createPackButton.setWidth(leftPw - SMALL_BTN_SIZE - SMALL_BTN_GAP - 4);
             createPackButton.visible = mode == Mode.PACK_LIST;
             createPackButton.active = mode == Mode.PACK_LIST;
         }
@@ -3889,7 +4031,9 @@ public final class QuestEditorScreen extends Screen {
         }
         boolean createEntryVisible = canCreateEntryInCurrentMode();
         if (createEntryButton != null) {
-            createEntryButton.setX(pxLeft + 2 + SMALL_BTN_SIZE + SMALL_BTN_GAP);
+            createEntryButton.setX(isTreePack()
+                    ? pxLeft + 2 + SMALL_BTN_SIZE + SMALL_BTN_GAP
+                    : pxLeft + 2);
             createEntryButton.setY(barY);
             createEntryButton.visible = createEntryVisible;
             createEntryButton.active = createEntryVisible;
@@ -3912,16 +4056,27 @@ public final class QuestEditorScreen extends Screen {
             treeConnectorButton.visible = showTree;
             treeConnectorButton.active = showTree;
         }
+        if (treeExpandButton != null) {
+            treeExpandButton.setX(questTree.getX() + questTree.getWidth() - 41);
+            treeExpandButton.setY(questTree.getY() + 3);
+            treeExpandButton.visible = showTree;
+            treeExpandButton.active = showTree;
+        }
         if (originButton != null) {
-            originButton.setX(pxRight + pw - SMALL_BTN_SIZE - 2);
+            originButton.setX(pxRight + pw - HEADER_ICON_SIZE - 2);
             originButton.setY(py + 1);
             originButton.visible = editorType == EditorType.QUEST && isTreePack();
             originButton.active = originButton.visible;
-            originButton.setTextures(questTreeOrigin ? PIN_HOVER_TEX : PIN_TEX, PIN_HOVER_TEX);
+            originButton.setTextures(questTreeOrigin ? ORIGIN_HOVER_TEX : ORIGIN_TEX, ORIGIN_HOVER_TEX);
         }
         if (questSearchBox != null) {
-            questSearchBox.visible = false;
-            questSearchBox.active = false;
+            boolean showQuestSearch = mode == Mode.QUEST_LIST && currentPack != null && !isTreePack();
+            int searchX = pxLeft + 2 + SMALL_BTN_SIZE + SMALL_BTN_GAP;
+            questSearchBox.setX(searchX);
+            questSearchBox.setY(barY);
+            questSearchBox.setWidth(leftPw - 4 - SMALL_BTN_SIZE - SMALL_BTN_GAP);
+            questSearchBox.visible = showQuestSearch;
+            questSearchBox.active = showQuestSearch;
         }
         layoutTabButtons();
     }
@@ -3931,17 +4086,37 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void layoutTabButtons() {
-        layoutTabButton(categoriesTabButton, 0, 0);
-        layoutTabButton(subCategoriesTabButton, 0, 0);
-        layoutTabButton(questsTabButton, 0, 0);
+        int x = leftX - TAB_W + SIDE_TAB_X_OFFSET;
+        int startY = py + 6;
+        layoutTabButton(categoriesTabButton, x, startY);
+        layoutTabButton(subCategoriesTabButton, x, startY + TAB_H + TAB_GAP);
+        layoutTabButton(questsTabButton, x, startY + (TAB_H + TAB_GAP) * 2);
+    }
+
+    private boolean isTreeTooltipCovered(int mouseX, int mouseY) {
+        if (isHovered(treeMoveButton, mouseX, mouseY)
+                || isHovered(createEntryButton, mouseX, mouseY)
+                || isHovered(treeDeleteButton, mouseX, mouseY)
+                || isHovered(treeConnectorButton, mouseX, mouseY)
+                || isHovered(treeExpandButton, mouseX, mouseY)) return true;
+        for (CategoryWorkspaceTab tab : categoryWorkspaceTabs) {
+            if (isHovered(tab, mouseX, mouseY)) return true;
+        }
+        return false;
+    }
+
+    private boolean isHovered(AbstractWidget widget, double mouseX, double mouseY) {
+        return widget != null && widget.visible && widget.isMouseOver(mouseX, mouseY);
     }
 
     private void layoutTabButton(EditorTabButton button, int x, int y) {
         if (button == null) return;
         button.setX(x);
         button.setY(y);
-        button.visible = false;
-        button.active = false;
+        boolean visible = currentPack != null && !isTreePack()
+                && (mode == Mode.CATEGORY_LIST || mode == Mode.SUBCATEGORY_LIST || mode == Mode.QUEST_LIST);
+        button.visible = visible;
+        button.active = visible;
     }
 
     private void renderSideTabs(GuiGraphics gg, int mouseX, int mouseY) {
@@ -3951,6 +4126,20 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void renderTabTooltip(GuiGraphics gg, int mouseX, int mouseY) {
+        boolean directTooltipHovered = isHovered(categoriesTabButton, mouseX, mouseY)
+                || isHovered(subCategoriesTabButton, mouseX, mouseY)
+                || isHovered(questsTabButton, mouseX, mouseY)
+                || isHovered(importQuestPackButton, mouseX, mouseY)
+                || isHovered(createEntryButton, mouseX, mouseY)
+                || isHovered(treeMoveButton, mouseX, mouseY)
+                || isHovered(treeDeleteButton, mouseX, mouseY)
+                || isHovered(treeConnectorButton, mouseX, mouseY)
+                || isHovered(originButton, mouseX, mouseY)
+                || isHovered(packLayoutSelector, mouseX, mouseY)
+                || isHovered(duplicateButton, mouseX, mouseY)
+                || isHovered(deleteQuestButton, mouseX, mouseY)
+                || isHovered(backButton, mouseX, mouseY);
+        if (directTooltipHovered) pendingEditorTooltip = List.of();
         if (categoriesTabButton != null && categoriesTabButton.visible && categoriesTabButton.isMouseOver(mouseX, mouseY)) {
             gg.renderTooltip(font, Component.literal(categoriesTabButton.tooltip()), mouseX, mouseY);
             return;
@@ -4003,6 +4192,7 @@ public final class QuestEditorScreen extends Screen {
         }
         if (deleteQuestButton != null && deleteQuestButton.visible && deleteQuestButton.isMouseOver(mouseX, mouseY)) {
             gg.renderTooltip(font, deleteConfirmArmed ? tr("tooltip.hold_delete") : tr("tooltip.delete"), mouseX, mouseY);
+            return;
         }
         if (backButton != null && backButton.visible && backButton.isMouseOver(mouseX, mouseY)) {
             gg.renderTooltip(font, tr("tooltip.back"), mouseX, mouseY);
@@ -4012,6 +4202,7 @@ public final class QuestEditorScreen extends Screen {
     private boolean isUnsavedChangesPopupOpen() {
         return pendingTreeDeleteAction != null
                 || pendingEditorExit
+                || pendingBackNavigation
                 || (pendingDiscardMode != null && !pendingDiscardEntryId.isBlank());
     }
 
@@ -4132,6 +4323,7 @@ public final class QuestEditorScreen extends Screen {
         renderIconOverlay(gg, packIconPathBox);
         renderIconOverlay(gg, questIconBox);
         renderIconOverlay(gg, catIconBox);
+        renderIconOverlay(gg, catBackgroundBox);
         renderIconOverlay(gg, subIconBox);
         // no extra reward fields
         gg.disableScissor();
@@ -4144,6 +4336,11 @@ public final class QuestEditorScreen extends Screen {
             gg.fill(box.getX(), box.getY(), box.getX() + box.getWidth(), box.getY() + box.getHeight(), 0xFF808080);
             gg.fill(box.getX() + 1, box.getY() + 1,
                     box.getX() + box.getWidth() - 1, box.getY() + box.getHeight() - 1, 0xFF000000);
+        }
+
+        if (box == catBackgroundBox) {
+            renderCategoryBackgroundPreview(gg, box);
+            return;
         }
 
         if (QuestEditorItemIcons.hasRenderableIcon(box.getValue())) {
@@ -4238,6 +4435,7 @@ public final class QuestEditorScreen extends Screen {
         if (packIconPathBox != null && packIconPathBox.visible && packIconPathBox.isFocused()) return packIconPathBox;
         if (questIconBox != null && questIconBox.visible && questIconBox.isFocused()) return questIconBox;
         if (catIconBox != null && catIconBox.visible && catIconBox.isFocused()) return catIconBox;
+        if (catBackgroundBox != null && catBackgroundBox.visible && catBackgroundBox.isFocused()) return catBackgroundBox;
         if (subIconBox != null && subIconBox.visible && subIconBox.isFocused()) return subIconBox;
         if (catDependencyBox != null && catDependencyBox.visible && catDependencyBox.isFocused()) return catDependencyBox;
         return null;
@@ -4554,6 +4752,14 @@ public final class QuestEditorScreen extends Screen {
 
     private void renderEditorFields(GuiGraphics gg, int mouseX, int mouseY) {
         backupRowHitboxes.clear();
+        if (catBackgroundModeButton != null) {
+            catBackgroundModeButton.visible = false;
+            catBackgroundModeButton.active = false;
+        }
+        if (catBackgroundAssetButton != null) {
+            catBackgroundAssetButton.visible = false;
+            catBackgroundAssetButton.active = false;
+        }
         if (entryRowsDirty) {
             normalizeEntryRows(EntryRowKind.DEPENDENCY);
             normalizeEntryRows(EntryRowKind.COMPLETION);
@@ -4591,6 +4797,8 @@ public final class QuestEditorScreen extends Screen {
                     if (embeddedIcon != null) {
                         eb.setX(boxX + 22);
                         eb.setWidth(Math.max(10, widgetWidth - 22));
+                    } else if (eb instanceof IconPickerBox) {
+                        eb.setWidth(20);
                     } else {
                         eb.setWidth(widgetWidth);
                     }
@@ -4626,6 +4834,24 @@ public final class QuestEditorScreen extends Screen {
                     embeddedIcon.setWidth(20);
                     embeddedIcon.visible = inside;
                     embeddedIcon.active = inside;
+                }
+                if (field.widget == catBackgroundBox && catBackgroundModeButton != null && catBackgroundAssetButton != null) {
+                    int gap = 2;
+                    int assetWidth = 38;
+                    int modeX = boxX + 20 + gap;
+                    int modeWidth = Math.max(28, widgetWidth - 20 - assetWidth - gap * 2);
+                    catBackgroundModeButton.setPosition(modeX, boxY);
+                    catBackgroundModeButton.setWidth(modeWidth);
+                    catBackgroundModeButton.setHeight(BOX_H);
+                    catBackgroundModeButton.setMessage(Component.literal(catBackgroundMode.label));
+                    catBackgroundModeButton.visible = inside;
+                    catBackgroundModeButton.active = inside;
+                    catBackgroundAssetButton.setPosition(modeX + modeWidth + gap, boxY);
+                    catBackgroundAssetButton.setWidth(assetWidth);
+                    catBackgroundAssetButton.setHeight(BOX_H);
+                    catBackgroundAssetButton.setMessage(Component.literal(catBackgroundMode == CategoryBackgroundMode.TILEABLE ? "Blocks" : "Asset"));
+                    catBackgroundAssetButton.visible = inside;
+                    catBackgroundAssetButton.active = inside;
                 }
                 if (inside && field.widget instanceof EditBox eb && isDropdownField(eb)) {
                     boolean hovered = mouseX >= eb.getX() && mouseX <= eb.getX() + eb.getWidth()
@@ -4671,6 +4897,18 @@ public final class QuestEditorScreen extends Screen {
                     if (!isItemPickerOpen()) queueEditorTooltip(Component.literal(lockTooltip), mouseX, mouseY);
                     break;
                 }
+            }
+            if (!isItemPickerOpen() && catBackgroundModeButton != null && catBackgroundModeButton.visible
+                    && catBackgroundModeButton.isMouseOver(mouseX, mouseY)) {
+                queueEditorTooltip(Component.literal(switch (catBackgroundMode) {
+                    case TILEABLE -> "Tile one full block texture across the category background.";
+                    case CUSTOM_TILEABLE -> "Tile a custom PNG asset across the category background.";
+                    case FULL_IMAGE -> "Stretch one custom PNG across the background. Use a 121x150 image.";
+                }), mouseX, mouseY);
+            } else if (!isItemPickerOpen() && catBackgroundAssetButton != null && catBackgroundAssetButton.visible
+                    && catBackgroundAssetButton.isMouseOver(mouseX, mouseY)) {
+                queueEditorTooltip(Component.literal(catBackgroundMode == CategoryBackgroundMode.TILEABLE
+                        ? "Choose a full block texture." : "Choose or add a custom PNG asset."), mouseX, mouseY);
             }
             yCursor += font.lineHeight + FIELD_LABEL_GAP + widgetHeight + FIELD_ROW_GAP;
             if (field.widget == questDescriptionBox) {
@@ -4833,6 +5071,7 @@ public final class QuestEditorScreen extends Screen {
                 || isInsideBox(catIconBox, mouseX, mouseY)
                 || isInsideBox(subIconBox, mouseX, mouseY)
                 || isInsideBox(questIconBox, mouseX, mouseY)
+                || isInsideBox(catBackgroundBox, mouseX, mouseY)
                 || isInsideBox(catDependencyBox, mouseX, mouseY)
                 || isInsideBox(subCategoryBox, mouseX, mouseY)
                 || isInsideBox(questCategoryBox, mouseX, mouseY)
@@ -4852,7 +5091,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private EditBox clickedVisibleIconBox(double mouseX, double mouseY) {
-        EditBox[] boxes = {packIconPathBox, catIconBox, subIconBox, questIconBox};
+        EditBox[] boxes = {packIconPathBox, catIconBox, catBackgroundBox, subIconBox, questIconBox};
         for (EditBox box : boxes) {
             if (isInsideBox(box, mouseX, mouseY)) return box;
         }
@@ -5347,12 +5586,29 @@ public final class QuestEditorScreen extends Screen {
         }
 
         if (questSearchBox != null) {
-            questSearchBox.visible = false;
-            questSearchBox.active = false;
+            boolean visible = mode == Mode.QUEST_LIST && currentPack != null && !isTreePack();
+            questSearchBox.visible = visible;
+            questSearchBox.active = visible;
         }
     }
 
     private void goBack() {
+        if (hasUnsavedEditorChanges()) {
+            clearPendingDiscardState();
+            pendingBackNavigation = true;
+            statusMessage = "";
+            statusColor = 0xFFD080;
+            return;
+        }
+        performBackNavigation();
+    }
+
+    private void performBackNavigation() {
+        pendingBackNavigation = false;
+        if (returnToParentOnBack) {
+            exitEditor();
+            return;
+        }
         switch (mode) {
             case PACK_LIST -> {
                 if (editorType == EditorType.PACK_OPTIONS) {
@@ -5475,6 +5731,7 @@ public final class QuestEditorScreen extends Screen {
         if (button != 0) return true;
         boolean confirmingTreeDelete = pendingTreeDeleteAction != null;
         boolean exitingEditor = pendingEditorExit;
+        boolean navigatingBack = pendingBackNavigation;
         String save = confirmingTreeDelete ? "Delete" : trs("popup.save");
         String discard = confirmingTreeDelete ? "Cancel" : trs("popup.discard");
         String message = confirmingTreeDelete ? pendingTreeDeleteMessage : trs("popup.unsaved_changes");
@@ -5499,6 +5756,8 @@ public final class QuestEditorScreen extends Screen {
                 if (exitingEditor) {
                     pendingEditorExit = false;
                     exitEditor();
+                } else if (navigatingBack) {
+                    performBackNavigation();
                 } else {
                     continuePendingDiscardNavigation();
                 }
@@ -5514,6 +5773,8 @@ public final class QuestEditorScreen extends Screen {
             if (exitingEditor) {
                 pendingEditorExit = false;
                 exitEditor();
+            } else if (navigatingBack) {
+                performBackNavigation();
             } else {
                 continuePendingDiscardNavigation();
             }
@@ -5989,7 +6250,8 @@ public final class QuestEditorScreen extends Screen {
         itemPickerKind = null;
         itemPickerRow = -1;
         pickerMode = PickerMode.ITEMS;
-        itemPickerTab = ItemPickerTab.CREATIVE;
+        itemPickerTab = target == catBackgroundBox && catBackgroundMode != CategoryBackgroundMode.TILEABLE
+                ? ItemPickerTab.CUSTOM : ItemPickerTab.CREATIVE;
         itemPickerPage = 0;
         if (itemPickerSearchBox == null) {
             itemPickerSearchBox = new EditBox(font, 0, 0, ITEM_PICKER_SEARCH_W, ITEM_PICKER_SEARCH_H, tr("search_picker"));
@@ -6176,7 +6438,9 @@ public final class QuestEditorScreen extends Screen {
                 itemPickerPendingSelection,
                 currentPickerPageData(),
                 suggestionCaches.effectSuggestions(),
-                this::pickerSelectionId
+                this::pickerSelectionId,
+                itemPickerIconTarget == catBackgroundBox && catBackgroundMode == CategoryBackgroundMode.TILEABLE,
+                itemPickerIconTarget == catBackgroundBox && catBackgroundMode != CategoryBackgroundMode.TILEABLE
         ));
     }
 
@@ -6223,6 +6487,14 @@ public final class QuestEditorScreen extends Screen {
 
     private boolean clickPickerSideTab(double mouseX, double mouseY, int pickerX, int pickerY) {
         if (itemPickerIconTarget != null) {
+            if (itemPickerIconTarget == catBackgroundBox) {
+                ItemPickerTab allowedTab = catBackgroundMode == CategoryBackgroundMode.TILEABLE
+                        ? ItemPickerTab.CREATIVE : ItemPickerTab.CUSTOM;
+                boolean overTab = QuestEditorItemPickerRenderer.isMouseOverSideTab(
+                        mouseX, mouseY, pickerX, pickerY, allowedTab, false);
+                if (overTab) itemPickerTab = allowedTab;
+                return overTab;
+            }
             if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) {
                 itemPickerTab = ItemPickerTab.CREATIVE;
             } else if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS, false)) {
@@ -6272,6 +6544,33 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private PickerPageData currentPickerPageData() {
+        if (itemPickerIconTarget == catBackgroundBox && catBackgroundMode == CategoryBackgroundMode.TILEABLE) {
+            String query = safe(itemPickerSearchQuery).trim().toLowerCase(Locale.ROOT);
+            List<String> ids = new ArrayList<>();
+            Set<String> seenTextures = new HashSet<>();
+            for (String id : suggestionCaches.itemSuggestions()) {
+                ResourceLocation resource = ResourceLocation.tryParse(id);
+                if (resource == null || !query.isBlank() && !id.contains(query)) continue;
+                if (!(BuiltInRegistries.ITEM.get(resource) instanceof BlockItem blockItem)) continue;
+                Block block = blockItem.getBlock();
+                if (!isFullBackgroundBlock(block)) continue;
+                TextureAtlasSprite sprite = minecraft.getBlockRenderer().getBlockModelShaper()
+                        .getParticleIcon(block.defaultBlockState());
+                if (!seenTextures.add(sprite.contents().name().toString())) continue;
+                ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+                if (blockId != null) ids.add(blockId.toString());
+            }
+            int pageSize = ITEM_PICKER_COLS * ITEM_PICKER_ROWS;
+            int maxPage = Math.max(0, (ids.size() - 1) / pageSize);
+            itemPickerPage = Mth.clamp(itemPickerPage, 0, maxPage);
+            int start = Math.min(ids.size(), itemPickerPage * pageSize);
+            int end = Math.min(ids.size(), start + pageSize);
+            List<ItemStack> items = new ArrayList<>();
+            for (int index = start; index < end; index++) {
+                items.add(new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(ids.get(index)))));
+            }
+            return new PickerPageData(ids.size(), items, ids.subList(start, end));
+        }
         if (itemPickerIconTarget != null && itemPickerTab == ItemPickerTab.CUSTOM) {
             List<String> ids = QuestEditorCustomIcons.ids();
             String query = safe(itemPickerSearchQuery).toLowerCase(Locale.ROOT);
@@ -6310,11 +6609,29 @@ public final class QuestEditorScreen extends Screen {
         return result.data();
     }
 
+    private boolean isFullBackgroundBlock(Block block) {
+        if (block == null) return false;
+        var state = block.defaultBlockState();
+        return !state.isAir()
+                && state.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)
+                && state.getRenderShape() != net.minecraft.world.level.block.RenderShape.INVISIBLE;
+    }
+
     private void applyPickedItem(ItemStack picked) {
         if (!isItemPickerOpen()) return;
         if (itemPickerIconTarget != null) {
             if (picked == null || picked.isEmpty()) return;
-            ResourceLocation id = BuiltInRegistries.ITEM.getKey(picked.getItem());
+            ResourceLocation id;
+            if (itemPickerIconTarget == catBackgroundBox) {
+                if (catBackgroundMode != CategoryBackgroundMode.TILEABLE) return;
+                if (!(picked.getItem() instanceof BlockItem blockItem)) {
+                    setError("Category background must be a block");
+                    return;
+                }
+                id = BuiltInRegistries.BLOCK.getKey(blockItem.getBlock());
+            } else {
+                id = BuiltInRegistries.ITEM.getKey(picked.getItem());
+            }
             if (id == null) return;
             itemPickerIconTarget.setValue(id.toString());
             itemPickerIconTarget.setCursorPosition(id.toString().length());
@@ -6363,6 +6680,16 @@ public final class QuestEditorScreen extends Screen {
 
     private void applyPickedIcon(String id) {
         if (itemPickerIconTarget == null || id == null || id.isBlank()) return;
+        if (itemPickerIconTarget == catBackgroundBox) {
+            if (catBackgroundMode == CategoryBackgroundMode.TILEABLE) {
+                setError("Category background must be a full block");
+                return;
+            }
+            itemPickerIconTarget.setValue(id);
+            itemPickerIconTarget.setCursorPosition(id.length());
+            markCurrentEditorUnsaved();
+            return;
+        }
         itemPickerIconTarget.setValue(id);
         itemPickerIconTarget.setCursorPosition(id.length());
         markCurrentEditorUnsaved();
@@ -6433,13 +6760,15 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private boolean isIconBox(EditBox box) {
-        return box == packIconPathBox || box == questIconBox || box == catIconBox || box == subIconBox;
+        return box == packIconPathBox || box == questIconBox || box == catIconBox
+                || box == catBackgroundBox || box == subIconBox;
     }
 
     private EditBox focusedEditBox() {
         if (packIconPathBox != null && packIconPathBox.isFocused()) return packIconPathBox;
         if (questIconBox != null && questIconBox.isFocused()) return questIconBox;
         if (catIconBox != null && catIconBox.isFocused()) return catIconBox;
+        if (catBackgroundBox != null && catBackgroundBox.isFocused()) return catBackgroundBox;
         if (subIconBox != null && subIconBox.isFocused()) return subIconBox;
         return null;
     }
@@ -6584,6 +6913,23 @@ public final class QuestEditorScreen extends Screen {
         }
     }
 
+    private void renderCategoryBackgroundPreview(GuiGraphics gg, EditBox box) {
+        int iconX = box.getX() + 2;
+        int iconY = box.getY() + (box.getHeight() - 16) / 2;
+        if (catBackgroundMode == CategoryBackgroundMode.TILEABLE) {
+            ResourceLocation id = ResourceLocation.tryParse(safe(box.getValue()).trim());
+            if (id == null) return;
+            Block block = BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+            if (block == null) return;
+            TextureAtlasSprite sprite = minecraft.getBlockRenderer().getBlockModelShaper()
+                    .getParticleIcon(block.defaultBlockState());
+            gg.blit(iconX, iconY, 0, 16, 16, sprite);
+            return;
+        }
+        ResourceLocation texture = QuestEditorCustomIcons.texture(safe(box.getValue()).trim());
+        if (texture != null) gg.blit(texture, iconX, iconY, 0, 0, 16, 16, 16, 16);
+    }
+
     private final class TreeToolButton extends AbstractWidget {
         private final Tool tool;
         private final Runnable onPress;
@@ -6617,7 +6963,8 @@ public final class QuestEditorScreen extends Screen {
                     : ResourceLocation.withDefaultNamespace("widget/button");
             gg.blitSprite(background, getX(), getY(), getWidth(), getHeight());
             if (tool == Tool.DELETE) {
-                gg.blit(DELETE_TEX, getX(), getY(), 0, 0, SMALL_BTN_SIZE, SMALL_BTN_SIZE, SMALL_BTN_SIZE, SMALL_BTN_SIZE);
+                ResourceLocation texture = selected ? DELETE_ENABLED_TEX : DELETE_TEX;
+                gg.blit(texture, getX(), getY(), 0, 0, SMALL_BTN_SIZE, SMALL_BTN_SIZE, SMALL_BTN_SIZE, SMALL_BTN_SIZE);
                 return;
             }
             if (tool == Tool.MOVE) {
@@ -6643,6 +6990,55 @@ public final class QuestEditorScreen extends Screen {
             gg.fill(left + 3, top + 2, right + 1, top + 3, 0xFFFFFFFF);
             gg.fill(right, top + 3, right + 3, bottom + 1, 0xFF000000);
             gg.fill(right + 1, top + 3, right + 2, bottom + 1, 0xFFFFFFFF);
+        }
+
+        @Override
+        protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput narration) {
+        }
+    }
+
+    private enum CategoryBackgroundMode {
+        TILEABLE("Tile block"),
+        CUSTOM_TILEABLE("Tile asset"),
+        FULL_IMAGE("Full image");
+
+        private final String label;
+
+        CategoryBackgroundMode(String label) {
+            this.label = label;
+        }
+    }
+
+    private static final class ScaledIconButton extends net.minecraft.client.gui.components.AbstractButton {
+        private ResourceLocation texture;
+        private ResourceLocation hoverTexture;
+        private final Runnable onPress;
+
+        private ScaledIconButton(int x, int y, ResourceLocation texture, ResourceLocation hoverTexture, Runnable onPress) {
+            super(x, y, HEADER_ICON_SIZE, HEADER_ICON_SIZE, Component.empty());
+            this.texture = texture;
+            this.hoverTexture = hoverTexture;
+            this.onPress = onPress;
+        }
+
+        private void setTextures(ResourceLocation texture, ResourceLocation hoverTexture) {
+            this.texture = texture;
+            this.hoverTexture = hoverTexture;
+        }
+
+        @Override
+        public void onPress() {
+            if (onPress != null) onPress.run();
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            ResourceLocation selectedTexture = isMouseOver(mouseX, mouseY) ? hoverTexture : texture;
+            graphics.pose().pushPose();
+            graphics.pose().translate(getX(), getY(), 0);
+            graphics.pose().scale(0.5f, 0.5f, 1.0f);
+            graphics.blit(selectedTexture, 0, 0, 0, 0, 20, 20, 20, 20);
+            graphics.pose().popPose();
         }
 
         @Override

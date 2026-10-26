@@ -112,6 +112,7 @@ public final class QuestEditorJsonFiles {
         data.dependency = optString(obj, "dependency", "");
         data.autoComplete = optStringFlexible(obj, "auto_complete",
                 optStringFlexible(obj, "autoComplete", ""));
+        data.background = optString(obj, "background", "");
         return data;
     }
 

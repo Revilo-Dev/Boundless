@@ -12,7 +12,8 @@ public final class QuestEditorJsonBuilder {
     }
 
     // build category
-    public static JsonObject buildCategory(String id, String name, String icon, int order, String dependency, boolean autoComplete, Consumer<String> onError) {
+    public static JsonObject buildCategory(String id, String name, String icon, int order, String dependency,
+                                           boolean autoComplete, String background, Consumer<String> onError) {
         String categoryId = safe(id).trim();
         if (categoryId.isBlank()) {
             setError(onError, "Category id required");
@@ -25,6 +26,7 @@ public final class QuestEditorJsonBuilder {
         obj.addProperty("order", order);
         addOptional(obj, "dependency", dependency);
         obj.addProperty("auto_complete", autoComplete);
+        addOptional(obj, "background", background);
         return obj;
     }
 

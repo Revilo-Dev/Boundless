@@ -10,6 +10,7 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -18,11 +19,13 @@ import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.BoundlessDebug;
 import net.revilodev.boundless.compat.AuraCompat;
+import net.revilodev.boundless.compat.JeiCompat;
 import net.revilodev.boundless.client.screen.QuestSettingsScreen;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -55,8 +58,23 @@ public final class QuestPanelClient {
     private static Field LEFT_FIELD;
     private static boolean lastQuestOpen = false;
     private static String lastSelectedCategory = "all";
+    private static Screen pendingQuickEditSource;
+    private static String pendingQuickEditQuestId = "";
 
     private QuestPanelClient() {
+    }
+
+    public static List<Rect2i> getJeiExtraAreas(InventoryScreen inv) {
+        State st = STATES.get(inv);
+        if (st == null || !st.open) return List.of();
+        int panelX = computePanelX(inv, st);
+        int panelY = computePanelY(inv, st);
+        int left = Config.disableCategories() ? panelX : computeTabsX(inv, st);
+        if (st.settingsButton != null && st.settingsButton.visible) left = Math.min(left, st.settingsButton.getX());
+        int right = panelX + st.panelWidth;
+        int bottom = panelY + st.panelHeight;
+        if (st.filter != null && st.filter.visible) bottom = Math.max(bottom, st.filter.getY() + st.filter.getHeight());
+        return List.of(new Rect2i(left, panelY, right - left, bottom - panelY));
     }
 
     // attach quest panel widgets to inventory screens
@@ -65,6 +83,7 @@ public final class QuestPanelClient {
         if (!(s instanceof InventoryScreen inv)) return;
         QuestData.loadClient(false);
         State st = new State(inv);
+        updatePanelSize(inv, st);
         st.selectedCategory = lastSelectedCategory;
         STATES.put(s, st);
         ImageButton recipeAtInit = findRecipeButton(inv);
@@ -82,15 +101,15 @@ public final class QuestPanelClient {
             e.addListener(btn);
         }
 
-        st.bg = new PanelBackground(0, 0, PANEL_W, PANEL_H);
+        st.bg = new PanelBackground(0, 0, st.panelWidth, st.panelHeight);
         e.addListener(st.bg);
 
-        st.list = new QuestListWidget(0, 0, 127, PANEL_H - 20, q -> openDetails(st, q));
+        st.list = new QuestListWidget(0, 0, st.panelWidth - 20, st.panelHeight - 20, q -> openDetails(st, q));
         st.list.setQuests(QuestData.all());
         st.list.setCategory(st.selectedCategory);
         e.addListener(st.list);
 
-        st.tree = new QuestTreeWidget(0, 0, 127, PANEL_H - 20, q -> openDetails(st, q));
+        st.tree = new QuestTreeWidget(0, 0, st.panelWidth - 17, st.panelHeight - 17, q -> openDetails(st, q));
         st.tree.setQuests(new java.util.ArrayList<>(QuestData.all()));
         e.addListener(st.tree);
 
@@ -104,7 +123,7 @@ public final class QuestPanelClient {
         });
         st.list.setSearchQuery(st.searchQuery);
 
-        st.details = new QuestDetailsPanel(0, 0, 127, PANEL_H - 20, () -> closeDetails(st));
+        st.details = new QuestDetailsPanel(0, 0, st.panelWidth - 20, st.panelHeight - 20, () -> closeDetails(st));
         e.addListener(st.details);
         e.addListener(st.details.backButton());
         e.addListener(st.details.completeButton());
@@ -112,12 +131,14 @@ public final class QuestPanelClient {
         e.addListener(st.details.scrollButton());
         e.addListener(st.searchBox);
 
-        st.tabs = new CategoryTabsWidget(0, 0, 44, PANEL_H + 34, id -> {
+        st.tabs = new CategoryTabsWidget(0, 0, 44, st.panelHeight + 34, id -> {
             if (Config.disableCategories()) return;
             st.selectedCategory = id;
             lastSelectedCategory = id;
             if (st.list != null) st.list.setCategory(id);
             refreshTree(st);
+            st.showingDetails = false;
+            relayoutPanel(inv, st);
         });
         if (!Config.disableCategories()) {
             st.tabs.setSelected(st.selectedCategory);
@@ -135,26 +156,47 @@ public final class QuestPanelClient {
         }
         e.addListener(st.tabs);
 
-        st.header = new CategoryHeaderWidget(0, 0, PANEL_W, () -> sectionTitle(st));
+        st.header = new CategoryHeaderWidget(0, 0, st.panelWidth, () -> sectionTitle(st));
         e.addListener(st.header);
 
-        int filterX = computePanelX(inv) + 10;
-        int filterY = inv.getGuiTop() + PANEL_H + 6;
+        int filterX = computePanelX(inv, st) + 10;
+        int filterY = computePanelY(inv, st) + st.panelHeight + 6;
         st.filter = new QuestFilterBar(filterX, filterY, () -> openSettings(inv));
         e.addListener(st.filter);
         st.settingsButton = new SettingsButton(0, 0, () -> openSettings(inv));
         e.addListener(st.settingsButton);
+        st.expandButton = new QuestPanelExpandButton(0, 0, () -> st.expanded, () -> {
+            st.expanded = !st.expanded;
+            relayoutPanel(inv, st);
+        });
+        e.addListener(st.expandButton);
 
         reposition(inv, st);
 
         if (lastQuestOpen && isQuestBookEnabled()) {
             st.open = true;
-            if (Config.centerInventoryWithQuestPanel()) {
+            if (requiresResponsiveCenter(inv, st)) {
                 st.originalLeft = getLeft(inv);
-                setLeft(inv, computeCenteredLeft(inv));
+                setLeft(inv, computeCenteredLeft(inv, st));
             }
             updateVisibility(st);
         }
+        if (pendingQuickEditSource == s && !pendingQuickEditQuestId.isBlank()) {
+            String questId = pendingQuickEditQuestId;
+            pendingQuickEditSource = null;
+            pendingQuickEditQuestId = "";
+            QuestData.byId(questId).ifPresent(quest -> {
+                st.open = true;
+                lastQuestOpen = true;
+                openDetails(st, quest);
+            });
+        }
+    }
+
+    public static void rememberQuickEditReturn(Screen source, String questId) {
+        if (source == null || questId == null || questId.isBlank() || !STATES.containsKey(source)) return;
+        pendingQuickEditSource = source;
+        pendingQuickEditQuestId = questId;
     }
 
     // restore saved panel state when inventory closes
@@ -186,12 +228,20 @@ public final class QuestPanelClient {
                 st.btn.setTextures(BTN_TEX, BTN_TEX_HOVER);
             }
         }
-        if (st.open && Config.centerInventoryWithQuestPanel()) {
-            setLeft(inv, computeCenteredLeft(inv));
+        if (st.open && requiresResponsiveCenter(inv, st)) {
+            if (st.originalLeft == null) st.originalLeft = getLeft(inv);
+            setLeft(inv, computeCenteredLeft(inv, st));
+        } else if (st.open && st.originalLeft != null && !Config.centerInventoryWithQuestPanel()) {
+            setLeft(inv, st.originalLeft);
+            st.originalLeft = null;
         }
         refreshQuestBookData(st);
         reposition(inv, st);
         updateVisibility(st);
+        if (st.tree != null) {
+            st.tree.setTooltipSuppressed(st.expandButton != null && st.expandButton.visible
+                    && st.expandButton.isMouseOver(e.getMouseX(), e.getMouseY()));
+        }
         handleRecipeButtonRules(inv, st);
         if (startedAt != 0L) {
             long elapsedMicros = (System.nanoTime() - startedAt) / 1_000L;
@@ -209,10 +259,10 @@ public final class QuestPanelClient {
         if (st == null || !(s instanceof InventoryScreen inv)) return;
         if (!st.open) return;
 
-        int px = computePanelX(inv) + 10;
-        int py = inv.getGuiTop() + 10;
-        int pw = 127;
-        int ph = PANEL_H - 20;
+        int px = computePanelX(inv, st) + 10;
+        int py = computePanelY(inv, st) + 10;
+        int pw = st.panelWidth - 20;
+        int ph = st.panelHeight - 20;
         double mx = e.getMouseX();
         double my = e.getMouseY();
         boolean used = false;
@@ -226,7 +276,9 @@ public final class QuestPanelClient {
                 used = st.list.mouseScrolled(mx, my, dY) || st.list.mouseScrolled(mx, my, 0.0, dY);
             }
         }
-        if (!used && st.tree != null && st.tree.visible && mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
+        if (!used && st.tree != null && st.tree.visible
+                && mx >= st.tree.getX() && mx <= st.tree.getX() + st.tree.getWidth()
+                && my >= st.tree.getY() && my <= st.tree.getY() + st.tree.getHeight()) {
             used = st.tree.mouseScrolled(mx, my, 0.0, e.getScrollDeltaY());
         }
         if (st.details != null && st.details.visible) {
@@ -251,9 +303,7 @@ public final class QuestPanelClient {
 
         st.open = false;
         lastQuestOpen = false;
-        if (st.originalLeft != null) setLeft(inv, st.originalLeft);
-        reposition(inv, st);
-        updateVisibility(st);
+        relayoutPanel(inv, st);
     }
 
     // close every open quest panel for another inventory panel
@@ -261,9 +311,7 @@ public final class QuestPanelClient {
         for (State st : STATES.values()) {
             if (st == null || !st.open) continue;
             st.open = false;
-            if (st.originalLeft != null) setLeft(st.inv, st.originalLeft);
-            reposition(st.inv, st);
-            updateVisibility(st);
+            relayoutPanel(st.inv, st);
         }
         lastQuestOpen = false;
     }
@@ -316,47 +364,79 @@ public final class QuestPanelClient {
                     recipe.onPress();
                 }
             }
-            if (Config.centerInventoryWithQuestPanel()) {
+            if (requiresResponsiveCenter(st.inv, st)) {
                 if (st.originalLeft == null) st.originalLeft = getLeft(st.inv);
-                setLeft(st.inv, computeCenteredLeft(st.inv));
+                setLeft(st.inv, computeCenteredLeft(st.inv, st));
             }
             applySelectedCategory(st);
             st.showingDetails = false;
         } else if (st.originalLeft != null) {
             setLeft(st.inv, st.originalLeft);
         }
-        reposition(st.inv, st);
-        updateVisibility(st);
+        relayoutPanel(st.inv, st);
     }
 
     // center inventory and quest panel as one layout
-    private static int computeCenteredLeft(InventoryScreen inv) {
+    private static int computeCenteredLeft(InventoryScreen inv, State st) {
         int screenW = inv.width;
         int invW = inv.getXSize();
-        int total = PANEL_W + 2 + invW;
-        return (screenW - total) / 2 + PANEL_W + 2;
+        int tabsWidth = Config.disableCategories() ? 0 : 41;
+        int total = tabsWidth + st.panelWidth + 2 + invW;
+        return (screenW - total) / 2 + tabsWidth + st.panelWidth + 2;
     }
 
     // place the quest panel to the left of inventory
-    private static int computePanelX(InventoryScreen inv) {
-        return inv.getGuiLeft() - PANEL_W - 2;
+    private static int computePanelX(InventoryScreen inv, State st) {
+        return inv.getGuiLeft() - st.panelWidth - 2;
     }
 
     // place category tabs beside the quest panel
-    private static int computeTabsX(InventoryScreen inv) {
-        return computePanelX(inv) - 41;
+    private static int computeTabsX(InventoryScreen inv, State st) {
+        return computePanelX(inv, st) - 41;
+    }
+
+    private static int computePanelY(InventoryScreen inv, State st) {
+        return (inv.height - st.panelHeight) / 2;
+    }
+
+    private static void updatePanelSize(InventoryScreen inv, State st) {
+        int maxWidth = Math.max(96, inv.width - inv.getXSize() - 49);
+        boolean expandTree = st.expanded && !st.showingDetails && usesTreeView(st);
+        st.panelWidth = Math.min(expandTree ? 220 : PANEL_W, maxWidth);
+        st.panelHeight = Math.min(PANEL_H, Math.max(120, inv.height - 16));
+    }
+
+    private static void relayoutPanel(InventoryScreen inv, State st) {
+        updatePanelSize(inv, st);
+        if (st.open && requiresResponsiveCenter(inv, st)) {
+            if (st.originalLeft == null) st.originalLeft = getLeft(inv);
+            setLeft(inv, computeCenteredLeft(inv, st));
+        } else if (st.originalLeft != null) {
+            setLeft(inv, st.originalLeft);
+            st.originalLeft = null;
+        }
+        reposition(inv, st);
+        updateVisibility(st);
+        JeiCompat.refreshScreenLayout(inv);
+    }
+
+    private static boolean requiresResponsiveCenter(InventoryScreen inv, State st) {
+        int naturalLeft = st.originalLeft == null ? getLeft(inv) : st.originalLeft;
+        return Config.centerInventoryWithQuestPanel()
+                || naturalLeft - st.panelWidth - 2 < (Config.disableCategories() ? 2 : 41);
     }
 
     // lay out all widgets that live inside the panel
     private static void setPanelChildBounds(InventoryScreen inv, State st) {
-        int bgx = computePanelX(inv);
-        int bgy = inv.getGuiTop();
+        updatePanelSize(inv, st);
+        int bgx = computePanelX(inv, st);
+        int bgy = computePanelY(inv, st);
         int px = bgx + 10;
         int py = bgy + 10;
-        int pw = 127;
-        int ph = PANEL_H - 20;
+        int pw = st.panelWidth - 20;
+        int ph = st.panelHeight - 20;
 
-        if (st.bg != null) st.bg.setBounds(bgx, bgy, PANEL_W, PANEL_H);
+        if (st.bg != null) st.bg.setBounds(bgx, bgy, st.panelWidth, st.panelHeight);
 
         if (st.searchBox != null) {
             st.searchBox.setPosition(px, py);
@@ -369,10 +449,10 @@ public final class QuestPanelClient {
             st.list.setTopInset(Config.enableQuestSearchBox() ? 18 : 0);
         }
         if (st.tree != null) {
-            st.tree.setX(px);
-            st.tree.setY(py);
-            st.tree.setWidth(pw);
-            st.tree.setHeight(ph);
+            st.tree.setX(bgx + 8);
+            st.tree.setY(bgy + 8);
+            st.tree.setWidth(st.panelWidth - 17);
+            st.tree.setHeight(st.panelHeight - 17);
             refreshTree(st);
         }
         if (st.details != null) {
@@ -389,30 +469,34 @@ public final class QuestPanelClient {
             );
         }
 
-        if (st.tabs != null) st.tabs.setBounds(computeTabsX(inv), bgy + 4, 44, PANEL_H + 34);
-        if (st.header != null) st.header.setPanelBounds(bgx, bgy, PANEL_W);
+        if (st.tabs != null) st.tabs.setBounds(computeTabsX(inv, st), bgy + 4, 44, st.panelHeight + 34);
+        if (st.header != null) st.header.setPanelBounds(bgx, bgy, st.panelWidth);
 
         if (st.filter != null) {
             int filterX = px;
-            int filterY = bgy + PANEL_H - st.filter.getPreferredHeight() + 29;
+            int filterY = bgy + st.panelHeight - st.filter.getPreferredHeight() + 29;
             st.filter.setBounds(filterX, filterY, st.filter.getPreferredWidth(), st.filter.getPreferredHeight());
         }
     }
 
     // reposition panel widgets after inventory moves
     private static void reposition(InventoryScreen inv, State st) {
+        updatePanelSize(inv, st);
         repositionRecipeButton(inv, st);
         if (st.btn != null) {
             int x = computeQuestButtonX(inv);
             int y = computeQuestButtonY(inv);
             st.btn.setPosition(x, y);
         }
-        if (st.settingsButton != null) {
-            int bgx = computePanelX(inv);
-            int bgy = inv.getGuiTop();
-            st.settingsButton.setPosition(bgx - 22, bgy + PANEL_H - st.settingsButton.getHeight());
-        }
         setPanelChildBounds(inv, st);
+        if (st.settingsButton != null) {
+            int bgx = computePanelX(inv, st);
+            int bgy = computePanelY(inv, st);
+            st.settingsButton.setPosition(bgx - 22, bgy + st.panelHeight - st.settingsButton.getHeight());
+        }
+        if (st.expandButton != null && st.tree != null) {
+            st.expandButton.setPosition(st.tree.getX() + st.tree.getWidth() - 41, st.tree.getY() + 3);
+        }
     }
 
     // keep the inventory quest button visibility in sync
@@ -491,7 +575,7 @@ public final class QuestPanelClient {
         if (st.details == null) return;
         st.details.setQuest(quest);
         st.showingDetails = true;
-        updateVisibility(st);
+        relayoutPanel(st.inv, st);
     }
 
     private static void refreshQuestBookData(State st) {
@@ -521,6 +605,8 @@ public final class QuestPanelClient {
             if ("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category)) quests.add(quest);
         }
         st.tree.setQuests(quests);
+        st.tree.setBackground(QuestData.categoryById(st.selectedCategory)
+                .map(category -> category.background).orElse(""));
     }
 
     private static boolean usesTreeView(State st) {
@@ -543,7 +629,7 @@ public final class QuestPanelClient {
     // return from quest details to the quest list
     private static void closeDetails(State st) {
         st.showingDetails = false;
-        updateVisibility(st);
+        relayoutPanel(st.inv, st);
     }
 
     // show only the widgets for the current panel mode
@@ -619,6 +705,10 @@ public final class QuestPanelClient {
             boolean showSettings = st.open && !Config.displayFiltersAsTabs() && canAccessSettings;
             st.settingsButton.visible = showSettings;
             st.settingsButton.active = showSettings;
+        }
+        if (st.expandButton != null) {
+            st.expandButton.visible = treeVisible;
+            st.expandButton.active = treeVisible;
         }
     }
 
@@ -699,7 +789,7 @@ public final class QuestPanelClient {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             RenderSystem.disableBlend();
-            gg.blit(PANEL_TEX, getX(), getY(), 0, 0, width, height, width, height);
+            QuestPanelBackgroundRenderer.render(gg, PANEL_TEX, getX(), getY(), width, height);
         }
 
         @Override
@@ -717,6 +807,7 @@ public final class QuestPanelClient {
         final InventoryScreen inv;
         QuestToggleButton btn;
         SettingsButton settingsButton;
+        QuestPanelExpandButton expandButton;
         PanelBackground bg;
         QuestListWidget list;
         QuestTreeWidget tree;
@@ -726,6 +817,9 @@ public final class QuestPanelClient {
         QuestFilterBar filter;
         EditBox searchBox;
         boolean showingDetails;
+        boolean expanded;
+        int panelWidth = PANEL_W;
+        int panelHeight = PANEL_H;
         boolean open;
         Integer originalLeft;
         String selectedCategory = "all";

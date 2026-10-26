@@ -43,11 +43,11 @@ public final class QuestListWidget extends AbstractWidget {
     private static final ResourceLocation ROW_TEX_DISCARDED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget_discarded.png");
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
+    private static final Map<String, Boolean> SUBCATEGORY_OPEN_STATES = new HashMap<>();
 
     private final Minecraft mc = Minecraft.getInstance();
     private final List<QuestData.Quest> quests = new ArrayList<>();
     private final Consumer<QuestData.Quest> onClick;
-    private final Map<String, Boolean> subOpen = new HashMap<>();
 
     // scrolling and row sizing
     private float scrollY = 0;
@@ -57,6 +57,7 @@ public final class QuestListWidget extends AbstractWidget {
 
     // cached visible rows
     private String category = "all";
+    private String background = "";
     private boolean bypassFilters = false;
     private List<RowEntry> cachedRows = List.of();
     private int cachedContentHeight = 0;
@@ -87,6 +88,7 @@ public final class QuestListWidget extends AbstractWidget {
     // filter the list to one category or all
     public void setCategory(String cat) {
         category = cat == null ? "all" : cat;
+        background = QuestData.categoryById(category).map(value -> value.background).orElse("");
         scrollY = 0;
         invalidateRowsCache();
     }
@@ -167,7 +169,7 @@ public final class QuestListWidget extends AbstractWidget {
     private boolean isSubOpen(QuestData.SubCategory sc) {
         if (sc == null) return true;
         String key = subKey(sc.category, sc.id);
-        return subOpen.getOrDefault(key, sc.defaultOpen);
+        return SUBCATEGORY_OPEN_STATES.getOrDefault(key, sc.defaultOpen);
     }
 
     // collapse or expand one sub category group
@@ -175,7 +177,7 @@ public final class QuestListWidget extends AbstractWidget {
         if (sc == null) return;
         String key = subKey(sc.category, sc.id);
         boolean next = !isSubOpen(sc);
-        subOpen.put(key, next);
+        SUBCATEGORY_OPEN_STATES.put(key, next);
         invalidateRowsCache();
     }
 
@@ -399,6 +401,7 @@ public final class QuestListWidget extends AbstractWidget {
         if (!visible || mc.player == null) return;
 
         RenderSystem.enableBlend();
+        QuestCategoryBackgroundRenderer.render(gg, background, getX(), getY(), width, height);
         int contentTop = getY() + topInset;
         int viewportHeight = Math.max(0, height - topInset);
         gg.enableScissor(getX(), contentTop, getX() + width, contentTop + viewportHeight);

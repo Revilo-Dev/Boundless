@@ -1,5 +1,6 @@
 package net.revilodev.boundless.compat;
 
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 
@@ -15,6 +16,22 @@ public final class JeiCompat {
 
     public static void setRuntime(Object jeiRuntime) {
         runtime = jeiRuntime;
+    }
+
+    public static void refreshScreenLayout(Screen screen) {
+        if (runtime == null || screen == null) return;
+        refreshOverlay(runtime, "getIngredientListOverlay", screen);
+        refreshOverlay(runtime, "getBookmarkOverlay", screen);
+    }
+
+    private static void refreshOverlay(Object jeiRuntime, String getterName, Screen screen) {
+        try {
+            Object overlay = jeiRuntime.getClass().getMethod(getterName).invoke(jeiRuntime);
+            Object updater = overlay.getClass().getMethod("getScreenPropertiesUpdater").invoke(overlay);
+            Object pending = updater.getClass().getMethod("updateScreen", Screen.class).invoke(updater, screen);
+            pending.getClass().getMethod("forceUpdate").invoke(pending);
+        } catch (Throwable ignored) {
+        }
     }
 
     public static boolean showItem(ItemStack stack, boolean showRecipe) {

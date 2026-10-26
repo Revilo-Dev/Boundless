@@ -245,6 +245,7 @@ public final class BoundlessNetwork {
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
             boolean enableQuestScrolls,
+            boolean quickEdit,
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<UpdateServerConfig> TYPE =
@@ -272,6 +273,7 @@ public final class BoundlessNetwork {
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
                     buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.quickEdit);
                     buf.writeBoolean(p.disableQuestBook);
                     buf.writeBoolean(p.spawnWithQuestBook);
                 },
@@ -293,6 +295,7 @@ public final class BoundlessNetwork {
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -576,6 +579,7 @@ public final class BoundlessNetwork {
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
             boolean enableQuestScrolls,
+            boolean quickEdit,
             boolean disableQuestBook,
             boolean spawnWithQuestBook) implements CustomPacketPayload {
         public static final Type<SyncConfig> TYPE =
@@ -607,6 +611,7 @@ public final class BoundlessNetwork {
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
                     buf.writeBoolean(p.enableQuestScrolls);
+                    buf.writeBoolean(p.quickEdit);
                     buf.writeBoolean(p.disableQuestBook);
                     buf.writeBoolean(p.spawnWithQuestBook);
                 },
@@ -632,6 +637,7 @@ public final class BoundlessNetwork {
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -815,6 +821,7 @@ public final class BoundlessNetwork {
                 Config.disableQuestPinning(),
                 Config.autoClaimQuestRewards(),
                 Config.enableQuestScrolls(),
+                Config.quickEdit(),
                 Config.disableQuestBook(),
                 Config.spawnWithQuestBook()
         ));
@@ -902,6 +909,7 @@ public final class BoundlessNetwork {
             o.addProperty("dependency", c.dependency);
             o.addProperty("autoComplete", c.autoComplete);
             o.addProperty("treeLayout", c.treeLayout);
+            o.addProperty("background", c.background);
             cats.add(o);
         }
         root.add("categories", cats);
@@ -1268,6 +1276,7 @@ public final class BoundlessNetwork {
             Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
             Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
             Config.ENABLE_QUEST_SCROLLS.set(p.enableQuestScrolls());
+            Config.QUICK_EDIT.set(p.quickEdit());
             Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
             Config.SPAWN_WITH_QUEST_BOOK.set(p.spawnWithQuestBook());
             Config.SPEC.save();
@@ -1579,6 +1588,7 @@ public final class BoundlessNetwork {
                 p.disableQuestPinning(),
                 p.autoClaimQuestRewards(),
                 p.enableQuestScrolls(),
+                p.quickEdit(),
                 p.disableQuestBook(),
                 p.spawnWithQuestBook()
             );

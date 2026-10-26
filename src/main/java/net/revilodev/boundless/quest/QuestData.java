@@ -358,14 +358,21 @@ public final class QuestData {
         public final String dependency;
         public final boolean autoComplete;
         public final boolean treeLayout;
+        public final String background;
 
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete) {
-            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, false);
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, false, "");
         }
 
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete, boolean treeLayout) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, "");
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
             this.name = name == null || name.isBlank() ? id : name;
@@ -374,6 +381,7 @@ public final class QuestData {
             this.dependency = dependency == null ? "" : dependency;
             this.autoComplete = autoComplete;
             this.treeLayout = treeLayout;
+            this.background = background == null ? "" : background;
         }
 
         public Optional<Item> iconItem() {
@@ -536,8 +544,10 @@ public final class QuestData {
                 boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                         parseBoolFlexible(obj, "autoComplete", false));
                 boolean treeLayout = "tree".equalsIgnoreCase(optString(obj, "layout"));
+                String background = optString(obj, "background");
 
-                data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete, treeLayout));
+                data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
+                        autoComplete, treeLayout, background));
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("category-parse:" + entry.getKey(), 5_000L,
                         "could not parse category {}", entry.getKey(), e);
@@ -722,7 +732,9 @@ public final class QuestData {
                     boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                             parseBoolFlexible(obj, "autoComplete", false));
                     boolean treeLayout = packTreeLayout || "tree".equalsIgnoreCase(optString(obj, "layout"));
-                    data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency, autoComplete, treeLayout));
+                    String background = optString(obj, "background");
+                    data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
+                            autoComplete, treeLayout, background));
                 } catch (Exception e) {
                     BoundlessDebug.warnRateLimited("category-file:" + file, 5_000L,
                             "could not parse category file {}", file, e);
@@ -1677,8 +1689,10 @@ public final class QuestData {
                     boolean autoComplete = parseBoolFlexible(o, "auto_complete",
                             parseBoolFlexible(o, "autoComplete", false));
                     boolean treeLayout = parseBoolFlexible(o, "treeLayout", false);
+                    String background = optString(o, "background");
 
-                    parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout));
+                    parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency,
+                            autoComplete, treeLayout, background));
                 }
             }
 

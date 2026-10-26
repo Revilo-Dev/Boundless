@@ -14,6 +14,8 @@ import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.QuestDetailsPanel;
 import net.revilodev.boundless.client.QuestFilterBar;
 import net.revilodev.boundless.client.QuestListWidget;
+import net.revilodev.boundless.client.QuestPanelBackgroundRenderer;
+import net.revilodev.boundless.client.QuestPanelExpandButton;
 import net.revilodev.boundless.client.QuestTreeWidget;
 import net.revilodev.boundless.quest.QuestData;
 
@@ -30,6 +32,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     private static String lastSelectedCategory = "all";
 
     private int panelWidth = 147;
+    private int detailsPanelWidth = 147;
     private int panelHeight = 166;
 
     private int leftX;
@@ -43,9 +46,12 @@ public final class StandaloneQuestBookScreen extends Screen {
     private QuestDetailsPanel details;
     private QuestFilterBar filter;
     private SettingsButton settingsButton;
+    private QuestPanelExpandButton expandButton;
     private EditBox searchBox;
 
     private boolean showingDetails = false;
+    private boolean expanded = false;
+    private QuestData.Quest selectedQuest;
     private String searchQuery = "";
     private String selectedCategory = "all";
 
@@ -61,7 +67,14 @@ public final class StandaloneQuestBookScreen extends Screen {
             return;
         }
 
-        int cx = this.width / 2;
+        selectedCategory = lastSelectedCategory;
+        int maxPanelWidth = Math.max(96, (this.width - 49) / 2);
+        boolean expandTree = expanded && usesTreeView();
+        panelWidth = Math.min(expandTree ? 220 : 147, maxPanelWidth);
+        detailsPanelWidth = Math.min(147, maxPanelWidth);
+        panelHeight = Math.min(166, Math.max(120, this.height - 16));
+
+        int cx = this.width / 2 + 20;
         int cy = this.height / 2;
 
         leftX = cx - panelWidth - 2;
@@ -71,7 +84,8 @@ public final class StandaloneQuestBookScreen extends Screen {
         int pxLeft = leftX + 10;
         int pxRight = rightX + 10;
         int py = topY + 10;
-        int pw = 127;
+        int leftWidth = panelWidth - 20;
+        int detailsWidth = detailsPanelWidth - 20;
         int ph = panelHeight - 20;
 
         tabs = new CategoryTabsWidget(leftX - 41, topY + 4, 44, panelHeight + 34, id -> {
@@ -81,9 +95,9 @@ public final class StandaloneQuestBookScreen extends Screen {
             list.setCategory(id);
             refreshTree();
             showingDetails = false;
+            selectedQuest = null;
             updateVisibility();
         });
-        selectedCategory = lastSelectedCategory;
         if (!Config.disableCategories()) {
             tabs.setSelected(selectedCategory);
             tabs.setCategories(QuestData.categoriesOrdered());
@@ -97,7 +111,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             lastSelectedCategory = "all";
         }
 
-        searchBox = new EditBox(font, pxLeft, py, pw, 16, Component.translatable("ui.boundless.questbook.search_quests"));
+        searchBox = new EditBox(font, pxLeft, py, leftWidth, 16, Component.translatable("ui.boundless.questbook.search_quests"));
         searchBox.setHint(Component.translatable("ui.boundless.questbook.search"));
         searchBox.setMaxLength(64);
         searchBox.setValue(searchQuery);
@@ -106,8 +120,9 @@ public final class StandaloneQuestBookScreen extends Screen {
             if (list != null) list.setSearchQuery(searchQuery);
         });
 
-        list = new QuestListWidget(pxLeft, py, pw, ph, q -> {
+        list = new QuestListWidget(pxLeft, py, leftWidth, ph, q -> {
             details.setQuest(q);
+            selectedQuest = q;
             showingDetails = true;
             updateVisibility();
         });
@@ -116,18 +131,21 @@ public final class StandaloneQuestBookScreen extends Screen {
         list.setCategory(selectedCategory);
         list.setSearchQuery(searchQuery);
 
-        tree = new QuestTreeWidget(pxLeft, py, pw, ph, q -> {
+        tree = new QuestTreeWidget(leftX + 8, topY + 8, panelWidth - 17, panelHeight - 17, q -> {
             details.setQuest(q);
+            selectedQuest = q;
             showingDetails = true;
             updateVisibility();
         });
         refreshTree();
 
-        details = new QuestDetailsPanel(pxRight, py, pw, ph, () -> {
+        details = new QuestDetailsPanel(pxRight, py, detailsWidth, ph, () -> {
             showingDetails = false;
+            selectedQuest = null;
             updateVisibility();
         });
-        details.setBounds(pxRight, py, pw, ph);
+        details.setBounds(pxRight, py, detailsWidth, ph);
+        if (showingDetails && selectedQuest != null) details.setQuest(selectedQuest);
 
         int filterX = pxLeft;
         filter = new QuestFilterBar(filterX, 0, () -> {
@@ -143,6 +161,10 @@ public final class StandaloneQuestBookScreen extends Screen {
             if (!canAccessSettings()) return;
             minecraft.setScreen(new QuestSettingsScreen(this));
         });
+        expandButton = new QuestPanelExpandButton(leftX + panelWidth - 50, topY + 11, () -> expanded, () -> {
+            expanded = !expanded;
+            resize(minecraft, width, height);
+        });
 
         addRenderableWidget(tabs);
         addRenderableWidget(header);
@@ -156,6 +178,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         addRenderableWidget(searchBox);
         addRenderableWidget(filter);
         addRenderableWidget(settingsButton);
+        addRenderableWidget(expandButton);
 
         updateVisibility();
     }
@@ -208,6 +231,11 @@ public final class StandaloneQuestBookScreen extends Screen {
             boolean showSettings = !Config.displayFiltersAsTabs() && canAccessSettings();
             settingsButton.visible = showSettings;
             settingsButton.active = showSettings;
+        }
+        if (expandButton != null) {
+            boolean showExpand = treeView && !showingDetails;
+            expandButton.visible = showExpand;
+            expandButton.active = showExpand;
         }
     }
 
@@ -263,8 +291,9 @@ public final class StandaloneQuestBookScreen extends Screen {
             return;
         }
         gg.fill(0, 0, this.width, this.height, 0xA0000000);
-        gg.blit(PANEL_TEX, leftX, topY, 0, 0, panelWidth, panelHeight, panelWidth, panelHeight);
-        gg.blit(PANEL_TEX, rightX, topY, 0, 0, panelWidth, panelHeight, panelWidth, panelHeight);
+        QuestPanelBackgroundRenderer.render(gg, PANEL_TEX, leftX, topY, panelWidth, panelHeight);
+        QuestPanelBackgroundRenderer.render(gg, PANEL_TEX, rightX, topY, detailsPanelWidth, panelHeight);
+        if (tree != null) tree.setTooltipSuppressed(expandButton != null && expandButton.visible && expandButton.isMouseOver(mouseX, mouseY));
         super.render(gg, mouseX, mouseY, partialTick);
     }
 
@@ -307,6 +336,8 @@ public final class StandaloneQuestBookScreen extends Screen {
             }
         }
         tree.setQuests(quests);
+        tree.setBackground(QuestData.categoryById(selectedCategory)
+                .map(category -> category.background).orElse(""));
     }
 
     private boolean usesTreeView() {
