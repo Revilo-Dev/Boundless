@@ -48,6 +48,7 @@ public final class QuestData {
         final Map<String, SubCategory> subCategories = new LinkedHashMap<>();
         final Collection<Quest> questView = Collections.unmodifiableCollection(quests.values());
         boolean loaded;
+        boolean networkAuthoritative;
         String worldId;
 
         void clear() {
@@ -68,6 +69,7 @@ public final class QuestData {
         public final String name;
         public final String icon;
         public final String description;
+        public final String media;
         public final List<String> dependencies;
         public final List<String> incompatibleDependencies;
         public final boolean lockAfterDependency;
@@ -113,11 +115,23 @@ public final class QuestData {
                      boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
                      String type, Completion completion, String category, String subCategory, String sourcePath,
                      int treeX, int treeY, String treeBackground, boolean treeOrigin) {
+            this(id, name, icon, description, dependencies, incompatibleDependencies, lockAfterDependency, optional,
+                    repeatable, autoComplete, hiddenUnderDependency, rewards, type, completion, category, subCategory,
+                    sourcePath, treeX, treeY, treeBackground, treeOrigin, "");
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     List<String> dependencies, List<String> incompatibleDependencies,
+                     boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground, boolean treeOrigin, String media) {
 
             this.id = Objects.requireNonNull(id);
             this.name = name == null ? id : name;
             this.icon = icon == null || icon.isBlank() ? "boundless:quest_book" : icon;
             this.description = description == null ? "" : description;
+            this.media = media == null ? "" : media;
             this.dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
             this.incompatibleDependencies = lockAfterDependency
                     && (incompatibleDependencies == null || incompatibleDependencies.isEmpty())
@@ -361,6 +375,7 @@ public final class QuestData {
         public final String background;
         public final boolean backgroundDarkening;
         public final float backgroundDarkeningOpacity;
+        public final List<Sticker> stickers;
 
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete) {
@@ -382,6 +397,14 @@ public final class QuestData {
                         boolean excludeFromAll, String dependency, boolean autoComplete,
                         boolean treeLayout, String background, boolean backgroundDarkening,
                         float backgroundDarkeningOpacity) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, background,
+                    backgroundDarkening, backgroundDarkeningOpacity, List.of());
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, boolean backgroundDarkening,
+                        float backgroundDarkeningOpacity, List<Sticker> stickers) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
             this.name = name == null || name.isBlank() ? id : name;
@@ -393,6 +416,7 @@ public final class QuestData {
             this.background = background == null ? "" : background;
             this.backgroundDarkening = backgroundDarkening;
             this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, backgroundDarkeningOpacity));
+            this.stickers = stickers == null ? List.of() : List.copyOf(stickers);
         }
 
         public Optional<Item> iconItem() {
@@ -558,9 +582,10 @@ public final class QuestData {
                 String background = optString(obj, "background");
                 boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
                 float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
+                List<Sticker> stickers = parseStickers(obj);
 
                 data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
-                        autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity));
+                        autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity, stickers));
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("category-parse:" + entry.getKey(), 5_000L,
                         "could not parse category {}", entry.getKey(), e);
@@ -748,14 +773,22 @@ public final class QuestData {
                     String background = optString(obj, "background");
                     boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
                     float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
+                    List<Sticker> stickers = parseStickers(obj);
                     data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
-                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity));
+                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity, stickers));
                 } catch (Exception e) {
                     BoundlessDebug.warnRateLimited("category-file:" + file, 5_000L,
                             "could not parse category file {}", file, e);
                 }
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    public record Sticker(String type, String value, int x, int y) {
+        public Sticker {
+            type = "icon".equalsIgnoreCase(type) ? "icon" : "text";
+            value = value == null ? "" : value;
         }
     }
 
@@ -879,6 +912,7 @@ public final class QuestData {
         if (FMLEnvironment.dist != Dist.CLIENT) return;
 
         Minecraft mc = Minecraft.getInstance();
+        if (CLIENT_DATA.networkAuthoritative && mc.getConnection() != null) return;
         String worldId = null;
 
         try {
@@ -1102,6 +1136,7 @@ public final class QuestData {
         String name = optString(obj, "name");
         String icon = optString(obj, "icon");
         String description = optString(obj, "description");
+        String media = optString(obj, "media");
 
         List<String> deps = parseDependencies(obj);
         List<String> incompatibleDeps = parseStringList(obj, "incompatible_dependencies");
@@ -1133,7 +1168,7 @@ public final class QuestData {
 
         return new Quest(id, name, icon, description, deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                 rewards, type, completion,
-                category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin);
+                category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
     }
 
     private static List<String> parseStringList(JsonObject obj, String key) {
@@ -1707,9 +1742,10 @@ public final class QuestData {
                     String background = optString(o, "background");
                     boolean backgroundDarkening = parseBoolFlexible(o, "backgroundDarkening", false);
                     float backgroundDarkeningOpacity = parseFloatFlexible(o, "backgroundDarkeningOpacity", 0.45f);
+                    List<Sticker> stickers = parseStickers(o);
 
                     parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency,
-                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity));
+                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity, stickers));
                 }
             }
 
@@ -1755,6 +1791,7 @@ public final class QuestData {
                     String name = optString(o, "name");
                     String icon = optString(o, "icon");
                     String description = optString(o, "description");
+                    String media = optString(o, "media");
 
                     List<String> deps = new ArrayList<>();
                     if (o.has("dependencies") && o.get("dependencies").isJsonArray()) {
@@ -1919,7 +1956,7 @@ public final class QuestData {
 
                     Quest q = new Quest(id, name, icon, description, deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                             rewards, type, completion,
-                            category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin);
+                            category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
                     if (!isQuestDisabled(q)) parsed.quests.put(q.id, q);
                 }
             }
@@ -1952,6 +1989,7 @@ public final class QuestData {
         CLIENT_DATA.subCategories.putAll(snapshot.subCategories());
         // remote snapshots use the multiplayer cache key
         CLIENT_DATA.worldId = null;
+        CLIENT_DATA.networkAuthoritative = true;
         CLIENT_DATA.loaded = true;
     }
 
@@ -1963,6 +2001,7 @@ public final class QuestData {
         // Leave client loading available for the next server or world.
         if (FMLEnvironment.dist != Dist.CLIENT) return;
         CLIENT_DATA.clear();
+        CLIENT_DATA.networkAuthoritative = false;
         CLIENT_DATA.worldId = null;
         CLIENT_DATA.loaded = true;
     }
@@ -1994,6 +2033,21 @@ public final class QuestData {
         } catch (RuntimeException ignored) {
             return def;
         }
+    }
+
+    private static List<Sticker> parseStickers(JsonObject object) {
+        if (object == null || !object.has("stickers") || !object.get("stickers").isJsonArray()) return List.of();
+        List<Sticker> stickers = new ArrayList<>();
+        for (JsonElement element : object.getAsJsonArray("stickers")) {
+            if (!element.isJsonObject()) continue;
+            JsonObject sticker = element.getAsJsonObject();
+            String type = optString(sticker, "type");
+            String value = optString(sticker, "value");
+            if (value == null || value.isBlank()) continue;
+            stickers.add(new Sticker(type, value,
+                    parseIntFlexible(sticker, "x", 0), parseIntFlexible(sticker, "y", 0)));
+        }
+        return List.copyOf(stickers);
     }
 
     private static JsonObject safeObject(Reader reader) {

@@ -38,6 +38,12 @@ public final class QuestEditorCustomIcons {
         return TEXTURES.get(iconId);
     }
 
+    public static void clear() {
+        Minecraft minecraft = Minecraft.getInstance();
+        for (ResourceLocation texture : TEXTURES.values()) minecraft.getTextureManager().release(texture);
+        TEXTURES.clear();
+    }
+
     public static void reload() {
         try {
             Files.createDirectories(directory());
@@ -61,12 +67,13 @@ public final class QuestEditorCustomIcons {
             String id = PREFIX + relative.substring(0, relative.length() - 4).toLowerCase(Locale.ROOT);
             ResourceLocation texture = TEXTURES.get(id);
             if (texture == null) {
-                texture = Minecraft.getInstance().getTextureManager().register("boundless_custom/" + relative, new DynamicTexture(image));
+                String key = Integer.toUnsignedString(path.toAbsolutePath().normalize().toString().hashCode(), 16);
+                texture = Minecraft.getInstance().getTextureManager().register("boundless_custom/" + key, new DynamicTexture(image));
             } else {
                 image.close();
             }
             found.put(id, texture);
-        } catch (IOException ignored) {
+        } catch (Exception ignored) {
         }
     }
 }

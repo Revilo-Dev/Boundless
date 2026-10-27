@@ -113,7 +113,7 @@ public final class QuestEditorControls {
             int color = this.active ? 0xFFFFFF : 0x808080;
             gg.drawString(font, getMessage(), textX, textY, color, false);
             if (hovered && !tooltip.isEmpty()) {
-                gg.renderComponentTooltip(font, tooltip, mouseX, mouseY);
+                QuestEditorTooltips.renderComponents(gg, font, tooltip, mouseX, mouseY);
             }
         }
 
@@ -473,7 +473,7 @@ public final class QuestEditorControls {
             if (pendingTooltip == null || pendingTooltip.isEmpty()) return;
             gg.pose().pushPose();
             gg.pose().translate(0.0F, 0.0F, 500.0F);
-            gg.renderComponentTooltip(Minecraft.getInstance().font, pendingTooltip, pendingTooltipX, pendingTooltipY);
+            QuestEditorTooltips.renderComponents(gg, Minecraft.getInstance().font, pendingTooltip, pendingTooltipX, pendingTooltipY);
             gg.pose().popPose();
             pendingTooltip = List.of();
         }

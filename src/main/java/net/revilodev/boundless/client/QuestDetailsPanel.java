@@ -69,6 +69,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/edit.png");
     private static final ResourceLocation TEX_EDIT_HOVER =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/edit-hover.png");
+    private static final ResourceLocation TEX_COMPLETE =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/complete.png");
+    private static final ResourceLocation TEX_REVERT =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/revert.png");
+    private static final ResourceLocation TEX_REJECT =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject.png");
+    private static final ResourceLocation TEX_REJECT_HOVER =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject_highlighted.png");
+    private static final ResourceLocation TEX_REJECT_DISABLED =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject_disabled.png");
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXISTS_CACHE = new HashMap<>();
     // tag items reused by reward previews
     private static final Map<ResourceLocation, List<Item>> TAG_ITEM_CACHE = new HashMap<>();
@@ -91,6 +101,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private boolean descExpanded = false;
     private boolean hideBackButton = false;
     private LayoutCache layoutCache = LayoutCache.empty();
+    private QuestMediaRenderer.RenderResult mediaRender = new QuestMediaRenderer.RenderResult(0, 0, 0, 0, 0, null);
 
     private final List<DepClickRegion> depRegions = new ArrayList<>();
     private final List<ItemClickRegion> itemRegions = new ArrayList<>();
@@ -333,19 +344,28 @@ public final class QuestDetailsPanel extends AbstractWidget {
         final boolean bold;
         final boolean italic;
         final boolean encrypted;
+        final boolean underlined;
+        final boolean strikethrough;
         final boolean highlight;
         final String emoji;
 
         StyledDescriptionChar(char value, int color, boolean bold, boolean italic, boolean encrypted, boolean highlight) {
-            this(value, color, bold, italic, encrypted, highlight, null);
+            this(value, color, bold, italic, encrypted, false, false, highlight, null);
         }
 
         StyledDescriptionChar(char value, int color, boolean bold, boolean italic, boolean encrypted, boolean highlight, String emoji) {
+            this(value, color, bold, italic, encrypted, false, false, highlight, emoji);
+        }
+
+        StyledDescriptionChar(char value, int color, boolean bold, boolean italic, boolean encrypted,
+                              boolean underlined, boolean strikethrough, boolean highlight, String emoji) {
             this.value = value;
             this.color = color;
             this.bold = bold;
             this.italic = italic;
             this.encrypted = encrypted;
+            this.underlined = underlined;
+            this.strikethrough = strikethrough;
             this.highlight = highlight;
             this.emoji = emoji;
         }
@@ -460,12 +480,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         this.width = w;
         this.height = h;
 
-        int cy = y + h - complete.getHeight() - 2;
-        int cxCenter = x + (w - complete.getWidth()) / 2;
-
-        back.setPosition(x + 2, cy);
-        complete.setPosition(cxCenter, cy);
-        reject.setPosition(x + w - reject.getWidth() - 2, cy);
+        layoutBottomButtons();
 
         int actionX = x + w - pin.getWidth() - 5;
         int actionY = y + 4;
@@ -582,6 +597,13 @@ public final class QuestDetailsPanel extends AbstractWidget {
             } else {
                 curY[0] += wrapHeight + 8;
             }
+        }
+
+        if (quest.media != null && !quest.media.isBlank()) {
+            mediaRender = QuestMediaRenderer.render(gg, quest.media, x + 4, curY[0], w - 8);
+            curY[0] += mediaRender.height() + (mediaRender.height() > 0 ? 8 : 0);
+        } else {
+            mediaRender = new QuestMediaRenderer.RenderResult(0, 0, 0, 0, 0, null);
         }
 
         if (!quest.dependencies.isEmpty()) {
@@ -1129,6 +1151,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 && (status == QuestTracker.Status.COMPLETED || QuestTracker.isReady(quest, mc.player));
         boolean canUndoReject = rej && quest.optional;
 
+        complete.setUndoReject(canUndoReject);
         complete.setMessage(canUndoReject
                 ? Component.translatable("ui.boundless.questbook.undo_reject")
                 : canAcknowledge
@@ -1138,12 +1161,36 @@ public final class QuestDetailsPanel extends AbstractWidget {
         complete.visible = canUndoReject || (!rej && (canRepeat || !red));
 
         reject.setOptionalAllowed(quest.optional);
-        reject.active = !done && !canRepeat && quest.optional;
-        reject.visible = !done && !canRepeat;
+        reject.active = Config.enableQuestRejecting() && !done && !canRepeat && quest.optional;
+        reject.visible = Config.enableQuestRejecting() && !done && !canRepeat;
         if (!reject.active || !reject.visible) reject.resetConfirmState();
 
         back.visible = !hideBackButton;
         back.active = !hideBackButton;
+        layoutBottomButtons();
+    }
+
+    private void layoutBottomButtons() {
+        int buttonY = getY() + height - complete.getHeight() - 2;
+        int left = getX() + 2;
+        int right = getX() + width - 2;
+        back.setPosition(left, buttonY);
+        if (back.visible) left += back.getWidth() + 2;
+
+        int available = Math.max(1, right - left);
+        if (reject.visible) {
+            int gap = 2;
+            int rejectWidth = 24;
+            int completeWidth = Math.max(1, available - gap - rejectWidth);
+            complete.setWidth(completeWidth);
+            reject.setWidth(rejectWidth);
+            complete.setPosition(left, buttonY);
+            reject.setPosition(left + completeWidth + gap, buttonY);
+        } else {
+            complete.setWidth(available);
+            complete.setPosition(left, buttonY);
+            reject.setPosition(right - reject.getWidth(), buttonY);
+        }
     }
 
     private int measureContentHeight(int panelWidth) {
@@ -1188,6 +1235,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
             int wrapH = descriptionHeight;
             if (needsMore) y += wrapH + scaledLineHeight() + 6;
             else y += wrapH + 8;
+        }
+
+        if (quest.media != null && !quest.media.isBlank()) {
+            int mediaHeight = QuestMediaRenderer.preferredHeight(quest.media, w - 8);
+            y += mediaHeight + (mediaHeight > 0 ? 8 : 0);
         }
 
         if (!quest.dependencies.isEmpty()) {
@@ -1406,13 +1458,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
             int charWidth = descriptionCharWidth(ch);
             if (drawX + charWidth > maxX) break;
             if (ch.emoji != null) {
-                gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 1, 0, 0, 12, 12, 16, 16);
+                int emojiSize = QuestEditorEmojis.glyphSize();
+                gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY, 0, 0, emojiSize, emojiSize, 16, 16);
             } else {
                 gg.drawString(mc.font, Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
                                 .withColor(ch.color)
                                 .withBold(ch.bold)
                                 .withItalic(ch.italic)
-                                .withObfuscated(ch.encrypted)),
+                                .withObfuscated(ch.encrypted)
+                                .withUnderlined(ch.underlined)
+                                .withStrikethrough(ch.strikethrough)),
                         drawX, drawY, ch.color, false);
             }
             drawX += charWidth;
@@ -1442,15 +1497,18 @@ public final class QuestDetailsPanel extends AbstractWidget {
             for (StyledDescriptionChar ch : line.chars) {
                 int color = ch.highlight ? highlightColor(ch.color, globalIndex) : ch.color;
                 if (ch.emoji != null) {
-                    gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY - 1, 0, 0, 12, 12, 16, 16);
-                    drawX += 12;
+                    int emojiSize = QuestEditorEmojis.glyphSize();
+                    gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY, 0, 0, emojiSize, emojiSize, 16, 16);
+                    drawX += emojiSize;
                 } else {
                     drawX = gg.drawString(mc.font,
                             Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
                                     .withColor(color)
                                     .withBold(ch.bold)
                                     .withItalic(ch.italic)
-                                    .withObfuscated(ch.encrypted)),
+                                    .withObfuscated(ch.encrypted)
+                                    .withUnderlined(ch.underlined)
+                                    .withStrikethrough(ch.strikethrough)),
                             drawX,
                             drawY,
                             color,
@@ -1579,6 +1637,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean bold = false;
         boolean italic = false;
         boolean encrypted = false;
+        boolean underlined = false;
+        boolean strikethrough = false;
         boolean highlight = false;
         for (int i = 0; i < text.length(); i++) {
             if (startsWithColorToken(text, i)) {
@@ -1596,6 +1656,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
                     bold = false;
                     italic = false;
                     encrypted = false;
+                    underlined = false;
+                    strikethrough = false;
                     highlight = false;
                 } else {
                     color = formatColor(code, defaultColor);
@@ -1603,19 +1665,49 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 i += 1;
                 continue;
             }
+            if (startsWithVanillaFormat(text, i)) {
+                char code = Character.toLowerCase(text.charAt(i + 1));
+                if (code == 'x') {
+                    Integer hex = parseVanillaHexColor(text, i);
+                    if (hex != null) {
+                        color = hex;
+                        bold = italic = encrypted = underlined = strikethrough = false;
+                        i += 13;
+                        continue;
+                    }
+                }
+                Integer vanillaColor = vanillaColor(code);
+                if (vanillaColor != null) {
+                    color = vanillaColor;
+                    bold = italic = encrypted = underlined = strikethrough = false;
+                } else if (code == 'k') encrypted = true;
+                else if (code == 'l') bold = true;
+                else if (code == 'm') strikethrough = true;
+                else if (code == 'n') underlined = true;
+                else if (code == 'o') italic = true;
+                else if (code == 'r') {
+                    color = defaultColor;
+                    bold = italic = encrypted = underlined = strikethrough = highlight = false;
+                }
+                i += 1;
+                continue;
+            }
             int emojiEnd = QuestEditorEmojis.tokenEnd(text, i);
             if (emojiEnd >= 0) {
-                chars.add(new StyledDescriptionChar('\0', color, bold, italic, encrypted, highlight, text.substring(i + 1, emojiEnd)));
+                chars.add(new StyledDescriptionChar('\0', color, bold, italic, encrypted, underlined,
+                        strikethrough, highlight, text.substring(i + 1, emojiEnd)));
                 i = emojiEnd;
                 continue;
             }
-            chars.add(new StyledDescriptionChar(text.charAt(i), color, bold, italic, encrypted, highlight));
+            chars.add(new StyledDescriptionChar(text.charAt(i), color, bold, italic, encrypted, underlined,
+                    strikethrough, highlight, null));
         }
+
         return chars;
     }
 
     private int descriptionCharWidth(StyledDescriptionChar ch) {
-        return ch.emoji != null ? 12 : mc.font.width(String.valueOf(ch.value));
+        return ch.emoji != null ? QuestEditorEmojis.glyphSize() : mc.font.width(String.valueOf(ch.value)) + (ch.bold ? 1 : 0);
     }
 
     private int highlightColor(int baseColor, int index) {
@@ -1786,6 +1878,11 @@ public final class QuestDetailsPanel extends AbstractWidget {
         for (int i = 0; i < text.length(); i++) {
             if (startsWithColorToken(text, i)) {
                 i += 1;
+                continue;
+            }
+            if (startsWithVanillaFormat(text, i)) {
+                if (Character.toLowerCase(text.charAt(i + 1)) == 'x' && parseVanillaHexColor(text, i) != null) i += 13;
+                else i += 1;
                 continue;
             }
             out.append(text.charAt(i));
@@ -1963,6 +2060,10 @@ public final class QuestDetailsPanel extends AbstractWidget {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // clicks first check buttons then text and item regions
         if (!this.visible || !this.active) return false;
+        if (button == 0 && mediaRender.restartContains(mouseX, mouseY)) {
+            QuestMediaRenderer.restart(mediaRender.path());
+            return true;
+        }
 
         if (button == 0) {
             EditBox clicked = null;
@@ -2088,6 +2189,53 @@ public final class QuestDetailsPanel extends AbstractWidget {
         protected void updateWidgetNarration(NarrationElementOutput narration) {}
     }
 
+    private boolean startsWithVanillaFormat(String text, int index) {
+        if (index + 1 >= text.length()) return false;
+        char prefix = text.charAt(index);
+        char code = Character.toLowerCase(text.charAt(index + 1));
+        return (prefix == '\u00a7' || prefix == '&') && "0123456789abcdefklmnorx".indexOf(code) >= 0;
+    }
+
+    private Integer parseVanillaHexColor(String text, int index) {
+        if (index + 13 >= text.length()) return null;
+        char prefix = text.charAt(index);
+        StringBuilder hex = new StringBuilder(6);
+        for (int pair = 0; pair < 6; pair++) {
+            int marker = index + 2 + pair * 2;
+            if (text.charAt(marker) != prefix) return null;
+            char digit = text.charAt(marker + 1);
+            if (Character.digit(digit, 16) < 0) return null;
+            hex.append(digit);
+        }
+        try {
+            return Integer.parseInt(hex.toString(), 16);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private Integer vanillaColor(char code) {
+        return switch (Character.toLowerCase(code)) {
+            case '0' -> 0x000000;
+            case '1' -> 0x0000AA;
+            case '2' -> 0x00AA00;
+            case '3' -> 0x00AAAA;
+            case '4' -> 0xAA0000;
+            case '5' -> 0xAA00AA;
+            case '6' -> 0xFFAA00;
+            case '7' -> 0xAAAAAA;
+            case '8' -> 0x555555;
+            case '9' -> 0x5555FF;
+            case 'a' -> 0x55FF55;
+            case 'b' -> 0x55FFFF;
+            case 'c' -> 0xFF5555;
+            case 'd' -> 0xFF55FF;
+            case 'e' -> 0xFFFF55;
+            case 'f' -> 0xFFFFFF;
+            default -> null;
+        };
+    }
+
     private boolean canQuickEdit() {
         return Config.quickEdit() && mc.player != null
                 && (mc.hasSingleplayerServer() || mc.player.hasPermissions(2));
@@ -2183,14 +2331,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     // claim complete restart or acknowledge the quest
     private static final class CompleteButton extends AbstractButton {
-        private static final ResourceLocation TEX_NORMAL =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
-        private static final ResourceLocation TEX_HOVER =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
-        private static final ResourceLocation TEX_DISABLED =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
-
         private final Runnable onPress;
+        private boolean undoReject;
 
         public CompleteButton(int x, int y, Runnable onPress) {
             super(x, y, 68, 20, Component.translatable("quest.boundless.complete"));
@@ -2202,18 +2344,25 @@ public final class QuestDetailsPanel extends AbstractWidget {
             if (onPress != null) onPress.run();
         }
 
+        public void setUndoReject(boolean undoReject) {
+            this.undoReject = undoReject;
+        }
+
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-            boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
-            ResourceLocation tex = !this.active ? TEX_DISABLED : (hovered ? TEX_HOVER : TEX_NORMAL);
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            super.renderWidget(gg, mouseX, mouseY, partialTick);
+        }
 
-            var font = Minecraft.getInstance().font;
-            int textW = font.width(getMessage());
-            int textX = getX() + (this.width - textW) / 2 + 2;
+        @Override
+        public void renderString(GuiGraphics gg, net.minecraft.client.gui.Font font, int color) {
+            ResourceLocation icon = undoReject ? TEX_REVERT : TEX_COMPLETE;
+            int iconX = getX() + 6;
+            int iconY = getY() + (getHeight() - 9) / 2;
+            gg.blit(icon, iconX, iconY, 0, 0, 9, 9, 9, 9);
+            int textX = iconX + 13;
             int textY = getY() + (this.height - font.lineHeight) / 2 + 1;
-            int color = this.active ? 0xFFFFFF : 0x808080;
-            gg.drawString(font, getMessage(), textX, textY, color, false);
+            String text = font.plainSubstrByWidth(getMessage().getString(), Math.max(0, getX() + getWidth() - textX - 3));
+            gg.drawString(font, text, textX, textY, color, false);
         }
 
         @Override
@@ -2222,21 +2371,12 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
     // reject optional quests with a confirmation step
     private static final class RejectButton extends AbstractButton {
-        private static final ResourceLocation TEX_NORMAL =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject.png");
-        private static final ResourceLocation TEX_HOVER =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject_highlighted.png");
-        private static final ResourceLocation TEX_DISABLED =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_reject_disabled.png");
-        private static final ResourceLocation TEX_CONFIRM =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/are_you_sure_button.png");
-
         private final Runnable onPress;
         private boolean optionalAllowed;
         private boolean confirmArmed;
 
         public RejectButton(int x, int y, Runnable onPress) {
-            super(x, y, 24, 20, Component.empty());
+            super(x, y, 24, 20, Component.translatable("ui.boundless.questbook.reject"));
             this.onPress = onPress;
         }
 
@@ -2246,6 +2386,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         public void resetConfirmState() {
             this.confirmArmed = false;
+            setMessage(Component.translatable("ui.boundless.questbook.reject"));
         }
 
         @Override
@@ -2253,6 +2394,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             if (!this.active) return;
             if (!this.confirmArmed) {
                 this.confirmArmed = true;
+                setMessage(Component.translatable("ui.boundless.questbook.confirm_reject"));
                 return;
             }
             this.confirmArmed = false;
@@ -2266,7 +2408,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             if (!this.visible || button != 0) return false;
             boolean over = this.isMouseOver(mouseX, mouseY);
             if (this.confirmArmed && !over) {
-                this.confirmArmed = false;
+                resetConfirmState();
                 return false;
             }
             return super.mouseClicked(mouseX, mouseY, button);
@@ -2274,15 +2416,16 @@ public final class QuestDetailsPanel extends AbstractWidget {
 
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-            boolean hovered = this.isMouseOver(mouseX, mouseY);
-            if (!this.active && this.confirmArmed) this.confirmArmed = false;
-            ResourceLocation tex = !this.active ? TEX_DISABLED : (this.confirmArmed ? TEX_CONFIRM : (hovered ? TEX_HOVER : TEX_NORMAL));
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            if (!this.active && this.confirmArmed) resetConfirmState();
+            ResourceLocation texture = !this.active ? TEX_REJECT_DISABLED
+                    : (this.confirmArmed || this.isMouseOver(mouseX, mouseY) ? TEX_REJECT_HOVER : TEX_REJECT);
+            gg.blit(texture, getX(), getY(), 0, 0, 24, 20, 24, 20);
 
-            if (hovered && !this.active && !optionalAllowed) {
-                gg.renderTooltip(Minecraft.getInstance().font,
-                        Component.translatable("ui.boundless.questbook.not_optional"),
-                        mouseX, mouseY);
+            if (this.isMouseOver(mouseX, mouseY)) {
+                Component tooltip = !this.active && !optionalAllowed
+                        ? Component.translatable("ui.boundless.questbook.not_optional")
+                        : getMessage();
+                gg.renderTooltip(Minecraft.getInstance().font, tooltip, mouseX, mouseY);
             }
         }
 

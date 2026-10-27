@@ -12,6 +12,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestTracker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +28,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
     private static final ResourceLocation TAB_SELECTED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
 
-    // page button textures
+    // category scroll button textures
     private static final ResourceLocation MOVE_DOWN =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_down.png");
 
@@ -40,10 +41,13 @@ public final class CategoryTabsWidget extends AbstractWidget {
     private static final ResourceLocation MOVE_UP_HIGHLIGHTED =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/arrow_up-highlighted.png");
 
-    // show 5 tabs on each page
+    private static final ResourceLocation ATTENTION =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/attention.png");
+
+    // show five tabs in the sliding window
     private static final int PAGE_SIZE = 5;
 
-    // page button sizes
+    // scroll button sizes
     private static final int CONTROL_ICON_BASE = 16;
     private static final float CONTROL_ICON_SCALE = 1.0f;
     private static final int CONTROL_ICON = (int) (CONTROL_ICON_BASE * CONTROL_ICON_SCALE);
@@ -58,7 +62,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
     private final List<QuestData.Category> categories = new ArrayList<>();
 
     private String selected = "";
-    private int pageIndex = 0;
+    private int firstVisibleIndex = 0;
 
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
@@ -126,11 +130,11 @@ public final class CategoryTabsWidget extends AbstractWidget {
             }
         } else {
             selected = "";
-            pageIndex = 0;
+            firstVisibleIndex = 0;
             return;
         }
 
-        clampPage();
+        ensureSelectedVisible();
     }
 
     // change the selected category
@@ -159,7 +163,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
     public String selectFirstCategory() {
         if (categories.isEmpty()) {
             selected = "";
-            pageIndex = 0;
+            firstVisibleIndex = 0;
             return "";
         }
 
@@ -191,13 +195,13 @@ public final class CategoryTabsWidget extends AbstractWidget {
         int visibleCount = visibleTabCount();
         if (visibleCount <= 0) return;
 
-        clampPage();
+        clampFirstVisible();
 
         int x = tabRenderX();
         int y = getY();
 
-        // work out which categories are on this page
-        int start = pageIndex * PAGE_SIZE;
+        // work out which categories are in the current window
+        int start = firstVisibleIndex;
         int end = Math.min(categories.size(), start + visibleCount);
 
         for (int idx = start; idx < end; idx++) {
@@ -218,6 +222,9 @@ public final class CategoryTabsWidget extends AbstractWidget {
             c.iconItem().ifPresent(it ->
                     gg.renderItem(new ItemStack(it), renderX + 10, top + 5)
             );
+            if (hasRedeemableQuest(c)) {
+                gg.blit(ATTENTION, renderX + 27, top + 2, 0, 0, 4, 11, 4, 11);
+            }
 
             boolean hover =
                     mouseX >= x &&
@@ -233,14 +240,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
             }
         }
 
-        // page buttons go under the last tab
-        renderPageControls(
-                gg,
-                mouseX,
-                mouseY,
-                getX(),
-                y + visibleCount * (cellH + gap)
-        );
+        renderScrollControls(gg, mouseX, mouseY, visibleCount);
     }
 
     @Override
@@ -253,12 +253,12 @@ public final class CategoryTabsWidget extends AbstractWidget {
         int visibleCount = visibleTabCount();
         if (visibleCount <= 0) return false;
 
-        clampPage();
+        clampFirstVisible();
 
         int x = tabRenderX();
         int y = getY();
 
-        int start = pageIndex * PAGE_SIZE;
+        int start = firstVisibleIndex;
         int end = Math.min(categories.size(), start + visibleCount);
 
         // check if a category tab was clicked
@@ -282,19 +282,15 @@ public final class CategoryTabsWidget extends AbstractWidget {
             }
         }
 
-        // check the page buttons
+        // move the five-tab window one category at a time
         if (categories.size() > PAGE_SIZE) {
-            int controlsY = y + visibleCount * (cellH + gap);
-
-            if (isOverUp(mouseX, mouseY, getX(), controlsY) && pageIndex > 0) {
-                pageIndex--;
+            if (isOverUp(mouseX, mouseY) && firstVisibleIndex > 0) {
+                firstVisibleIndex--;
                 return true;
             }
 
-            if (isOverDown(mouseX, mouseY, getX(), controlsY) &&
-                    pageIndex < maxPageIndex()) {
-
-                pageIndex++;
+            if (isOverDown(mouseX, mouseY, visibleCount) && firstVisibleIndex < maxFirstVisibleIndex()) {
+                firstVisibleIndex++;
                 return true;
             }
         }
@@ -309,7 +305,22 @@ public final class CategoryTabsWidget extends AbstractWidget {
             double scrollX,
             double scrollY
     ) {
-        return false;
+        if (!visible || !active || categories.size() <= PAGE_SIZE || scrollY == 0.0D || !isMouseOver(mouseX, mouseY)) {
+            return false;
+        }
+        int previous = firstVisibleIndex;
+        firstVisibleIndex += scrollY > 0.0D ? -1 : 1;
+        clampFirstVisible();
+        return previous != firstVisibleIndex;
+    }
+
+    @Override
+    public boolean isMouseOver(double mouseX, double mouseY) {
+        int visibleCount = visibleTabCount();
+        int left = tabRenderX();
+        int top = categories.size() > PAGE_SIZE ? upControlY() : getY();
+        int bottom = categories.size() > PAGE_SIZE ? downControlY(visibleCount) + CONTROL_ICON : getY() + visibleCount * (cellH + gap);
+        return visible && mouseX >= left && mouseX < left + cellW && mouseY >= top && mouseY < bottom;
     }
 
     // always show up to 5 tabs
@@ -317,20 +328,18 @@ public final class CategoryTabsWidget extends AbstractWidget {
         return PAGE_SIZE;
     }
 
-    // get the last valid page number
-    private int maxPageIndex() {
-        return Math.max(0, (categories.size() - 1) / PAGE_SIZE);
+    private int maxFirstVisibleIndex() {
+        return Math.max(0, categories.size() - PAGE_SIZE);
     }
 
-    // stop the page number going out of range
-    private void clampPage() {
-        pageIndex = Math.max(0, Math.min(pageIndex, maxPageIndex()));
+    private void clampFirstVisible() {
+        firstVisibleIndex = Math.max(0, Math.min(firstVisibleIndex, maxFirstVisibleIndex()));
     }
 
-    // move to the page that has the selected category
+    // move the sliding window so the selected category remains visible
     private void ensureSelectedVisible() {
         if (selected == null || selected.isBlank() || categories.isEmpty()) {
-            clampPage();
+            clampFirstVisible();
             return;
         }
 
@@ -344,37 +353,34 @@ public final class CategoryTabsWidget extends AbstractWidget {
         }
 
         if (selectedIndex < 0) {
-            clampPage();
+            clampFirstVisible();
             return;
         }
 
-        pageIndex = selectedIndex / PAGE_SIZE;
-        clampPage();
+        if (selectedIndex < firstVisibleIndex) {
+            firstVisibleIndex = selectedIndex;
+        } else if (selectedIndex >= firstVisibleIndex + PAGE_SIZE) {
+            firstVisibleIndex = selectedIndex - PAGE_SIZE + 1;
+        }
+        clampFirstVisible();
     }
 
-    // draw the up and down page buttons
-    private void renderPageControls(
-            GuiGraphics gg,
-            int mouseX,
-            int mouseY,
-            int x,
-            int y
-    ) {
+    private void renderScrollControls(GuiGraphics gg, int mouseX, int mouseY, int visibleCount) {
         if (categories.size() <= PAGE_SIZE) return;
 
-        int controlsY = y + 1;
         int iconX = controlsIconX();
-        int downY = controlsY + CONTROL_ICON + CONTROL_GAP;
+        int upY = upControlY();
+        int downY = downControlY(visibleCount);
 
-        boolean hoverUp = isOverUp(mouseX, mouseY, x, y);
-        boolean hoverDown = isOverDown(mouseX, mouseY, x, y);
+        boolean hoverUp = isOverUp(mouseX, mouseY);
+        boolean hoverDown = isOverDown(mouseX, mouseY, visibleCount);
 
         // use highlighted textures while hovering
         drawScaledIcon(
                 gg,
                 hoverUp ? MOVE_UP_HIGHLIGHTED : MOVE_UP,
                 iconX,
-                controlsY
+                upY
         );
 
         drawScaledIcon(
@@ -384,26 +390,21 @@ public final class CategoryTabsWidget extends AbstractWidget {
                 downY
         );
 
-        // page number like 1/3
-        String text = (pageIndex + 1) + "/" + (maxPageIndex() + 1);
+        if (hasRedeemableQuestBefore(firstVisibleIndex)) {
+            gg.blit(ATTENTION, iconX + CONTROL_ICON + 1, upY - 1, 0, 0, 4, 11, 4, 11);
+        }
+        if (hasRedeemableQuestAfter(firstVisibleIndex + visibleCount)) {
+            gg.blit(ATTENTION, iconX + CONTROL_ICON + 1, downY - 1, 0, 0, 4, 11, 4, 11);
+        }
 
-        int textX =
-                iconX +
-                        (CONTROL_ICON / 2) -
-                        (int) ((mc.font.width(text) * 0.8f) / 2f);
-
-        int textY = downY + CONTROL_ICON + 2;
-
-        drawScaledString(gg, text, 0.8f, textX, textY, 0xFFFFFFFF);
-
-        // show page button tooltips when the button can be used
-        if (hoverUp && pageIndex > 0) {
+        // show direction tooltips when the control can be used
+        if (hoverUp && firstVisibleIndex > 0) {
             pendingTooltip =
                     Component.translatable("ui.boundless.pagination.previous");
 
             pendingTooltipX = mouseX;
             pendingTooltipY = mouseY;
-        } else if (hoverDown && pageIndex < maxPageIndex()) {
+        } else if (hoverDown && firstVisibleIndex < maxFirstVisibleIndex()) {
             pendingTooltip =
                     Component.translatable("ui.boundless.pagination.next");
 
@@ -413,9 +414,9 @@ public final class CategoryTabsWidget extends AbstractWidget {
     }
 
     // check if the mouse is over the up button
-    private boolean isOverUp(double mouseX, double mouseY, int x, int y) {
-        int controlsY = y + 1;
+    private boolean isOverUp(double mouseX, double mouseY) {
         int iconX = controlsIconX();
+        int controlsY = upControlY();
 
         return mouseX >= iconX &&
                 mouseX < iconX + CONTROL_ICON &&
@@ -424,10 +425,9 @@ public final class CategoryTabsWidget extends AbstractWidget {
     }
 
     // check if the mouse is over the down button
-    private boolean isOverDown(double mouseX, double mouseY, int x, int y) {
-        int controlsY = y + 1;
+    private boolean isOverDown(double mouseX, double mouseY, int visibleCount) {
         int iconX = controlsIconX();
-        int downY = controlsY + CONTROL_ICON + CONTROL_GAP;
+        int downY = downControlY(visibleCount);
 
         return mouseX >= iconX &&
                 mouseX < iconX + CONTROL_ICON &&
@@ -442,33 +442,41 @@ public final class CategoryTabsWidget extends AbstractWidget {
                 CONTROL_X_SHIFT;
     }
 
-    // draw smaller text using the pose scale
-    private void drawScaledString(
-            GuiGraphics gg,
-            String text,
-            float scale,
-            int x,
-            int y,
-            int color
-    ) {
-        if (text == null || text.isEmpty()) return;
-
-        gg.pose().pushPose();
-        gg.pose().scale(scale, scale, 1f);
-
-        float inv = 1f / scale;
-
-        gg.drawString(
-                mc.font,
-                text,
-                (int) (x * inv),
-                (int) (y * inv),
-                color,
-                false
-        );
-
-        gg.pose().popPose();
+    private int upControlY() {
+        return getY() - CONTROL_ICON - CONTROL_GAP;
     }
+
+    private int downControlY(int visibleCount) {
+        return getY() + visibleCount * (cellH + gap) + 1;
+    }
+
+    private boolean hasRedeemableQuestBefore(int endExclusive) {
+        for (int index = 0; index < Math.min(endExclusive, categories.size()); index++) {
+            if (hasRedeemableQuest(categories.get(index))) return true;
+        }
+        return false;
+    }
+
+    private boolean hasRedeemableQuestAfter(int startInclusive) {
+        for (int index = Math.max(0, startInclusive); index < categories.size(); index++) {
+            if (hasRedeemableQuest(categories.get(index))) return true;
+        }
+        return false;
+    }
+
+    private boolean hasRedeemableQuest(QuestData.Category category) {
+        if (category == null || mc.player == null) return false;
+        for (QuestData.Quest quest : QuestData.all()) {
+            if (quest == null || !category.id.equalsIgnoreCase(quest.category)) continue;
+            QuestTracker.Status status = QuestTracker.getStatus(quest, mc.player);
+            if (status == QuestTracker.Status.REDEEMED || status == QuestTracker.Status.REJECTED) continue;
+            if (!QuestTracker.dependenciesMet(quest, mc.player)) continue;
+            if (status == QuestTracker.Status.COMPLETED || QuestTracker.isReady(quest, mc.player)
+                    || QuestTracker.canAcknowledge(quest, mc.player)) return true;
+        }
+        return false;
+    }
+
 
     // draw an icon using the set scale
     private void drawScaledIcon(

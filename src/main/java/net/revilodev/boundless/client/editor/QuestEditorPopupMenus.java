@@ -165,8 +165,10 @@ public final class QuestEditorPopupMenus {
             int row = i - start;
             int rowY = y + row * ENTRY_ROW_H;
             boolean hovered = mouseX >= x && mouseX <= x + width && mouseY >= rowY && mouseY < rowY + ENTRY_ROW_H;
-            if (hovered) gg.fill(x + 1, rowY, x + width - 1, rowY + ENTRY_ROW_H, 0xFF2D2D2D);
-            gg.drawString(font, options.get(i), x + 3, rowY + 2, ID_SUGGESTION_TEXT_COLOR, false);
+            gg.fill(x + 1, rowY, x + width - 1, rowY + ENTRY_ROW_H, ID_SUGGESTION_BORDER_COLOR);
+            gg.fill(x + 2, rowY + 1, x + width - 2, rowY + ENTRY_ROW_H - 1,
+                    hovered ? 0xFF2D2D2D : ID_SUGGESTION_BG_COLOR);
+            gg.drawString(font, options.get(i), x + 4, rowY + 2, ID_SUGGESTION_TEXT_COLOR, false);
         }
         if (options.size() > visible) renderScrollThumb(gg, x, y, width, height, scroll, visible, options.size());
         gg.pose().popPose();
