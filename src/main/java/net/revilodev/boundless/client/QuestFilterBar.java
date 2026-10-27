@@ -271,6 +271,6 @@ public final class QuestFilterBar extends AbstractWidget {
     private boolean showSettingsButton() {
         if (onSettings == null) return false;
         var player = Minecraft.getInstance().player;
-        return player != null && player.hasPermissions(2);
+        return player != null;
     }
 }

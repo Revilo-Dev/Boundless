@@ -49,6 +49,7 @@ import net.revilodev.boundless.client.editor.QuestEditorEntryTypes;
 import net.revilodev.boundless.client.editor.QuestEditorJsonFiles;
 import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
 import net.revilodev.boundless.client.editor.QuestEditorTreeWidget;
+import net.revilodev.boundless.client.editor.QuestEditorTooltips;
 import net.revilodev.boundless.client.editor.QuestEditorTreeWidget.Tool;
 import net.revilodev.boundless.client.editor.QuestEditorItemPickerData;
 import net.revilodev.boundless.client.editor.QuestEditorItemPickerData.PickerPageRequest;
@@ -531,7 +532,7 @@ public final class QuestEditorScreen extends Screen {
         questTree = new QuestEditorTreeWidget(pxLeft, py, leftPw, listH, this::openTreeQuest,
                 this::placeTreeQuest, this::saveTreePosition, this::requestDeleteTreeNode,
                 this::requestTreeDependencyChange, this::toggleTreeIncompatibility,
-                this::saveTreeStickers, this::requestStickerIcon);
+                this::saveTreeStickers, this::requestStickerIcon, this::requestStickerTextEdit);
         questTree.visible = false;
         questTree.active = false;
         addRenderableWidget(questTree);
@@ -1415,6 +1416,29 @@ public final class QuestEditorScreen extends Screen {
         openIconItemPicker(stickerIconPickerTarget);
     }
 
+    private void requestStickerTextEdit(Integer index, QuestData.Sticker sticker) {
+        if (index == null || sticker == null || "icon".equals(sticker.type())) return;
+        pendingState = captureState();
+        Minecraft.getInstance().setScreen(new StickerTextEditorScreen(this, sticker.value(), updatedText -> {
+            if (currentPack == null || treeCategoryId.isBlank()) return;
+            CategoryData category = QuestEditorJsonFiles.loadCategory(currentPack, treeCategoryId);
+            List<QuestData.Sticker> updated = new ArrayList<>(readCategoryStickers(category == null ? null : category.path));
+            if (index < 0) {
+                if (updatedText != null && !updatedText.isBlank()) {
+                    updated.add(new QuestData.Sticker("text", updatedText, sticker.x(), sticker.y()));
+                    saveTreeStickers(updated);
+                }
+                return;
+            }
+            if (index >= updated.size()) return;
+            QuestData.Sticker current = updated.get(index);
+            if ("icon".equals(current.type())) return;
+            if (updatedText == null || updatedText.isBlank()) updated.remove((int) index);
+            else updated.set(index, new QuestData.Sticker("text", updatedText, current.x(), current.y()));
+            saveTreeStickers(updated);
+        }));
+    }
+
     private void autosaveTreeBackground(String background, boolean alreadyUnsaved) {
         if (editorType != EditorType.QUEST || editingPath == null || currentPack == null) {
             markCurrentEditorUnsaved();
@@ -1982,7 +2006,7 @@ public final class QuestEditorScreen extends Screen {
         if (Config.showIdField()) fields.add(field(trs("field.id"), questIdBox));
         fields.add(field("Display", questNameBox));
         fields.add(field(trs("field.description"), questDescriptionBox));
-        fields.add(field("Image or looping GIF", questMediaSelector));
+        fields.add(field("Image or media", questMediaSelector));
         fields.add(field(trs("field.category_required"), questCategoryBox));
         if (!dropdownBoxValue(questCategoryBox).isBlank()) {
             fields.add(field(trs("field.subcategory"), questSubCategoryBox));
@@ -4241,7 +4265,7 @@ public final class QuestEditorScreen extends Screen {
         if (pendingEditorTooltip == null || pendingEditorTooltip.isEmpty()) return;
         gg.pose().pushPose();
         gg.pose().translate(0f, 0f, 650f);
-        gg.renderComponentTooltip(font, pendingEditorTooltip, pendingEditorTooltipX, pendingEditorTooltipY);
+        QuestEditorTooltips.renderComponents(gg, font, pendingEditorTooltip, pendingEditorTooltipX, pendingEditorTooltipY);
         gg.pose().popPose();
         pendingEditorTooltip = List.of();
     }
@@ -4321,9 +4345,6 @@ public final class QuestEditorScreen extends Screen {
         }
         if (originButton != null) {
             originButton.setX(pxRight + pw - HEADER_ICON_SIZE - 2);
-            originButton.setY(py + 1);
-            originButton.visible = editorType == EditorType.QUEST && isTreePack();
-            originButton.active = originButton.visible;
             originButton.setTextures(questTreeOrigin ? ORIGIN_HOVER_TEX : ORIGIN_TEX, ORIGIN_HOVER_TEX);
         }
         if (questSearchBox != null) {
@@ -4398,61 +4419,61 @@ public final class QuestEditorScreen extends Screen {
                 || isHovered(backButton, mouseX, mouseY);
         if (directTooltipHovered) pendingEditorTooltip = List.of();
         if (categoriesTabButton != null && categoriesTabButton.visible && categoriesTabButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, Component.literal(categoriesTabButton.tooltip()), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, Component.literal(categoriesTabButton.tooltip()), mouseX, mouseY);
             return;
         }
         if (subCategoriesTabButton != null && subCategoriesTabButton.visible && subCategoriesTabButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, Component.literal(subCategoriesTabButton.tooltip()), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, Component.literal(subCategoriesTabButton.tooltip()), mouseX, mouseY);
             return;
         }
         if (questsTabButton != null && questsTabButton.visible && questsTabButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, Component.literal(questsTabButton.tooltip()), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, Component.literal(questsTabButton.tooltip()), mouseX, mouseY);
             return;
         }
         if (importQuestPackButton != null && importQuestPackButton.visible && importQuestPackButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, tr("tooltip.import_questpacks"), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, tr("tooltip.import_questpacks"), mouseX, mouseY);
             return;
         }
         if (createEntryButton != null && createEntryButton.visible && createEntryButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, font.split(createEntryTooltip(), 170), mouseX, mouseY);
+            QuestEditorTooltips.renderFormatted(gg, font, font.split(createEntryTooltip(), 170), mouseX, mouseY);
             return;
         }
         if (treeMoveButton != null && treeMoveButton.visible && treeMoveButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, Component.literal("Move nodes or drag empty space to pan the tree."), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, Component.literal("Move nodes, text, or icons; drag empty space to pan."), mouseX, mouseY);
             return;
         }
         if (treeDeleteButton != null && treeDeleteButton.visible && treeDeleteButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, font.split(Component.literal("Delete nodes or dependency lines. "
+            QuestEditorTooltips.renderFormatted(gg, font, font.split(Component.literal("Delete nodes, text, icons, or dependency lines. "
                     + "Hold Shift while clicking to bypass the confirmation prompt."), 170), mouseX, mouseY);
             return;
         }
         if (treeConnectorButton != null && treeConnectorButton.visible && treeConnectorButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, font.split(Component.literal("Connect nodes: select the dependency first, "
+            QuestEditorTooltips.renderFormatted(gg, font, font.split(Component.literal("Connect nodes: select the dependency first, "
                     + "then select the quest that should depend on it. Shift-double-click a line to toggle "
                     + "a red incompatibility."), 190), mouseX, mouseY);
             return;
         }
         if (originButton != null && originButton.visible && originButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, Component.literal(questTreeOrigin
+            QuestEditorTooltips.render(gg, font, Component.literal(questTreeOrigin
                     ? "This quest is the tree origin."
                     : "Make this quest the tree origin."), mouseX, mouseY);
             return;
         }
         if (packLayoutSelector != null && packLayoutSelector.visible && packLayoutSelector.isMouseOver(mouseX, mouseY)) {
             Component tooltip = packLayoutSelector.hoveredTooltip(mouseX, mouseY);
-            if (tooltip != null) gg.renderTooltip(font, tooltip, mouseX, mouseY);
+            if (tooltip != null) QuestEditorTooltips.render(gg, font, tooltip, mouseX, mouseY);
             return;
         }
         if (duplicateButton != null && duplicateButton.visible && duplicateButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, tr("tooltip.duplicate"), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, tr("tooltip.duplicate"), mouseX, mouseY);
             return;
         }
         if (deleteQuestButton != null && deleteQuestButton.visible && deleteQuestButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, deleteConfirmArmed ? tr("tooltip.hold_delete") : tr("tooltip.delete"), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, deleteConfirmArmed ? tr("tooltip.hold_delete") : tr("tooltip.delete"), mouseX, mouseY);
             return;
         }
         if (backButton != null && backButton.visible && backButton.isMouseOver(mouseX, mouseY)) {
-            gg.renderTooltip(font, tr("tooltip.back"), mouseX, mouseY);
+            QuestEditorTooltips.render(gg, font, tr("tooltip.back"), mouseX, mouseY);
         }
     }
 
@@ -5036,6 +5057,15 @@ public final class QuestEditorScreen extends Screen {
         int clipBottom = py + ph - 2;
 
         int yCursor = py - (int) editorScroll;
+        if (originButton != null) {
+            int originY = yCursor + 1;
+            originButton.setX(pxRight + pw - HEADER_ICON_SIZE - 2);
+            originButton.setY(originY);
+            boolean showOrigin = editorType == EditorType.QUEST && isTreePack()
+                    && originY + originButton.getHeight() > clipTop && originY < clipBottom;
+            originButton.visible = showOrigin;
+            originButton.active = showOrigin;
+        }
         for (FormField field : activeFields) {
             if (field.widget == catBackgroundOpacitySlider && !catBackgroundDarkeningToggle.isOn()) {
                 field.widget.visible = false;
@@ -7308,7 +7338,7 @@ public final class QuestEditorScreen extends Screen {
 
     private final class QuestTreeBackgroundSelector extends AbstractWidget {
         private static final int HEIGHT = 34;
-        private static final int ICON_SIZE = 8;
+        private static final int ICON_SIZE = 20;
         private static final int BUTTON_GAP = 2;
         private static final int BUTTON_Y = 1;
         private static final int BUTTON_HEIGHT = 32;
@@ -7358,7 +7388,8 @@ public final class QuestEditorScreen extends Screen {
                 gg.blitSprite(buttonTexture, x, y, buttonWidth, BUTTON_HEIGHT);
                 gg.pose().pushPose();
                 gg.pose().translate(x + (buttonWidth - ICON_SIZE) / 2f, y + (BUTTON_HEIGHT - ICON_SIZE) / 2f, 0);
-                gg.pose().scale(0.25f, 0.25f, 1f);
+                float iconScale = ICON_SIZE / 32f;
+                gg.pose().scale(iconScale, iconScale, 1f);
                 gg.blit(ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/tree/" + values[index].replace('_', '-') + "-incomplete.png"),
                         0, 0, 0, 0, 32, 32, 32, 32);
                 gg.pose().popPose();
@@ -7545,12 +7576,12 @@ public final class QuestEditorScreen extends Screen {
                 gg.pose().scale(3f, 3f, 1f);
                 gg.blit(plus, 0, 0, 0, 0, 7, 7, 7, 7);
                 gg.pose().popPose();
-                if (isMouseOver(mouseX, mouseY)) gg.renderTooltip(font, Component.literal("Create category tree"), mouseX, mouseY);
+                if (isMouseOver(mouseX, mouseY)) QuestEditorTooltips.render(gg, font, Component.literal("Create category tree"), mouseX, mouseY);
                 return;
             }
             ItemStack icon = QuestEditorItemIcons.iconStackFromId(category.icon);
             if (!icon.isEmpty()) gg.renderItem(icon, x + (TAB_W - 16) / 2, getY() + 5);
-            if (isMouseOver(mouseX, mouseY)) gg.renderTooltip(font, Component.literal(category.name), mouseX, mouseY);
+            if (isMouseOver(mouseX, mouseY)) QuestEditorTooltips.render(gg, font, Component.literal(category.name), mouseX, mouseY);
         }
 
         @Override

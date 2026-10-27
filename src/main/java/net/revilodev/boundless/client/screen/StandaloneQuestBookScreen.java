@@ -54,6 +54,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     private QuestData.Quest selectedQuest;
     private String searchQuery = "";
     private String selectedCategory = "all";
+    private float uiScale = 1.0f;
 
     public StandaloneQuestBookScreen() {
         super(Component.translatable("ui.boundless.questbook.title"));
@@ -62,6 +63,9 @@ public final class StandaloneQuestBookScreen extends Screen {
     // build the standalone quest book
     @Override
     protected void init() {
+        uiScale = Config.questBookScale();
+        width = Math.max(1, Math.round(width / uiScale));
+        height = Math.max(1, Math.round(height / uiScale));
         if (Config.disableQuestBook()) {
             if (minecraft != null) minecraft.setScreen(null);
             return;
@@ -71,14 +75,13 @@ public final class StandaloneQuestBookScreen extends Screen {
         int maxPanelWidth = Math.max(96, (this.width - 49) / 2);
         boolean expandTree = expanded && usesTreeView();
         panelWidth = Math.min(expandTree ? 220 : 147, maxPanelWidth);
-        detailsPanelWidth = Math.min(147, maxPanelWidth);
+        detailsPanelWidth = Math.min(expanded ? 220 : 147, maxPanelWidth);
         panelHeight = Math.min(166, Math.max(120, this.height - 16));
 
-        int cx = this.width / 2 + 20;
         int cy = this.height / 2;
 
-        leftX = cx - panelWidth - 2;
-        rightX = cx + 2;
+        leftX = (this.width - panelWidth - detailsPanelWidth - 4) / 2;
+        rightX = leftX + panelWidth + 4;
         topY = cy - panelHeight / 2;
 
         int pxLeft = leftX + 10;
@@ -163,7 +166,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         });
         expandButton = new QuestPanelExpandButton(leftX + panelWidth - 50, topY + 11, () -> expanded, () -> {
             expanded = !expanded;
-            resize(minecraft, width, height);
+            resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
         });
 
         addRenderableWidget(tabs);
@@ -290,15 +293,22 @@ public final class StandaloneQuestBookScreen extends Screen {
             if (minecraft != null) minecraft.setScreen(null);
             return;
         }
+        mouseX = Math.round(mouseX / uiScale);
+        mouseY = Math.round(mouseY / uiScale);
+        gg.pose().pushPose();
+        gg.pose().scale(uiScale, uiScale, 1.0f);
         gg.fill(0, 0, this.width, this.height, 0xA0000000);
         QuestPanelBackgroundRenderer.render(gg, PANEL_TEX, leftX, topY, panelWidth, panelHeight);
         QuestPanelBackgroundRenderer.render(gg, PANEL_TEX, rightX, topY, detailsPanelWidth, panelHeight);
         if (tree != null) tree.setTooltipSuppressed(expandButton != null && expandButton.visible && expandButton.isMouseOver(mouseX, mouseY));
         super.render(gg, mouseX, mouseY, partialTick);
+        gg.pose().popPose();
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        mouseX /= uiScale;
+        mouseY /= uiScale;
         boolean overSearch = searchBox != null && searchBox.visible
                 && mouseX >= searchBox.getX() && mouseX <= searchBox.getX() + searchBox.getWidth()
                 && mouseY >= searchBox.getY() && mouseY <= searchBox.getY() + searchBox.getHeight();
@@ -323,6 +333,21 @@ public final class StandaloneQuestBookScreen extends Screen {
     }
 
     @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        return super.mouseClicked(mouseX / uiScale, mouseY / uiScale, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        return super.mouseReleased(mouseX / uiScale, mouseY / uiScale, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        return super.mouseDragged(mouseX / uiScale, mouseY / uiScale, button, dragX / uiScale, dragY / uiScale);
+    }
+
+    @Override
     public boolean isPauseScreen() {
         return false;
     }
@@ -340,6 +365,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         tree.setBackground(category == null ? "" : category.background,
                 category != null && category.backgroundDarkening,
                 category == null ? 0.45f : category.backgroundDarkeningOpacity);
+        tree.setStickers(category == null ? java.util.List.of() : category.stickers);
     }
 
     private boolean usesTreeView() {
@@ -359,8 +385,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     }
 
     private boolean canAccessSettings() {
-        return minecraft != null && minecraft.player != null
-                && (minecraft.hasSingleplayerServer() || minecraft.player.hasPermissions(2));
+        return minecraft != null && minecraft.player != null;
     }
 
     private static final class SettingsButton extends AbstractButton {

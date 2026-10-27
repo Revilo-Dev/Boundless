@@ -28,7 +28,10 @@ public final class QuestPanelExpandButton extends AbstractButton {
 
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 400);
         graphics.blit(TEXTURE, getX(), getY(), 0, 0, getWidth(), getHeight(), getWidth(), getHeight());
+        graphics.pose().popPose();
         if (isMouseOver(mouseX, mouseY)) {
             graphics.renderTooltip(Minecraft.getInstance().font,
                     Component.literal(expanded.getAsBoolean() ? "Collapse tree panel" : "Expand tree panel"),

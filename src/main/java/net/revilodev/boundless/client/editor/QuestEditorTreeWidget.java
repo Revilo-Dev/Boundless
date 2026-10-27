@@ -39,9 +39,12 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private static final int ALIGN_SNAP_DISTANCE = 6;
     private static final int DIAGONAL_SNAP_DISTANCE = 16;
     private static final long SHIFT_DOUBLE_CLICK_MS = 350L;
+    private static final long STICKER_DOUBLE_CLICK_MS = 350L;
     private static final ResourceLocation ZOOM_IN = texture("button-zoom-in");
     private static final ResourceLocation ZOOM_OUT = texture("button-zoom-out");
     private static final ResourceLocation ZOOM_CENTRE = texture("button-zoom-centre");
+    private static final ResourceLocation ORIGIN_STAR =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/icon/emoji/star.png");
 
     private final Minecraft minecraft = Minecraft.getInstance();
     private final Consumer<QuestEntryData> onSelect;
@@ -52,6 +55,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private final BiConsumer<QuestEntryData, String> onIncompatibilityToggle;
     private final Consumer<List<QuestData.Sticker>> onStickersChanged;
     private final BiConsumer<Integer, Integer> onStickerIconRequested;
+    private final BiConsumer<Integer, QuestData.Sticker> onStickerTextEditRequested;
     private List<QuestEntryData> quests = List.of();
     private Map<String, QuestEntryData> questsById = Map.of();
     private Map<QuestEntryData, Integer> questIndexes = Map.of();
@@ -80,13 +84,21 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private int pendingStickerY;
     private boolean editingStickerText;
     private String stickerText = "";
+    private int selectedStickerIndex = -1;
+    private int draggedStickerIndex = -1;
+    private int stickerDragOffsetX;
+    private int stickerDragOffsetY;
+    private boolean draggedStickerMoved;
+    private int lastStickerClickIndex = -1;
+    private long lastStickerClickMs;
 
     public QuestEditorTreeWidget(int x, int y, int width, int height, Consumer<QuestEntryData> onSelect,
                                  BiConsumer<Integer, Integer> onPlace, NodeMoved onMoved,
                                  NodeDeleteRequested onDeleteRequested, DependencyChanged onDependencyChanged,
                                  BiConsumer<QuestEntryData, String> onIncompatibilityToggle,
                                  Consumer<List<QuestData.Sticker>> onStickersChanged,
-                                 BiConsumer<Integer, Integer> onStickerIconRequested) {
+                                 BiConsumer<Integer, Integer> onStickerIconRequested,
+                                 BiConsumer<Integer, QuestData.Sticker> onStickerTextEditRequested) {
         super(x, y, width, height, Component.empty());
         this.onSelect = onSelect;
         this.onPlace = onPlace;
@@ -96,6 +108,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         this.onIncompatibilityToggle = onIncompatibilityToggle;
         this.onStickersChanged = onStickersChanged;
         this.onStickerIconRequested = onStickerIconRequested;
+        this.onStickerTextEditRequested = onStickerTextEditRequested;
     }
 
     public void setQuests(List<QuestEntryData> quests) {
@@ -116,6 +129,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     public void setStickers(List<QuestData.Sticker> stickers) {
         this.stickers = stickers == null ? List.of() : List.copyOf(stickers);
+        if (selectedStickerIndex >= this.stickers.size()) selectedStickerIndex = -1;
     }
 
     public void addIconSticker(int x, int y, String icon) {
@@ -132,6 +146,9 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         connectorSource = null;
         draggedQuest = null;
         draggedQuestMoved = false;
+        draggedStickerIndex = -1;
+        draggedStickerMoved = false;
+        if (this.tool != Tool.MOVE) selectedStickerIndex = -1;
         draggingCanvas = false;
     }
 
@@ -170,9 +187,10 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         renderConnectors(gg);
         renderNodes(gg, hovered);
         gg.pose().popPose();
+        gg.flush();
         gg.disableScissor();
         renderZoomButtons(gg);
-        renderStickerMenu(gg);
+        renderStickerMenu(gg, mouseX, mouseY);
         if (hovered != null) renderTreeTooltip(gg, Component.literal(displayName(hovered)), mouseX, mouseY);
         else if (tool == Tool.CONNECT && connectorSource != null && isMouseOver(mouseX, mouseY)) {
             renderTreeTooltip(gg, Component.literal("Select the quest that should depend on "
@@ -185,34 +203,64 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private void renderStickers(GuiGraphics gg) {
-        for (QuestData.Sticker sticker : stickers) {
+        for (int index = 0; index < stickers.size(); index++) {
+            QuestData.Sticker sticker = stickers.get(index);
+            if (tool == Tool.MOVE && index == selectedStickerIndex) drawStickerSelection(gg, sticker);
             if ("icon".equals(sticker.type())) {
                 QuestEditorItemIcons.renderIcon(gg, sticker.value(), sticker.x() - 8, sticker.y() - 8);
             } else {
-                gg.drawString(minecraft.font, Component.literal(sticker.value()), sticker.x(), sticker.y(), 0xFFFFFFFF, true);
+                QuestStickerTextRenderer.render(gg, minecraft.font, sticker.value(), sticker.x(), sticker.y());
             }
         }
     }
 
-    private void renderStickerMenu(GuiGraphics gg) {
+    private void drawStickerSelection(GuiGraphics gg, QuestData.Sticker sticker) {
+        int left;
+        int top;
+        int right;
+        int bottom;
+        if ("icon".equals(sticker.type())) {
+            left = sticker.x() - 10;
+            top = sticker.y() - 10;
+            right = sticker.x() + 10;
+            bottom = sticker.y() + 10;
+        } else {
+            left = sticker.x() - 2;
+            top = sticker.y() - 2;
+            right = sticker.x() + QuestStickerTextRenderer.width(minecraft.font, sticker.value()) + 2;
+            bottom = sticker.y() + QuestStickerTextRenderer.height(minecraft.font, sticker.value()) + 2;
+        }
+        gg.fill(left, top, right, top + 1, 0xFFFFFFFF);
+        gg.fill(left, bottom - 1, right, bottom, 0xFFFFFFFF);
+        gg.fill(left, top, left + 1, bottom, 0xFFFFFFFF);
+        gg.fill(right - 1, top, right, bottom, 0xFFFFFFFF);
+    }
+
+    private void renderStickerMenu(GuiGraphics gg, int mouseX, int mouseY) {
         if (!stickerMenuOpen && !editingStickerText) return;
         int x = stickerMenuX;
         int y = stickerMenuY;
         gg.pose().pushPose();
         gg.pose().translate(0, 0, 950);
         if (editingStickerText) {
-            gg.fill(x, y, x + 116, y + 22, 0xEE151515);
+            gg.fill(x, y, x + 116, y + 22, 0xFFFFFFFF);
             gg.fill(x + 2, y + 2, x + 114, y + 20, 0xFF303030);
             String shown = stickerText.isEmpty() ? "Type text, press Enter" : stickerText;
             gg.drawString(minecraft.font, minecraft.font.plainSubstrByWidth(shown, 108), x + 5, y + 7, 0xFFFFFFFF, false);
         } else {
-            gg.fill(x, y, x + 78, y + 38, 0xEE151515);
-            gg.fill(x + 2, y + 2, x + 76, y + 18, 0xFF303030);
-            gg.fill(x + 2, y + 20, x + 76, y + 36, 0xFF303030);
+            drawOutlinedMenuRow(gg, x, y, 78, 18,
+                    mouseX >= x && mouseX <= x + 78 && mouseY >= y && mouseY < y + 18);
+            drawOutlinedMenuRow(gg, x, y + 20, 78, 18,
+                    mouseX >= x && mouseX <= x + 78 && mouseY >= y + 20 && mouseY < y + 38);
             gg.drawString(minecraft.font, "Add text", x + 7, y + 6, 0xFFFFFFFF, false);
             gg.drawString(minecraft.font, "Add icon", x + 7, y + 24, 0xFFFFFFFF, false);
         }
         gg.pose().popPose();
+    }
+
+    private void drawOutlinedMenuRow(GuiGraphics gg, int x, int y, int width, int height, boolean hovered) {
+        gg.fill(x, y, x + width, y + height, 0xFFFFFFFF);
+        gg.fill(x + 1, y + 1, x + width - 1, y + height - 1, hovered ? 0xFF3A3A3A : 0xEE151515);
     }
 
     private void renderNodes(GuiGraphics gg, QuestEntryData hovered) {
@@ -225,7 +273,9 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             ItemStack icon = questIcons.getOrDefault(quest, ItemStack.EMPTY);
             if (!icon.isEmpty()) gg.renderItem(icon, x + 8, y + 8);
             if (quest == connectorSource) drawNodeSelection(gg, x, y, 0xFFFFFFFF);
-            if (parseBoolean(quest.treeOrigin)) drawNodeSelection(gg, x, y, 0xFFFFC040);
+            if (parseBoolean(quest.treeOrigin)) {
+                gg.blit(ORIGIN_STAR, x + NODE_SIZE - 8, y - 2, 0, 0, 10, 10, 10, 10);
+            }
         }
     }
 
@@ -238,7 +288,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private void renderTreeTooltip(GuiGraphics gg, Component text, int mouseX, int mouseY) {
         gg.pose().pushPose();
         gg.pose().translate(0, 0, 900);
-        gg.renderTooltip(minecraft.font, text, mouseX, mouseY);
+        QuestEditorTooltips.render(gg, minecraft.font, text, mouseX, mouseY);
         gg.pose().popPose();
     }
 
@@ -256,9 +306,12 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private void renderZoomButtons(GuiGraphics gg) {
         int x = getX() + width - 31;
         int y = getY() + 3;
+        gg.pose().pushPose();
+        gg.pose().translate(0, 0, 400);
         gg.blit(ZOOM_OUT, x, y, 0, 0, 7, 7, 7, 7);
         gg.blit(ZOOM_CENTRE, x + 10, y - 1, 0, 0, 9, 9, 9, 9);
         gg.blit(ZOOM_IN, x + 22, y, 0, 0, 7, 7, 7, 7);
+        gg.pose().popPose();
     }
 
     private boolean isOverZoomControls(double mouseX, double mouseY) {
@@ -274,8 +327,13 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             if (mouseX >= stickerMenuX && mouseX <= stickerMenuX + 78 && mouseY >= stickerMenuY && mouseY <= stickerMenuY + 38) {
                 if (mouseY < stickerMenuY + 20) {
                     stickerMenuOpen = false;
-                    editingStickerText = true;
-                    stickerText = "";
+                    if (onStickerTextEditRequested != null) {
+                        onStickerTextEditRequested.accept(-1,
+                                new QuestData.Sticker("text", "", pendingStickerX, pendingStickerY));
+                    } else {
+                        editingStickerText = true;
+                        stickerText = "";
+                    }
                 } else {
                     stickerMenuOpen = false;
                     if (onStickerIconRequested != null) onStickerIconRequested.accept(pendingStickerX, pendingStickerY);
@@ -297,6 +355,28 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         if (button != 0) return false;
         if (handleZoomClick(mouseX, mouseY)) return true;
 
+        int clickedStickerIndex = stickerAt(mouseX, mouseY);
+        if (clickedStickerIndex >= 0 && tool != Tool.DELETE && tool != Tool.CONNECT && tool != Tool.CREATE) {
+            QuestData.Sticker sticker = stickers.get(clickedStickerIndex);
+            long now = Util.getMillis();
+            if (!"icon".equals(sticker.type()) && clickedStickerIndex == lastStickerClickIndex
+                    && now - lastStickerClickMs <= STICKER_DOUBLE_CLICK_MS) {
+                lastStickerClickIndex = -1;
+                lastStickerClickMs = 0L;
+                draggedStickerIndex = -1;
+                draggingCanvas = false;
+                if (onStickerTextEditRequested != null) onStickerTextEditRequested.accept(clickedStickerIndex, sticker);
+                return true;
+            }
+            lastStickerClickIndex = clickedStickerIndex;
+            lastStickerClickMs = now;
+            selectedStickerIndex = clickedStickerIndex;
+            if (tool == Tool.NONE) return true;
+        } else if (clickedStickerIndex < 0) {
+            lastStickerClickIndex = -1;
+            lastStickerClickMs = 0L;
+        }
+
         QuestEntryData quest = questAt(mouseX, mouseY);
         DependencyEdge clickedEdge = quest == null ? edgeAt(mouseX, mouseY) : null;
         if (tool != Tool.DELETE && Screen.hasShiftDown() && clickedEdge != null) {
@@ -315,6 +395,10 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             return true;
         }
         if (tool == Tool.DELETE) {
+            if (clickedStickerIndex >= 0) {
+                removeSticker(clickedStickerIndex);
+                return true;
+            }
             if (quest != null) {
                 if (onDeleteRequested != null) onDeleteRequested.accept(quest, Screen.hasShiftDown());
                 return true;
@@ -344,10 +428,20 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
         if (tool == Tool.MOVE) {
             setFocused(true);
-            if (quest != null) {
+            int stickerIndex = stickerAt(mouseX, mouseY);
+            if (stickerIndex >= 0) {
+                selectedStickerIndex = stickerIndex;
+                draggedStickerIndex = stickerIndex;
+                QuestData.Sticker sticker = stickers.get(stickerIndex);
+                stickerDragOffsetX = canvasNodeX(mouseX) - sticker.x();
+                stickerDragOffsetY = canvasNodeY(mouseY) - sticker.y();
+                draggedStickerMoved = false;
+            } else if (quest != null) {
+                selectedStickerIndex = -1;
                 draggedQuest = quest;
                 draggedQuestMoved = false;
             } else {
+                selectedStickerIndex = -1;
                 draggingCanvas = true;
             }
             return true;
@@ -373,6 +467,18 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (!active || !visible || button != 0) return false;
+        if (tool == Tool.MOVE && draggedStickerIndex >= 0 && draggedStickerIndex < stickers.size()) {
+            QuestData.Sticker sticker = stickers.get(draggedStickerIndex);
+            int nextX = canvasNodeX(mouseX) - stickerDragOffsetX;
+            int nextY = canvasNodeY(mouseY) - stickerDragOffsetY;
+            if (nextX != sticker.x() || nextY != sticker.y()) {
+                List<QuestData.Sticker> updated = new ArrayList<>(stickers);
+                updated.set(draggedStickerIndex, new QuestData.Sticker(sticker.type(), sticker.value(), nextX, nextY));
+                stickers = List.copyOf(updated);
+                draggedStickerMoved = true;
+            }
+            return true;
+        }
         if (draggingCanvas) {
             panX += (float) dragX / zoom;
             panY += (float) dragY / zoom;
@@ -400,8 +506,11 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         if (draggedQuest != null && draggedQuestMoved && onMoved != null) {
             onMoved.accept(draggedQuest, parse(draggedQuest.treeX, 0), parse(draggedQuest.treeY, 0));
         }
+        if (draggedStickerMoved && onStickersChanged != null) onStickersChanged.accept(stickers);
         draggedQuest = null;
         draggedQuestMoved = false;
+        draggedStickerIndex = -1;
+        draggedStickerMoved = false;
         draggingCanvas = false;
         return true;
     }
@@ -467,6 +576,16 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         if (onStickersChanged != null) onStickersChanged.accept(stickers);
     }
 
+    private void removeSticker(int index) {
+        if (index < 0 || index >= stickers.size()) return;
+        List<QuestData.Sticker> updated = new ArrayList<>(stickers);
+        updated.remove(index);
+        stickers = List.copyOf(updated);
+        selectedStickerIndex = -1;
+        draggedStickerIndex = -1;
+        if (onStickersChanged != null) onStickersChanged.accept(stickers);
+    }
+
     private boolean handleZoomClick(double mouseX, double mouseY) {
         int x = getX() + width - 31;
         int y = getY() + 3;
@@ -488,6 +607,24 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             if (canvasX >= x && canvasX <= x + NODE_SIZE && canvasY >= y && canvasY <= y + NODE_SIZE) return quest;
         }
         return null;
+    }
+
+    private int stickerAt(double mouseX, double mouseY) {
+        double canvasX = canvasX(mouseX);
+        double canvasY = canvasY(mouseY);
+        for (int index = stickers.size() - 1; index >= 0; index--) {
+            QuestData.Sticker sticker = stickers.get(index);
+            if ("icon".equals(sticker.type())) {
+                if (canvasX >= sticker.x() - 8 && canvasX <= sticker.x() + 8
+                        && canvasY >= sticker.y() - 8 && canvasY <= sticker.y() + 8) return index;
+            } else {
+                int width = QuestStickerTextRenderer.width(minecraft.font, sticker.value());
+                int height = QuestStickerTextRenderer.height(minecraft.font, sticker.value());
+                if (canvasX >= sticker.x() && canvasX <= sticker.x() + width
+                        && canvasY >= sticker.y() && canvasY <= sticker.y() + height) return index;
+            }
+        }
+        return -1;
     }
 
     private DependencyEdge edgeAt(double mouseX, double mouseY) {
@@ -547,20 +684,130 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         panY = (float) ((mouseY - centerY) / zoom - canvasY);
     }
 
-    private Connector connector(QuestEntryData dependency, QuestEntryData quest) {
+    private Connector connector(QuestEntryData dependency, QuestEntryData quest, List<Connector> routed) {
         int x1 = nodeX(dependency) + NODE_SIZE / 2;
         int y1 = nodeY(dependency) + NODE_SIZE / 2;
         int x2 = nodeX(quest) + NODE_SIZE / 2;
         int y2 = nodeY(quest) + NODE_SIZE / 2;
-        int dx = x2 - x1;
-        int dy = y2 - y1;
-        List<Point> points = new ArrayList<>();
-        points.add(new Point(x1, y1));
-        if (dx != 0 && dy != 0 && !isDiagonal(dx, dy)) {
-            points.add(new Point(x2, y1));
+        List<Connector> candidates = new ArrayList<>();
+        candidates.add(route(new Point(x1, y1), new Point(x2, y2)));
+        candidates.add(route(new Point(x1, y1), new Point(x2, y1), new Point(x2, y2)));
+        candidates.add(route(new Point(x1, y1), new Point(x1, y2), new Point(x2, y2)));
+
+        int middleX = Math.round((x1 + x2) / 2f / GRID_SIZE) * GRID_SIZE;
+        int middleY = Math.round((y1 + y2) / 2f / GRID_SIZE) * GRID_SIZE;
+        int[] offsets = {0, GRID_SIZE, -GRID_SIZE, GRID_SIZE * 2, -GRID_SIZE * 2,
+                GRID_SIZE * 3, -GRID_SIZE * 3, GRID_SIZE * 4, -GRID_SIZE * 4};
+        for (int offset : offsets) {
+            int bendX = middleX + offset;
+            candidates.add(route(new Point(x1, y1), new Point(bendX, y1),
+                    new Point(bendX, y2), new Point(x2, y2)));
+            int bendY = middleY + offset;
+            candidates.add(route(new Point(x1, y1), new Point(x1, bendY),
+                    new Point(x2, bendY), new Point(x2, y2)));
         }
-        points.add(new Point(x2, y2));
+
+        Connector best = candidates.get(0);
+        long bestScore = Long.MAX_VALUE;
+        for (Connector candidate : candidates) {
+            long score = routeScore(candidate, dependency, quest, routed);
+            if (score < bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private Connector route(Point... rawPoints) {
+        List<Point> points = new ArrayList<>();
+        for (Point point : rawPoints) {
+            if (point == null) continue;
+            if (!points.isEmpty() && points.get(points.size() - 1).equals(point)) continue;
+            points.add(point);
+        }
         return new Connector(List.copyOf(points));
+    }
+
+    private long routeScore(Connector candidate, QuestEntryData dependency, QuestEntryData quest,
+                            List<Connector> routed) {
+        Set<Long> pixels = routePixels(candidate);
+        long score = Math.max(0, candidate.points.size() - 2) * 12L;
+        for (int index = 1; index < candidate.points.size(); index++) {
+            Point start = candidate.points.get(index - 1);
+            Point end = candidate.points.get(index);
+            score += Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
+        }
+
+        for (QuestEntryData other : quests) {
+            if (other == dependency || other == quest) continue;
+            int left = nodeX(other) - 4;
+            int top = nodeY(other) - 4;
+            int right = left + NODE_SIZE + 8;
+            int bottom = top + NODE_SIZE + 8;
+            for (long packed : pixels) {
+                int x = (int) (packed >> 32);
+                int y = (int) packed;
+                if (x >= left && x <= right && y >= top && y <= bottom) score += 8_000L;
+            }
+        }
+
+        for (Connector existing : routed) {
+            Set<Long> existingPixels = routePixels(existing);
+            for (long packed : pixels) {
+                int x = (int) (packed >> 32);
+                int y = (int) packed;
+                if (nearEndpoint(x, y, candidate) || nearEndpoint(x, y, existing)) continue;
+                if (existingPixels.contains(packed)) {
+                    score += 2_000L;
+                    continue;
+                }
+                for (int offsetX = -2; offsetX <= 2; offsetX++) {
+                    for (int offsetY = -2; offsetY <= 2; offsetY++) {
+                        if (existingPixels.contains(packPoint(x + offsetX, y + offsetY))) score += 20L;
+                    }
+                }
+            }
+        }
+        return score;
+    }
+
+    private boolean nearEndpoint(int x, int y, Connector connector) {
+        if (connector.points.isEmpty()) return false;
+        Point first = connector.points.get(0);
+        Point last = connector.points.get(connector.points.size() - 1);
+        int radius = NODE_SIZE / 2 + 4;
+        return Math.abs(x - first.x) <= radius && Math.abs(y - first.y) <= radius
+                || Math.abs(x - last.x) <= radius && Math.abs(y - last.y) <= radius;
+    }
+
+    private Set<Long> routePixels(Connector connector) {
+        Set<Long> pixels = new HashSet<>();
+        for (int index = 1; index < connector.points.size(); index++) {
+            Point start = connector.points.get(index - 1);
+            Point end = connector.points.get(index);
+            rasterRouteLine(start.x, start.y, end.x, end.y, pixels);
+        }
+        return pixels;
+    }
+
+    private void rasterRouteLine(int x1, int y1, int x2, int y2, Set<Long> pixels) {
+        int dx = Math.abs(x2 - x1);
+        int sx = x1 < x2 ? 1 : -1;
+        int dy = -Math.abs(y2 - y1);
+        int sy = y1 < y2 ? 1 : -1;
+        int error = dx + dy;
+        while (true) {
+            pixels.add(packPoint(x1, y1));
+            if (x1 == x2 && y1 == y2) return;
+            int twice = error * 2;
+            if (twice >= dy) { error += dy; x1 += sx; }
+            if (twice <= dx) { error += dx; y1 += sy; }
+        }
+    }
+
+    private long packPoint(int x, int y) {
+        return ((long) x << 32) | (y & 0xFFFFFFFFL);
     }
 
     private void drawConnector(GuiGraphics gg, RenderedConnector connector) {
@@ -573,8 +820,9 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         }
     }
 
-    private RenderedConnector renderedConnector(QuestEntryData dependency, QuestEntryData quest, boolean incompatible) {
-        Connector connector = connector(dependency, quest);
+    private RenderedConnector renderedConnector(QuestEntryData dependency, QuestEntryData quest, boolean incompatible,
+                                                List<Connector> routed) {
+        Connector connector = connector(dependency, quest, routed);
         Set<Long> outer = new HashSet<>();
         Set<Long> inner = new HashSet<>();
         for (int index = 1; index < connector.points.size(); index++) {
@@ -625,12 +873,16 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     private void rebuildConnectorCache() {
         List<RenderedConnector> connectors = new ArrayList<>();
+        List<Connector> routed = new ArrayList<>();
         for (QuestEntryData quest : quests) {
             Set<String> incompatible = new HashSet<>(incompatibleDependencies(quest));
             for (String dependencyId : dependencies(quest)) {
                 QuestEntryData dependency = questById(dependencyId);
                 if (dependency != null) {
-                    connectors.add(renderedConnector(dependency, quest, incompatible.contains(dependencyId)));
+                    RenderedConnector connector = renderedConnector(dependency, quest,
+                            incompatible.contains(dependencyId), routed);
+                    connectors.add(connector);
+                    routed.add(connector.connector);
                 }
             }
         }

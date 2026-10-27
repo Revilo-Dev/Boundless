@@ -270,8 +270,11 @@ public final class QuestPanelClient {
                 && mx >= st.searchBox.getX() && mx <= st.searchBox.getX() + st.searchBox.getWidth()
                 && my >= st.searchBox.getY() && my <= st.searchBox.getY() + st.searchBox.getHeight();
 
+        if (st.tabs != null && st.tabs.visible && st.tabs.isMouseOver(mx, my)) {
+            used = st.tabs.mouseScrolled(mx, my, e.getScrollDeltaX(), e.getScrollDeltaY());
+        }
         if (st.list != null && st.list.visible) {
-            if (!overSearch && mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
+            if (!used && !overSearch && mx >= px && mx <= px + pw && my >= py && my <= py + ph) {
                 double dY = e.getScrollDeltaY();
                 used = st.list.mouseScrolled(mx, my, dY) || st.list.mouseScrolled(mx, my, 0.0, dY);
             }
@@ -401,9 +404,11 @@ public final class QuestPanelClient {
 
     private static void updatePanelSize(InventoryScreen inv, State st) {
         int maxWidth = Math.max(96, inv.width - inv.getXSize() - 49);
-        boolean expandTree = st.expanded && !st.showingDetails && usesTreeView(st);
-        st.panelWidth = Math.min(expandTree ? 220 : PANEL_W, maxWidth);
-        st.panelHeight = Math.min(PANEL_H, Math.max(120, inv.height - 16));
+        float scale = Config.questBookScale();
+        int desiredWidth = Math.round((st.expanded ? 220 : PANEL_W) * scale);
+        int desiredHeight = Math.round(PANEL_H * scale);
+        st.panelWidth = Math.min(desiredWidth, maxWidth);
+        st.panelHeight = Math.min(desiredHeight, Math.max(120, inv.height - 16));
     }
 
     private static void relayoutPanel(InventoryScreen inv, State st) {
@@ -457,16 +462,6 @@ public final class QuestPanelClient {
         }
         if (st.details != null) {
             st.details.setBounds(px, py, pw, ph);
-
-            st.details.backButton().setPosition(px, py + ph - st.details.backButton().getHeight() - 4);
-            st.details.completeButton().setPosition(
-                    px + (pw - st.details.completeButton().getWidth()) / 2,
-                    py + ph - st.details.completeButton().getHeight() - 4
-            );
-            st.details.rejectButton().setPosition(
-                    px + pw - st.details.rejectButton().getWidth() - 2,
-                    py + ph - st.details.rejectButton().getHeight() - 4
-            );
         }
 
         if (st.tabs != null) st.tabs.setBounds(computeTabsX(inv, st), bgy + 4, 44, st.panelHeight + 34);
@@ -609,6 +604,7 @@ public final class QuestPanelClient {
         st.tree.setBackground(category == null ? "" : category.background,
                 category != null && category.backgroundDarkening,
                 category == null ? 0.45f : category.backgroundDarkeningOpacity);
+        st.tree.setStickers(category == null ? java.util.List.of() : category.stickers);
     }
 
     private static boolean usesTreeView(State st) {
@@ -738,7 +734,7 @@ public final class QuestPanelClient {
         return inv.getGuiTop() + offset;
     }
 
-    // open the settings screen for admins
+    // open settings for every player; the screen filters authority-only controls
     private static void openSettings(InventoryScreen inv) {
         var mc = Minecraft.getInstance();
         if (!canAccessSettings()) return;
@@ -747,7 +743,7 @@ public final class QuestPanelClient {
 
     private static boolean canAccessSettings() {
         Minecraft mc = Minecraft.getInstance();
-        return mc.player != null && (mc.hasSingleplayerServer() || mc.player.hasPermissions(2));
+        return mc.player != null;
     }
 
     // reapply the saved category after reopening the panel

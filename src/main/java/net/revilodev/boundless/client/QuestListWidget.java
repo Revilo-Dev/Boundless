@@ -435,7 +435,7 @@ public final class QuestListWidget extends AbstractWidget {
                 float iconScale = 0.45f * configuredIconScale();
                 int iconSize = (int) (16 * iconScale);
                 int iconX = getX() + 2;
-                int iconY = top + (h - iconSize) / 2;
+                int iconY = top + (h - iconSize) / 2 + 2;
                 int textIconSize = hideIcons ? 0 : iconSize;
 
                 if (!hideIcons) {
@@ -549,7 +549,7 @@ public final class QuestListWidget extends AbstractWidget {
         float iconScale = 0.45f * configuredIconScale();
         int iconSize = (int) (16 * iconScale);
         int iconX = getX() + 2;
-        int iconY = contentTop + (h - iconSize) / 2;
+        int iconY = contentTop + (h - iconSize) / 2 + 2;
         if (!hideIcons) {
             activeHeader.iconItem().ifPresent(item -> {
                 gg.pose().pushPose();

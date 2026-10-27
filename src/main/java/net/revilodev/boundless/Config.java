@@ -91,6 +91,12 @@ public final class Config {
     public static final ModConfigSpec.DoubleValue QUEST_ICON_SCALE =
             BUILDER.comment("Scales quest widget icons and quest detail panel icons. Range: 0.5 to 1.0.")
                     .defineInRange("questIconScale", 1.0D, 0.5D, 1.0D);
+    public static final ModConfigSpec.ConfigValue<Double> EDITOR_SCALE =
+            BUILDER.comment("Quest editor UI scale: 1.0, 1.25, 1.5, or 2.0.")
+                    .define("editorScale", 1.0D, Config::isUiScale);
+    public static final ModConfigSpec.ConfigValue<Double> QUEST_BOOK_SCALE =
+            BUILDER.comment("Quest book UI scale: 1.0, 1.25, 1.5, or 2.0.")
+                    .define("questBookScale", 1.0D, Config::isUiScale);
     // enableQuestSearchBox shows the quest search field
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
@@ -149,6 +155,9 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> AUTO_CLAIM_QUEST_REWARDS =
             BUILDER.comment("If true, quest rewards are automatically claimed when a quest becomes complete.")
                     .define("autoClaimQuestRewards", false);
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_REJECTING =
+            BUILDER.comment("If true, optional quests can be rejected from the quest book.")
+                    .define("enableQuestRejecting", true);
     // enableQuestScrolls allows creating and redeeming quest scrolls
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SCROLLS =
             BUILDER.comment("If true, quest completion scrolls can be created and used.")
@@ -303,6 +312,7 @@ public final class Config {
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
+            boolean enableQuestRejecting,
             boolean enableQuestScrolls,
             boolean quickEdit,
             boolean disableQuestBook,
@@ -332,6 +342,7 @@ public final class Config {
         ENABLE_QUEST_TOASTS.set(enableQuestToasts);
         DISABLE_QUEST_PINNING.set(disableQuestPinning);
         AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
+        ENABLE_QUEST_REJECTING.set(enableQuestRejecting);
         ENABLE_QUEST_SCROLLS.set(enableQuestScrolls);
         QUICK_EDIT.set(quickEdit);
         DISABLE_QUEST_BOOK.set(disableQuestBook);
@@ -441,6 +452,28 @@ public final class Config {
         return (float) Math.max(0.5D, Math.min(1.0D, value));
     }
 
+    public static Path questMediaRoot() {
+        return boundlessConfigRoot().resolve("media").normalize();
+    }
+
+    public static Path emojiRoot() {
+        return boundlessConfigRoot().resolve("emoji").normalize();
+    }
+
+    public static float editorScale() {
+        return normalizedUiScale(EDITOR_SCALE.get());
+    }
+
+    public static float questBookScale() {
+        return normalizedUiScale(QUEST_BOOK_SCALE.get());
+    }
+
+    private static float normalizedUiScale(Double value) {
+        if (value == null) return 1.0f;
+        float scale = value.floatValue();
+        return scale == 1.25f || scale == 1.5f || scale == 2.0f ? scale : 1.0f;
+    }
+
     public static boolean enableBuiltinQuestPack() {
         return ENABLE_BUILTIN_QUEST_PACK.get();
     }
@@ -451,6 +484,12 @@ public final class Config {
 
     public static boolean enableQuestSearchBox() {
         return ENABLE_QUEST_SEARCH_BOX.get();
+    }
+
+    private static boolean isUiScale(Object value) {
+        if (!(value instanceof Number number)) return false;
+        double scale = number.doubleValue();
+        return scale == 1.0D || scale == 1.25D || scale == 1.5D || scale == 2.0D;
     }
 
     public static boolean customBackgrounds() {
@@ -502,6 +541,10 @@ public final class Config {
 
     public static boolean autoClaimQuestRewards() {
         return AUTO_CLAIM_QUEST_REWARDS.get();
+    }
+
+    public static boolean enableQuestRejecting() {
+        return ENABLE_QUEST_REJECTING.get();
     }
 
     public static boolean enableQuestScrolls() {

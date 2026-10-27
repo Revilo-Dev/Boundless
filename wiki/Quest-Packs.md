@@ -40,6 +40,14 @@ The in-game editor supports:
 - Opening import directory
 - Exporting a quest pack zip
 
+## Quest Media
+
+Quest JSON may include a `media` filename. The editor copies PNG, JPEG, and animated GIF files into `config/boundless/media/`; media is displayed below the quest description. Animated GIFs loop and include a restart control.
+
+## Tree Stickers
+
+Tree category JSON may contain a `stickers` array. Each entry has `type` (`text` or `icon`), `value`, `x`, and `y`. In the tree editor, right-click an empty position to add text or choose an item/custom emoji icon.
+
 ## Reloading After Manual Edits
 
 If you edit files outside the game:

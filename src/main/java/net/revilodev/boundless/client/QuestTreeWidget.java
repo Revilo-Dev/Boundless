@@ -5,12 +5,15 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
+import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
+import net.revilodev.boundless.client.editor.QuestStickerTextRenderer;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -34,6 +37,7 @@ public final class QuestTreeWidget extends AbstractWidget {
     private final Minecraft minecraft = Minecraft.getInstance();
     private final Consumer<QuestData.Quest> onQuestSelected;
     private List<QuestData.Quest> quests = List.of();
+    private List<QuestData.Sticker> stickers = List.of();
     private float zoom = 1f;
     private float panX;
     private float panY;
@@ -52,6 +56,10 @@ public final class QuestTreeWidget extends AbstractWidget {
     // update the visible quest nodes
     public void setQuests(List<QuestData.Quest> quests) {
         this.quests = quests == null ? List.of() : List.copyOf(quests);
+    }
+
+    public void setStickers(List<QuestData.Sticker> stickers) {
+        this.stickers = stickers == null ? List.of() : List.copyOf(stickers);
     }
 
     public void setBackground(String background) {
@@ -85,15 +93,17 @@ public final class QuestTreeWidget extends AbstractWidget {
         gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
         gg.pose().pushPose();
         applyCanvasTransform(gg);
+        renderStickers(gg);
         renderConnectors(gg);
-        renderNodes(gg);
+        renderNodes(gg, hovered);
         gg.pose().popPose();
+        gg.flush();
         gg.disableScissor();
         renderZoomButtons(gg);
         if (hovered != null) {
             gg.pose().pushPose();
             gg.pose().translate(0, 0, 900);
-            gg.renderTooltip(minecraft.font, Component.literal(hovered.name), mouseX, mouseY);
+            gg.renderComponentTooltip(minecraft.font, questTooltip(hovered), mouseX, mouseY);
             gg.pose().popPose();
         }
     }
@@ -107,7 +117,7 @@ public final class QuestTreeWidget extends AbstractWidget {
                 int y1 = nodeY(dependency) + NODE_SIZE / 2;
                 int x2 = nodeX(quest) + NODE_SIZE / 2;
                 int y2 = nodeY(quest) + NODE_SIZE / 2;
-                boolean highlighted = selectedQuestId.isBlank()
+                boolean highlighted = isComplete(dependency)
                         || selectedQuestId.equals(quest.id) || selectedQuestId.equals(dependencyId);
                 drawConnector(gg, connector(x1, y1, x2, y2),
                         quest.incompatibleDependencies.contains(dependencyId), highlighted);
@@ -115,17 +125,29 @@ public final class QuestTreeWidget extends AbstractWidget {
         }
     }
 
-    private void renderNodes(GuiGraphics gg) {
+    private void renderNodes(GuiGraphics gg, QuestData.Quest hovered) {
         for (QuestData.Quest quest : quests) {
             int x = nodeX(quest);
             int y = nodeY(quest);
             boolean complete = isComplete(quest);
-            gg.blit(nodeTexture(quest.treeBackground, complete), x, y, 0, 0, NODE_SIZE, NODE_SIZE, NODE_SIZE, NODE_SIZE);
+            boolean selected = selectedQuestId.equals(quest.id);
+            gg.blit(nodeTexture(quest.treeBackground, complete, selected || quest == hovered),
+                    x, y, 0, 0, NODE_SIZE, NODE_SIZE, NODE_SIZE, NODE_SIZE);
             quest.iconItem().ifPresent(item -> gg.renderItem(new net.minecraft.world.item.ItemStack(item), x + 8, y + 8));
             if (complete) {
                 gg.blit(ICON_COMPLETE, x + 18, y + 18, 0, 0, 11, 11, 11, 11);
             } else if (minecraft.player != null && !QuestTracker.dependenciesMet(quest, minecraft.player)) {
                 gg.blit(ICON_ATTENTION, x + 23, y + 10, 0, 0, 6, 13, 6, 13);
+            }
+        }
+    }
+
+    private void renderStickers(GuiGraphics gg) {
+        for (QuestData.Sticker sticker : stickers) {
+            if ("icon".equals(sticker.type())) {
+                QuestEditorItemIcons.renderIcon(gg, sticker.value(), sticker.x() - 8, sticker.y() - 8);
+            } else {
+                QuestStickerTextRenderer.render(gg, minecraft.font, sticker.value(), sticker.x(), sticker.y());
             }
         }
     }
@@ -139,9 +161,12 @@ public final class QuestTreeWidget extends AbstractWidget {
     private void renderZoomButtons(GuiGraphics gg) {
         int x = getX() + width - 31;
         int y = getY() + 3;
+        gg.pose().pushPose();
+        gg.pose().translate(0, 0, 400);
         gg.blit(ZOOM_OUT, x, y, 0, 0, 7, 7, 7, 7);
         gg.blit(ZOOM_CENTRE, x + 10, y - 1, 0, 0, 9, 9, 9, 9);
         gg.blit(ZOOM_IN, x + 22, y, 0, 0, 7, 7, 7, 7);
+        gg.pose().popPose();
     }
 
     private int nodeX(QuestData.Quest quest) {
@@ -198,9 +223,7 @@ public final class QuestTreeWidget extends AbstractWidget {
             int y = (int) packed;
             gg.fill(x, y, x + 1, y + 1, 0xFF000000);
         }
-        int color = incompatible
-                ? (highlighted ? 0xFFFF3030 : 0xFF681C1C)
-                : (highlighted ? 0xFFFFFFFF : 0xFF686868);
+        int color = highlighted ? 0xFFFFFFFF : (incompatible ? 0xFF681C1C : 0xFF686868);
         for (long packed : inner) {
             int x = (int) (packed >> 32);
             int y = (int) packed;
@@ -301,15 +324,36 @@ public final class QuestTreeWidget extends AbstractWidget {
         return ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/tree/" + name + ".png");
     }
 
-    private static ResourceLocation nodeTexture(String background, boolean complete) {
+    private static ResourceLocation nodeTexture(String background, boolean complete, boolean selected) {
         String shape = background == null || background.isBlank() ? "square" : background.replace('_', '-');
-        return texture(shape + (complete ? "-complete" : "-incomplete"));
+        return texture(shape + (complete ? "-complete" : "-incomplete") + (selected ? "-selected" : ""));
     }
 
     private boolean isComplete(QuestData.Quest quest) {
         if (minecraft.player == null) return false;
         QuestTracker.Status status = QuestTracker.getStatus(quest, minecraft.player);
         return status == QuestTracker.Status.COMPLETED || status == QuestTracker.Status.REDEEMED;
+    }
+
+    private List<Component> questTooltip(QuestData.Quest quest) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(quest.name));
+        if (quest.completion == null || quest.completion.targets.isEmpty()) return lines;
+        lines.add(Component.literal("Requirements").withStyle(ChatFormatting.GRAY));
+        for (QuestData.Target target : quest.completion.targets) {
+            lines.add(Component.literal("• " + requirementText(target)).withStyle(ChatFormatting.GRAY));
+        }
+        return lines;
+    }
+
+    private String requirementText(QuestData.Target target) {
+        if (target == null) return "Unknown";
+        if (target.hint != null && !target.hint.isBlank()) return target.hint;
+        String kind = target.kind == null || target.kind.isBlank() ? "Complete" : target.kind.replace('_', ' ');
+        kind = Character.toUpperCase(kind.charAt(0)) + kind.substring(1);
+        String id = target.id == null || target.id.isBlank() ? "objective" : target.id;
+        if ((target.isItem() || target.isSubmit()) && target.count > 1) return kind + " " + target.count + "× " + id;
+        return kind + " " + id;
     }
 
     private static boolean isDiagonal(int dx, int dy) {

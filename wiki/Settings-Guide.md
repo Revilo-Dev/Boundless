@@ -13,7 +13,9 @@ Typical options include:
 - Pinning and HUD behavior
 - Toast notification behavior
 - Auto-claim/auto-complete related behavior
+- Optional quest rejecting and restoring behavior
 - Quest scroll behavior
+- Editor and quest-book UI scale (`1x`, `1.25x`, `1.5x`, or `2x`)
 
 ## Suggested Baselines
 

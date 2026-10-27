@@ -245,6 +245,7 @@ public final class BoundlessNetwork {
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
+            boolean enableQuestRejecting,
             boolean enableQuestScrolls,
             boolean quickEdit,
             boolean disableQuestBook,
@@ -274,6 +275,7 @@ public final class BoundlessNetwork {
                     buf.writeBoolean(p.enableQuestToasts);
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestRejecting);
                     buf.writeBoolean(p.enableQuestScrolls);
                     buf.writeBoolean(p.quickEdit);
                     buf.writeBoolean(p.disableQuestBook);
@@ -298,6 +300,7 @@ public final class BoundlessNetwork {
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -582,6 +585,7 @@ public final class BoundlessNetwork {
             boolean enableQuestToasts,
             boolean disableQuestPinning,
             boolean autoClaimQuestRewards,
+            boolean enableQuestRejecting,
             boolean enableQuestScrolls,
             boolean quickEdit,
             boolean disableQuestBook,
@@ -615,6 +619,7 @@ public final class BoundlessNetwork {
                     buf.writeBoolean(p.enableQuestToasts);
                     buf.writeBoolean(p.disableQuestPinning);
                     buf.writeBoolean(p.autoClaimQuestRewards);
+                    buf.writeBoolean(p.enableQuestRejecting);
                     buf.writeBoolean(p.enableQuestScrolls);
                     buf.writeBoolean(p.quickEdit);
                     buf.writeBoolean(p.disableQuestBook);
@@ -643,6 +648,7 @@ public final class BoundlessNetwork {
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
@@ -827,6 +833,7 @@ public final class BoundlessNetwork {
                 Config.enableQuestToasts(),
                 Config.disableQuestPinning(),
                 Config.autoClaimQuestRewards(),
+                Config.enableQuestRejecting(),
                 Config.enableQuestScrolls(),
                 Config.quickEdit(),
                 Config.disableQuestBook(),
@@ -1174,6 +1181,7 @@ public final class BoundlessNetwork {
     private static void handleReject(Reject p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
             ServerPlayer sp = (ServerPlayer) ctx.player();
+            if (!Config.enableQuestRejecting()) return;
             QuestData.byIdServer(sp.server, p.questId()).ifPresent(q -> {
                 if (QuestTracker.serverReject(q, sp)) {
                     QuestTracker.setServerStatus(sp, q.id, QuestTracker.Status.REJECTED);
@@ -1296,6 +1304,7 @@ public final class BoundlessNetwork {
             Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
             Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
             Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
+            Config.ENABLE_QUEST_REJECTING.set(p.enableQuestRejecting());
             Config.ENABLE_QUEST_SCROLLS.set(p.enableQuestScrolls());
             Config.QUICK_EDIT.set(p.quickEdit());
             Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
@@ -1609,6 +1618,7 @@ public final class BoundlessNetwork {
                 p.enableQuestToasts(),
                 p.disableQuestPinning(),
                 p.autoClaimQuestRewards(),
+                p.enableQuestRejecting(),
                 p.enableQuestScrolls(),
                 p.quickEdit(),
                 p.disableQuestBook(),

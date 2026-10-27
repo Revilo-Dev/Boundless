@@ -24,6 +24,8 @@ The details panel shows:
 - Objective progress
 - Reward preview
 
+Descriptions support vanilla `§`/`&` formatting codes, Boundless formatting controls, Unicode text, and `:emoji:` tokens. Other mods can expose emoji textures under an `emoji`/`emojis` texture folder and use qualified tokens such as `:modid:emoji_name:`.
+
 ## Dependency Behavior
 
 Some quests stay locked until prerequisites are completed.  

@@ -453,8 +453,9 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     private int drawEmoji(GuiGraphics guiGraphics, String name, int x, int y) {
-        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y - 1, 0, 0, 12, 12, 16, 16);
-        return x + 12;
+        int size = QuestEditorEmojis.glyphSize();
+        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y, 0, 0, size, size, 16, 16);
+        return x + size;
     }
 
     private int drawStyledSegment(GuiGraphics guiGraphics, String text, int x, int y, int color,
@@ -1008,7 +1009,7 @@ final class ScaledTextField {
                 }
                 int emojiEnd = QuestEditorEmojis.tokenEnd(this.value, index);
                 int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(this.value.codePointAt(index));
-                int glyphWidth = emojiEnd >= 0 ? 12 : this.font.width(this.value.substring(index, nextIndex));
+                int glyphWidth = emojiEnd >= 0 ? QuestEditorEmojis.glyphSize() : this.font.width(this.value.substring(index, nextIndex));
                 if (lineWidth + glyphWidth > safeWidth && index > lineStart) {
                     if (lastSpace >= lineStart) {
                         this.displayLines.add(new StringView(lineStart, lastSpace));
@@ -1057,7 +1058,7 @@ final class ScaledTextField {
             }
             int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
             if (emojiEnd >= 0) {
-                width += 12;
+                width += QuestEditorEmojis.glyphSize();
                 index = emojiEnd + 1;
                 continue;
             }
@@ -1077,7 +1078,7 @@ final class ScaledTextField {
             }
             int emojiEnd = QuestEditorEmojis.tokenEnd(text, index);
             int nextIndex = emojiEnd >= 0 ? emojiEnd + 1 : index + Character.charCount(text.codePointAt(index));
-            int glyphWidth = emojiEnd >= 0 ? 12 : this.font.width(text.substring(index, nextIndex));
+            int glyphWidth = emojiEnd >= 0 ? QuestEditorEmojis.glyphSize() : this.font.width(text.substring(index, nextIndex));
             if (width + glyphWidth > targetWidth) {
                 return emojiEnd >= 0 && targetWidth - width >= glyphWidth / 2 ? nextIndex : index;
             }
