@@ -14,6 +14,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.client.QuestCategoryBackgroundRenderer;
 import net.revilodev.boundless.client.editor.QuestEditorModels.QuestEntryData;
+import net.revilodev.boundless.quest.QuestData;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -49,28 +50,43 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private final NodeDeleteRequested onDeleteRequested;
     private final DependencyChanged onDependencyChanged;
     private final BiConsumer<QuestEntryData, String> onIncompatibilityToggle;
+    private final Consumer<List<QuestData.Sticker>> onStickersChanged;
+    private final BiConsumer<Integer, Integer> onStickerIconRequested;
     private List<QuestEntryData> quests = List.of();
     private Map<String, QuestEntryData> questsById = Map.of();
     private Map<QuestEntryData, Integer> questIndexes = Map.of();
     private Map<QuestEntryData, ItemStack> questIcons = Map.of();
     private List<RenderedConnector> renderedConnectors = List.of();
     private String background = "";
+    private boolean backgroundDarkening;
+    private float backgroundDarkeningOpacity = 0.45f;
     private float zoom = 1f;
     private float panX;
     private float panY;
     private QuestEntryData draggedQuest;
     private QuestEntryData connectorSource;
+    private QuestEntryData selectedQuest;
     private boolean draggedQuestMoved;
     private boolean draggingCanvas;
     private Tool tool = Tool.NONE;
     private String lastShiftEdgeKey = "";
     private long lastShiftEdgeClickMs;
     private boolean tooltipSuppressed;
+    private List<QuestData.Sticker> stickers = List.of();
+    private boolean stickerMenuOpen;
+    private int stickerMenuX;
+    private int stickerMenuY;
+    private int pendingStickerX;
+    private int pendingStickerY;
+    private boolean editingStickerText;
+    private String stickerText = "";
 
     public QuestEditorTreeWidget(int x, int y, int width, int height, Consumer<QuestEntryData> onSelect,
                                  BiConsumer<Integer, Integer> onPlace, NodeMoved onMoved,
                                  NodeDeleteRequested onDeleteRequested, DependencyChanged onDependencyChanged,
-                                 BiConsumer<QuestEntryData, String> onIncompatibilityToggle) {
+                                 BiConsumer<QuestEntryData, String> onIncompatibilityToggle,
+                                 Consumer<List<QuestData.Sticker>> onStickersChanged,
+                                 BiConsumer<Integer, Integer> onStickerIconRequested) {
         super(x, y, width, height, Component.empty());
         this.onSelect = onSelect;
         this.onPlace = onPlace;
@@ -78,6 +94,8 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         this.onDeleteRequested = onDeleteRequested;
         this.onDependencyChanged = onDependencyChanged;
         this.onIncompatibilityToggle = onIncompatibilityToggle;
+        this.onStickersChanged = onStickersChanged;
+        this.onStickerIconRequested = onStickerIconRequested;
     }
 
     public void setQuests(List<QuestEntryData> quests) {
@@ -87,7 +105,22 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     public void setBackground(String background) {
+        setBackground(background, false, 0.45f);
+    }
+
+    public void setBackground(String background, boolean darkening, float darkeningOpacity) {
         this.background = background == null ? "" : background;
+        this.backgroundDarkening = darkening;
+        this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, darkeningOpacity));
+    }
+
+    public void setStickers(List<QuestData.Sticker> stickers) {
+        this.stickers = stickers == null ? List.of() : List.copyOf(stickers);
+    }
+
+    public void addIconSticker(int x, int y, String icon) {
+        if (icon == null || icon.isBlank()) return;
+        addSticker(new QuestData.Sticker("icon", icon, x, y));
     }
 
     public void setTooltipSuppressed(boolean tooltipSuppressed) {
@@ -128,15 +161,18 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         QuestEntryData hovered = tooltipSuppressed || isOverZoomControls(mouseX, mouseY) ? null : questAt(mouseX, mouseY);
-        QuestCategoryBackgroundRenderer.render(gg, background, getX(), getY(), width, height);
+        QuestCategoryBackgroundRenderer.render(gg, background, backgroundDarkening, backgroundDarkeningOpacity,
+                getX(), getY(), width, height);
         gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
         gg.pose().pushPose();
         applyCanvasTransform(gg);
+        renderStickers(gg);
         renderConnectors(gg);
-        renderNodes(gg);
+        renderNodes(gg, hovered);
         gg.pose().popPose();
         gg.disableScissor();
         renderZoomButtons(gg);
+        renderStickerMenu(gg);
         if (hovered != null) renderTreeTooltip(gg, Component.literal(displayName(hovered)), mouseX, mouseY);
         else if (tool == Tool.CONNECT && connectorSource != null && isMouseOver(mouseX, mouseY)) {
             renderTreeTooltip(gg, Component.literal("Select the quest that should depend on "
@@ -148,11 +184,43 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         for (RenderedConnector connector : renderedConnectors) drawConnector(gg, connector);
     }
 
-    private void renderNodes(GuiGraphics gg) {
+    private void renderStickers(GuiGraphics gg) {
+        for (QuestData.Sticker sticker : stickers) {
+            if ("icon".equals(sticker.type())) {
+                QuestEditorItemIcons.renderIcon(gg, sticker.value(), sticker.x() - 8, sticker.y() - 8);
+            } else {
+                gg.drawString(minecraft.font, Component.literal(sticker.value()), sticker.x(), sticker.y(), 0xFFFFFFFF, true);
+            }
+        }
+    }
+
+    private void renderStickerMenu(GuiGraphics gg) {
+        if (!stickerMenuOpen && !editingStickerText) return;
+        int x = stickerMenuX;
+        int y = stickerMenuY;
+        gg.pose().pushPose();
+        gg.pose().translate(0, 0, 950);
+        if (editingStickerText) {
+            gg.fill(x, y, x + 116, y + 22, 0xEE151515);
+            gg.fill(x + 2, y + 2, x + 114, y + 20, 0xFF303030);
+            String shown = stickerText.isEmpty() ? "Type text, press Enter" : stickerText;
+            gg.drawString(minecraft.font, minecraft.font.plainSubstrByWidth(shown, 108), x + 5, y + 7, 0xFFFFFFFF, false);
+        } else {
+            gg.fill(x, y, x + 78, y + 38, 0xEE151515);
+            gg.fill(x + 2, y + 2, x + 76, y + 18, 0xFF303030);
+            gg.fill(x + 2, y + 20, x + 76, y + 36, 0xFF303030);
+            gg.drawString(minecraft.font, "Add text", x + 7, y + 6, 0xFFFFFFFF, false);
+            gg.drawString(minecraft.font, "Add icon", x + 7, y + 24, 0xFFFFFFFF, false);
+        }
+        gg.pose().popPose();
+    }
+
+    private void renderNodes(GuiGraphics gg, QuestEntryData hovered) {
         for (QuestEntryData quest : quests) {
             int x = nodeX(quest);
             int y = nodeY(quest);
-            gg.blit(texture(normalizeBackground(quest.treeBackground) + "-incomplete"),
+            boolean selected = quest == hovered || quest == selectedQuest || quest == connectorSource;
+            gg.blit(texture(normalizeBackground(quest.treeBackground) + "-incomplete" + (selected ? "-selected" : "")),
                     x, y, 0, 0, NODE_SIZE, NODE_SIZE, NODE_SIZE, NODE_SIZE);
             ItemStack icon = questIcons.getOrDefault(quest, ItemStack.EMPTY);
             if (!icon.isEmpty()) gg.renderItem(icon, x + 8, y + 8);
@@ -201,7 +269,32 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!active || !visible || button != 0 || !isMouseOver(mouseX, mouseY)) return false;
+        if (!active || !visible) return false;
+        if (stickerMenuOpen && button == 0) {
+            if (mouseX >= stickerMenuX && mouseX <= stickerMenuX + 78 && mouseY >= stickerMenuY && mouseY <= stickerMenuY + 38) {
+                if (mouseY < stickerMenuY + 20) {
+                    stickerMenuOpen = false;
+                    editingStickerText = true;
+                    stickerText = "";
+                } else {
+                    stickerMenuOpen = false;
+                    if (onStickerIconRequested != null) onStickerIconRequested.accept(pendingStickerX, pendingStickerY);
+                }
+                return true;
+            }
+            stickerMenuOpen = false;
+        }
+        if (editingStickerText) return true;
+        if (!isMouseOver(mouseX, mouseY)) return false;
+        if (button == 1 && questAt(mouseX, mouseY) == null) {
+            pendingStickerX = canvasNodeX(mouseX);
+            pendingStickerY = canvasNodeY(mouseY);
+            stickerMenuX = Mth.floor(mouseX);
+            stickerMenuY = Mth.floor(mouseY);
+            stickerMenuOpen = true;
+            return true;
+        }
+        if (button != 0) return false;
         if (handleZoomClick(mouseX, mouseY)) return true;
 
         QuestEntryData quest = questAt(mouseX, mouseY);
@@ -262,6 +355,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
         if (quest != null) {
             setFocused(true);
+            selectedQuest = quest;
             if (tool == Tool.CREATE) setTool(Tool.NONE);
             if (onSelect != null) onSelect.accept(quest);
             return true;
@@ -322,6 +416,22 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (!visible || !active) return false;
+        if (editingStickerText) {
+            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+                if (!stickerText.isBlank()) addSticker(new QuestData.Sticker("text", stickerText, pendingStickerX, pendingStickerY));
+                editingStickerText = false;
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                editingStickerText = false;
+                return true;
+            }
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE && !stickerText.isEmpty()) {
+                stickerText = stickerText.substring(0, stickerText.offsetByCodePoints(stickerText.length(), -1));
+                return true;
+            }
+            return true;
+        }
         double centerX = getX() + width / 2D;
         double centerY = getY() + height / 2D;
         if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
@@ -341,6 +451,20 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (!editingStickerText) return false;
+        if (!Character.isISOControl(codePoint) && stickerText.length() < 80) stickerText += codePoint;
+        return true;
+    }
+
+    private void addSticker(QuestData.Sticker sticker) {
+        List<QuestData.Sticker> updated = new ArrayList<>(stickers);
+        updated.add(sticker);
+        stickers = List.copyOf(updated);
+        if (onStickersChanged != null) onStickersChanged.accept(stickers);
     }
 
     private boolean handleZoomClick(double mouseX, double mouseY) {

@@ -10,6 +10,7 @@ import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -39,6 +40,7 @@ import net.revilodev.boundless.client.editor.QuestEditorControls.LockToggleButto
 import net.revilodev.boundless.client.editor.QuestEditorControls.TextInsertButton;
 import net.revilodev.boundless.client.editor.QuestEditorControls.ToggleButton;
 import net.revilodev.boundless.client.editor.QuestEditorEntryCodec;
+import net.revilodev.boundless.client.editor.FtbQuestImporter;
 import net.revilodev.boundless.client.editor.QuestEditorCustomIcons;
 import net.revilodev.boundless.client.editor.QuestEditorEmojis;
 import net.revilodev.boundless.client.editor.QuestEditorEntryRows;
@@ -102,6 +104,7 @@ import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestPackStorage;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.util.tinyfd.TinyFileDialogs;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -118,6 +121,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 @OnlyIn(Dist.CLIENT)
 public final class QuestEditorScreen extends Screen {
@@ -328,6 +333,8 @@ public final class QuestEditorScreen extends Screen {
     private EditBox packIconPathBox;
     private ScaledMultiLineEditBox packDescriptionBox;
     private PackLayoutSelector packLayoutSelector;
+    private FtbImportSection ftbImportSection;
+    private boolean ftbImportRunning;
 
     // category fields
     private EditBox catIdBox;
@@ -337,6 +344,11 @@ public final class QuestEditorScreen extends Screen {
     private Button catBackgroundModeButton;
     private Button catBackgroundAssetButton;
     private CategoryBackgroundMode catBackgroundMode = CategoryBackgroundMode.TILEABLE;
+    private ToggleButton catBackgroundDarkeningToggle;
+    private CategoryBackgroundOpacitySlider catBackgroundOpacitySlider;
+    private String observedCategoryBackgroundState = "";
+    private String persistedCategoryBackgroundState = "";
+    private long categoryBackgroundSaveAt;
     private EditBox catDependencyBox;
     private ToggleButton catAutoCompleteToggle;
 
@@ -352,6 +364,10 @@ public final class QuestEditorScreen extends Screen {
     private EditBox questNameBox;
     private EditBox questIconBox;
     private ScaledMultiLineEditBox questDescriptionBox;
+    private QuestMediaSelector questMediaSelector;
+    private EditBox stickerIconPickerTarget;
+    private int pendingStickerIconX;
+    private int pendingStickerIconY;
     private EditBox questCategoryBox;
     private EditBox questSubCategoryBox;
     private ScaledMultiLineEditBox questDependenciesBox;
@@ -465,6 +481,7 @@ public final class QuestEditorScreen extends Screen {
     private List<Component> pendingEditorTooltip = List.of();
     private int pendingEditorTooltipX;
     private int pendingEditorTooltipY;
+    private float uiScale = 1.0f;
 
     private record BackupRowHitbox(QuestPackStorage.Snapshot snapshot, int x, int y, int width, int height) {
         boolean contains(double mouseX, double mouseY) {
@@ -488,6 +505,9 @@ public final class QuestEditorScreen extends Screen {
     @Override
     // build the editor layout
     protected void init() {
+        uiScale = Config.editorScale();
+        width = Math.max(1, Math.round(width / uiScale));
+        height = Math.max(1, Math.round(height / uiScale));
         closeTransientMenus();
         int maxPanelWidth = Math.max(100, (width - TAB_W - 12) / 2);
         panelWidth = Math.min(treePanelExpanded ? 220 : PANEL_W, maxPanelWidth);
@@ -510,12 +530,14 @@ public final class QuestEditorScreen extends Screen {
         addRenderableWidget(leftList);
         questTree = new QuestEditorTreeWidget(pxLeft, py, leftPw, listH, this::openTreeQuest,
                 this::placeTreeQuest, this::saveTreePosition, this::requestDeleteTreeNode,
-                this::requestTreeDependencyChange, this::toggleTreeIncompatibility);
+                this::requestTreeDependencyChange, this::toggleTreeIncompatibility,
+                this::saveTreeStickers, this::requestStickerIcon);
         questTree.visible = false;
         questTree.active = false;
         addRenderableWidget(questTree);
 
         initFormFields();
+        stickerIconPickerTarget = new EditBox(font, 0, 0, 1, 1, Component.empty());
 
         int barY = py + ph + (BOTTOM_BAR_H - 20) / 2;
         int saveX = pxRight + pw - 68;
@@ -560,7 +582,7 @@ public final class QuestEditorScreen extends Screen {
         addRenderableWidget(treeConnectorButton);
         treeExpandButton = new QuestPanelExpandButton(0, 0, () -> treePanelExpanded, () -> {
             treePanelExpanded = !treePanelExpanded;
-            resize(minecraft, width, height);
+            resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
         });
         treeExpandButton.visible = false;
         treeExpandButton.active = false;
@@ -627,6 +649,8 @@ public final class QuestEditorScreen extends Screen {
         packDescriptionBox = makeMultiBox("Pack description", BOX_H_TALL, false);
         packLayoutSelector = new PackLayoutSelector();
         addRenderableWidget(packLayoutSelector);
+        ftbImportSection = new FtbImportSection();
+        addRenderableWidget(ftbImportSection);
 
         catIdBox = createBox("Category id", BOX_H);
         catNameBox = createBox("Category name", BOX_H);
@@ -643,6 +667,9 @@ public final class QuestEditorScreen extends Screen {
         catBackgroundAssetButton.visible = false;
         catBackgroundAssetButton.active = false;
         addRenderableWidget(catBackgroundAssetButton);
+        catBackgroundDarkeningToggle = createToggle(false);
+        catBackgroundOpacitySlider = new CategoryBackgroundOpacitySlider(0, 0, 100, BOX_H, 0.45f);
+        addRenderableWidget(catBackgroundOpacitySlider);
         catDependencyBox = createBox("Unlock quest", BOX_H);
         catAutoCompleteToggle = createToggle(false);
 
@@ -657,6 +684,8 @@ public final class QuestEditorScreen extends Screen {
         questNameBox = createBox("Quest name", BOX_H);
         questIconBox = createIconPickerBox("Quest icon");
         questDescriptionBox = makeMultiBox("Quest description", BOX_H_TALL, true);
+        questMediaSelector = new QuestMediaSelector();
+        addRenderableWidget(questMediaSelector);
         questCategoryBox = createBox("Quest category", BOX_H);
         questSubCategoryBox = createBox("Quest sub-category", BOX_H);
         questDependenciesBox = makeMultiBox("Dependencies", BOX_H_TALL, false);
@@ -771,6 +800,7 @@ public final class QuestEditorScreen extends Screen {
 
     // switch the active editor mode
     private void setMode(Mode next) {
+        if (next != mode) flushCategoryBackgroundAutosave();
         if (next != Mode.QUEST_LIST) setTreeTool(Tool.NONE);
         if (next == Mode.QUEST_LIST && mode != Mode.QUEST_LIST) {
             restoreQuestListCollapseState();
@@ -840,7 +870,7 @@ public final class QuestEditorScreen extends Screen {
         if (questTree == null) return;
         if (mode != Mode.QUEST_LIST || !isTreePack()) {
             questTree.setQuests(List.of());
-            questTree.setBackground("");
+            questTree.setBackground("", false, 0.45f);
             return;
         }
         List<QuestEntryData> quests = new ArrayList<>();
@@ -849,7 +879,10 @@ public final class QuestEditorScreen extends Screen {
         }
         questTree.setQuests(quests);
         CategoryData category = QuestEditorJsonFiles.loadCategory(currentPack, treeCategoryId);
-        questTree.setBackground(category == null ? "" : category.background);
+        questTree.setBackground(category == null ? "" : category.background,
+                category != null && parseBool(category.backgroundDarkening, false),
+                category == null ? 0.45f : parseFloat(category.backgroundDarkeningOpacity, 0.45f));
+        questTree.setStickers(readCategoryStickers(category == null ? null : category.path));
     }
 
     private void refreshCategoryWorkspaceTabs() {
@@ -860,21 +893,16 @@ public final class QuestEditorScreen extends Screen {
         categoryWorkspaceTabs.clear();
         if (mode != Mode.QUEST_LIST || !isTreePack() || currentPack == null) return;
         List<NamedEntry> categories = QuestEditorJsonFiles.listCategoryEntries(currentPack);
-        NamedEntry current = null;
+        boolean currentExists = categories.stream().anyMatch(category -> category.id.equals(treeCategoryId));
+        if (!currentExists && !categories.isEmpty()) treeCategoryId = categories.getFirst().id;
+        int tabY = py;
         for (NamedEntry category : categories) {
-            if (category.id.equals(treeCategoryId)) {
-                current = category;
-                break;
-            }
-        }
-        if (current == null && !categories.isEmpty()) current = categories.getFirst();
-        if (current != null) {
-            treeCategoryId = current.id;
-            CategoryWorkspaceTab tab = new CategoryWorkspaceTab(current, py);
+            CategoryWorkspaceTab tab = new CategoryWorkspaceTab(category, tabY);
             categoryWorkspaceTabs.add(tab);
             addRenderableWidget(tab);
+            tabY += TAB_H + TAB_GAP;
         }
-        CategoryWorkspaceTab createTab = new CategoryWorkspaceTab(null, py + TAB_H + TAB_GAP);
+        CategoryWorkspaceTab createTab = new CategoryWorkspaceTab(null, tabY);
         categoryWorkspaceTabs.add(createTab);
         addRenderableWidget(createTab);
     }
@@ -1336,6 +1364,57 @@ public final class QuestEditorScreen extends Screen {
         }
     }
 
+    private List<QuestData.Sticker> readCategoryStickers(Path categoryPath) {
+        if (categoryPath == null) return List.of();
+        JsonObject object = QuestEditorJsonFiles.readJson(categoryPath);
+        if (object == null || !object.has("stickers") || !object.get("stickers").isJsonArray()) return List.of();
+        List<QuestData.Sticker> stickers = new ArrayList<>();
+        for (JsonElement element : object.getAsJsonArray("stickers")) {
+            if (!element.isJsonObject()) continue;
+            JsonObject sticker = element.getAsJsonObject();
+            String value = optStringFlexible(sticker, "value", "");
+            if (value.isBlank()) continue;
+            stickers.add(new QuestData.Sticker(optStringFlexible(sticker, "type", "text"), value,
+                    parseInt(optStringFlexible(sticker, "x", "0"), 0),
+                    parseInt(optStringFlexible(sticker, "y", "0"), 0)));
+        }
+        return List.copyOf(stickers);
+    }
+
+    private void saveTreeStickers(List<QuestData.Sticker> stickers) {
+        if (currentPack == null || treeCategoryId.isBlank()) return;
+        CategoryData category = QuestEditorJsonFiles.loadCategory(currentPack, treeCategoryId);
+        if (category == null || category.path == null) return;
+        JsonObject object = QuestEditorJsonFiles.readJson(category.path);
+        if (object == null) return;
+        com.google.gson.JsonArray array = new com.google.gson.JsonArray();
+        for (QuestData.Sticker sticker : stickers) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("type", sticker.type());
+            entry.addProperty("value", sticker.value());
+            entry.addProperty("x", sticker.x());
+            entry.addProperty("y", sticker.y());
+            array.add(entry);
+        }
+        object.add("stickers", array);
+        try {
+            QuestPackStorage.writeJsonAtomically(gson, object, category.path);
+            stageCurrentPackChange("Tree sticker saved");
+            QuestEditorPackFiles.backupPack(currentPack, "stickers");
+            QuestEditorPackFiles.mirrorPackDirectorySafe(currentPack, isSingleplayerAuthoritySession());
+            statusMessage = "Tree sticker saved";
+            statusColor = 0xA0FFA0;
+        } catch (IOException exception) {
+            setError("Failed to save tree sticker");
+        }
+    }
+
+    private void requestStickerIcon(Integer x, Integer y) {
+        pendingStickerIconX = x == null ? 0 : x;
+        pendingStickerIconY = y == null ? 0 : y;
+        openIconItemPicker(stickerIconPickerTarget);
+    }
+
     private void autosaveTreeBackground(String background, boolean alreadyUnsaved) {
         if (editorType != EditorType.QUEST || editingPath == null || currentPack == null) {
             markCurrentEditorUnsaved();
@@ -1355,6 +1434,76 @@ public final class QuestEditorScreen extends Screen {
             statusColor = 0xA0FFA0;
         } catch (IOException e) {
             setError("Failed to save quest node style");
+        }
+    }
+
+    private void resetCategoryBackgroundAutosaveState() {
+        String state = categoryBackgroundAutosaveState();
+        observedCategoryBackgroundState = state;
+        persistedCategoryBackgroundState = state;
+        categoryBackgroundSaveAt = 0L;
+    }
+
+    private String categoryBackgroundAutosaveState() {
+        return encodedCategoryBackground() + "\n"
+                + (catBackgroundDarkeningToggle != null && catBackgroundDarkeningToggle.isOn()) + "\n"
+                + (catBackgroundOpacitySlider == null ? 0.45f : catBackgroundOpacitySlider.getOpacity());
+    }
+
+    private void tickCategoryBackgroundAutosave() {
+        if (editorType != EditorType.CATEGORY || editingPath == null || currentPack == null) return;
+        String current = categoryBackgroundAutosaveState();
+        long now = Util.getMillis();
+        if (!current.equals(observedCategoryBackgroundState)) queueCategoryBackgroundAutosave(false);
+        if (categoryBackgroundSaveAt > 0L && now >= categoryBackgroundSaveAt
+                && !current.equals(persistedCategoryBackgroundState)) {
+            autosaveCategoryBackground(current);
+        }
+    }
+
+    private void queueCategoryBackgroundAutosave(boolean immediate) {
+        observedCategoryBackgroundState = categoryBackgroundAutosaveState();
+        categoryBackgroundSaveAt = Util.getMillis() + (immediate ? 0L : 200L);
+        applyCategoryBackgroundPreview();
+    }
+
+    private void flushCategoryBackgroundAutosave() {
+        if (editorType != EditorType.CATEGORY || editingPath == null || currentPack == null) return;
+        String current = categoryBackgroundAutosaveState();
+        if (!current.equals(persistedCategoryBackgroundState)) autosaveCategoryBackground(current);
+    }
+
+    private void applyCategoryBackgroundPreview() {
+        if (questTree == null || catIdBox == null || !treeCategoryId.equals(catIdBox.getValue().trim())) return;
+        questTree.setBackground(encodedCategoryBackground(), catBackgroundDarkeningToggle.isOn(),
+                catBackgroundOpacitySlider.getOpacity());
+    }
+
+    private void autosaveCategoryBackground(String state) {
+        JsonObject obj = QuestEditorJsonFiles.readJson(editingPath);
+        if (obj == null) return;
+        String background = encodedCategoryBackground();
+        if (background.isBlank()) obj.remove("background");
+        else obj.addProperty("background", background);
+        obj.addProperty("background_darkening", catBackgroundDarkeningToggle.isOn());
+        obj.addProperty("background_darkening_opacity", catBackgroundOpacitySlider.getOpacity());
+        try {
+            QuestPackStorage.writeJsonAtomically(gson, obj, editingPath);
+            persistedCategoryBackgroundState = state;
+            categoryBackgroundSaveAt = 0L;
+            stageCurrentPackChange("Category background saved");
+            QuestEditorPackFiles.backupPack(currentPack, "category-background");
+            refreshQuestTree();
+            QuestEditorPackFiles.mirrorPackDirectorySafe(currentPack, isSingleplayerAuthoritySession());
+            Minecraft.getInstance().execute(() -> {
+                QuestData.loadClient(true);
+                QuestPanelClient.applyConfigChanges();
+            });
+            statusMessage = "Category background saved";
+            statusColor = 0xA0FFA0;
+        } catch (IOException e) {
+            categoryBackgroundSaveAt = Util.getMillis() + 1_000L;
+            setError("Failed to save category background");
         }
     }
 
@@ -1616,7 +1765,8 @@ public final class QuestEditorScreen extends Screen {
 
         setActiveFields(List.of(
                 field("Display", packNameBox),
-                field("Questpack type", packLayoutSelector)
+                field("Questpack type", packLayoutSelector),
+                field("Import existing questline", ftbImportSection)
         ));
         saveButton.setMessage(tr("create"));
         saveButton.visible = true;
@@ -1680,6 +1830,9 @@ public final class QuestEditorScreen extends Screen {
         catNameBox.setValue(safe(data.name));
         catIconBox.setValue(safe(data.icon));
         setCategoryBackgroundValue(data.background);
+        catBackgroundDarkeningToggle.setState(parseBool(data.backgroundDarkening, false));
+        catBackgroundOpacitySlider.setOpacity(parseFloat(data.backgroundDarkeningOpacity, 0.45f));
+        resetCategoryBackgroundAutosaveState();
         catDependencyBox.setValue(safe(data.dependency));
         catAutoCompleteToggle.setState(parseBool(data.autoComplete, false));
 
@@ -1687,13 +1840,17 @@ public final class QuestEditorScreen extends Screen {
             setActiveFields(List.of(
                     field(trs("field.id"), catIdBox),
                     field("Display", catNameBox),
-                    field("Background (Tile a full block texture, tile a custom asset, or use a full 121x150 image.)", catBackgroundBox)
+                    field("Background (Tile a full block texture, tile a custom asset, or use a full 121x150 image.)", catBackgroundBox),
+                    field("Enable background darkening", catBackgroundDarkeningToggle),
+                    field("Background darkening opacity", catBackgroundOpacitySlider)
             ));
         } else {
             setActiveFields(List.of(
                     field(trs("field.id"), catIdBox),
                     field("Display", catNameBox),
                     field("Background (Tile a full block texture, tile a custom asset, or use a full 121x150 image.)", catBackgroundBox),
+                    field("Enable background darkening", catBackgroundDarkeningToggle),
+                    field("Background darkening opacity", catBackgroundOpacitySlider),
                     field("Unlock quest", catDependencyBox),
                     field(trs("field.auto_complete") + " (" + trs("tooltip.auto_complete_category") + ")", catAutoCompleteToggle)
             ));
@@ -1722,6 +1879,7 @@ public final class QuestEditorScreen extends Screen {
 
     private String encodedCategoryBackground() {
         String value = safe(catBackgroundBox == null ? "" : catBackgroundBox.getValue()).trim();
+        if (value.isBlank()) return "";
         return switch (catBackgroundMode) {
             case TILEABLE -> value;
             case CUSTOM_TILEABLE -> "custom_tile:" + value;
@@ -1736,7 +1894,7 @@ public final class QuestEditorScreen extends Screen {
             case FULL_IMAGE -> CategoryBackgroundMode.TILEABLE;
         };
         if (catBackgroundBox != null) catBackgroundBox.setValue("");
-        markCurrentEditorUnsaved();
+        queueCategoryBackgroundAutosave(true);
     }
 
     private void openCategoryBackgroundPicker() {
@@ -1785,6 +1943,7 @@ public final class QuestEditorScreen extends Screen {
         questNameBox.setValue(safe(data.name));
         questIconBox.setValue(safe(data.icon).isBlank() ? "boundless:quest_book" : safe(data.icon));
         questDescriptionBox.setValue(safe(data.description));
+        questMediaSelector.setValue(safe(data.media));
         QuestCategorySelection previousSelection = sourcePath == null && currentPack != null
                 ? LAST_QUEST_CATEGORY_SELECTIONS.get(currentPack.name) : null;
         setDropdownBoxValue(questCategoryBox, previousSelection == null ? safe(data.category) : previousSelection.category());
@@ -1823,6 +1982,7 @@ public final class QuestEditorScreen extends Screen {
         if (Config.showIdField()) fields.add(field(trs("field.id"), questIdBox));
         fields.add(field("Display", questNameBox));
         fields.add(field(trs("field.description"), questDescriptionBox));
+        fields.add(field("Image or looping GIF", questMediaSelector));
         fields.add(field(trs("field.category_required"), questCategoryBox));
         if (!dropdownBoxValue(questCategoryBox).isBlank()) {
             fields.add(field(trs("field.subcategory"), questSubCategoryBox));
@@ -1830,7 +1990,7 @@ public final class QuestEditorScreen extends Screen {
             setDropdownBoxValue(questSubCategoryBox, "");
         }
         fields.add(field(trs("field.dependencies"), questDependenciesBox));
-        fields.add(field("Quest node background", questTreeBackgroundSelector));
+        if (isTreePack()) fields.add(field("Quest node background", questTreeBackgroundSelector));
         fields.add(field(trs("field.flags"), questOptionalToggle));
         fields.add(field(trs("field.completion"), questCompletionBox));
         fields.add(field(trs("field.reward"), questRewardBox));
@@ -1898,7 +2058,7 @@ public final class QuestEditorScreen extends Screen {
             pack.ensureDirs();
             currentPack = pack;
             JsonObject firstCategory = QuestEditorJsonBuilder.buildCategory(
-                    namespace, name, iconPath, 0, "", false, "", this::setError);
+                    namespace, name, iconPath, 0, "", false, "", false, 0.45f, this::setError);
             if (firstCategory == null) return;
             if ("tree".equals(layout)) firstCategory.addProperty("layout", "tree");
             QuestPackStorage.writeJsonAtomically(gson, firstCategory, pack.categoriesDir.resolve(namespace + ".json"));
@@ -1912,6 +2072,74 @@ public final class QuestEditorScreen extends Screen {
             stagePackChange(pack, "Pack staged");
         } catch (Exception e) {
             setError("Failed to create pack");
+        }
+    }
+
+    private void selectFtbQuestImportFolder() {
+        if (ftbImportRunning) return;
+        Path defaultFolder = minecraft.gameDirectory.toPath().resolve("config").resolve("ftbquests").resolve("quests");
+        if (!Files.isDirectory(defaultFolder)) defaultFolder = minecraft.gameDirectory.toPath().resolve("config");
+        String selected = TinyFileDialogs.tinyfd_selectFolderDialog(
+                "Select config/ftbquests/quests", defaultFolder.toAbsolutePath().toString());
+        if (selected == null || selected.isBlank()) return;
+        beginFtbQuestImport(Path.of(selected));
+    }
+
+    private void beginFtbQuestImport(Path sourceFolder) {
+        String requestedName = QuestEditorNaming.cleanPackName(packNameBox.getValue());
+        if (requestedName.isBlank()) {
+            requestedName = QuestEditorNaming.nextCopyPack("ftb-quests-import");
+            packNameBox.setValue(requestedName);
+        }
+        if (QuestEditorPackFiles.isInvalidPackFolderName(requestedName)) {
+            setError("Enter a valid pack name before importing");
+            return;
+        }
+        if (Files.exists(QuestEditorPackFiles.packsRoot().resolve(requestedName))) {
+            setError("Pack already exists");
+            return;
+        }
+        packLayoutSelector.setTreeLayout(true);
+        ftbImportRunning = true;
+        statusMessage = "Importing FTB Quests...";
+        statusColor = 0xFFFFFFFF;
+        String packName = requestedName;
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return FtbQuestImporter.importPack(sourceFolder, QuestEditorPackFiles.packsRoot(), packName);
+            } catch (IOException exception) {
+                throw new CompletionException(exception);
+            }
+        }, Util.ioPool()).whenComplete((result, error) -> minecraft.execute(() -> finishFtbQuestImport(result, error)));
+    }
+
+    private void finishFtbQuestImport(FtbQuestImporter.ImportResult result, Throwable error) {
+        ftbImportRunning = false;
+        if (error != null || result == null) {
+            Throwable cause = error;
+            while (cause != null && cause.getCause() != null
+                    && (cause instanceof CompletionException || cause.getMessage() == null)) {
+                cause = cause.getCause();
+            }
+            String message = cause == null || cause.getMessage() == null ? "Unknown error" : cause.getMessage();
+            setError("FTB import failed: " + message);
+            return;
+        }
+        try {
+            currentPack = result.pack();
+            currentPack.ensureDirs();
+            cachedLayoutPack = null;
+            selectedEntryId = currentPack.name;
+            try {
+                QuestEditorPackFiles.backupPack(currentPack, "ftb-imported");
+            } catch (IOException ignored) {
+            }
+            setMode(Mode.QUEST_LIST);
+            stagePackChange(currentPack, "Imported " + result.quests() + " quests from " + result.chapters()
+                    + " chapters (" + result.warnings().size() + " warning"
+                    + (result.warnings().size() == 1 ? "" : "s") + ")");
+        } catch (IOException exception) {
+            setError("FTB import finished, but the pack could not be opened: " + exception.getMessage());
         }
     }
 
@@ -1997,7 +2225,7 @@ public final class QuestEditorScreen extends Screen {
         if (obj == null) return;
         Path target = currentPack.categoriesDir.resolve(id + ".json");
         saveJson(obj, target, editingPath);
-        if (isTreePack() && editingPath != null) {
+        if (editingPath != null) {
             QuestEditorPackFiles.mirrorPackDirectorySafe(currentPack, isSingleplayerAuthoritySession());
             Minecraft.getInstance().execute(() -> {
                 QuestData.loadClient(true);
@@ -2028,6 +2256,8 @@ public final class QuestEditorScreen extends Screen {
                 catDependencyBox.getValue(),
                 catAutoCompleteToggle.isOn(),
                 encodedCategoryBackground(),
+                catBackgroundDarkeningToggle.isOn(),
+                catBackgroundOpacitySlider.getOpacity(),
                 this::setError
         );
         if (category != null && isTreePack()) category.addProperty("layout", "tree");
@@ -2120,6 +2350,7 @@ public final class QuestEditorScreen extends Screen {
         fields.name = questNameBox.getValue();
         fields.icon = questIconBox.getValue();
         fields.description = questDescriptionBox.getValue();
+        fields.media = questMediaSelector.value();
         fields.category = dropdownBoxValue(questCategoryBox);
         fields.subCategory = dropdownBoxValue(questSubCategoryBox);
         fields.optional = questOptionalToggle.isOn();
@@ -3565,6 +3796,8 @@ public final class QuestEditorScreen extends Screen {
         fields.categoryName = safe(catNameBox == null ? "" : catNameBox.getValue());
         fields.categoryIcon = safe(catIconBox == null ? "" : catIconBox.getValue());
         fields.categoryBackground = encodedCategoryBackground();
+        fields.categoryBackgroundDarkening = catBackgroundDarkeningToggle != null && catBackgroundDarkeningToggle.isOn();
+        fields.categoryBackgroundDarkeningOpacity = catBackgroundOpacitySlider == null ? 0.45f : catBackgroundOpacitySlider.getOpacity();
         fields.categoryDependency = safe(catDependencyBox == null ? "" : catDependencyBox.getValue());
         fields.categoryAutoComplete = catAutoCompleteToggle != null && catAutoCompleteToggle.isOn();
         fields.subCategoryId = safe(subIdBox == null ? "" : subIdBox.getValue());
@@ -3577,6 +3810,7 @@ public final class QuestEditorScreen extends Screen {
         fields.questName = safe(questNameBox == null ? "" : questNameBox.getValue());
         fields.questIcon = safe(questIconBox == null ? "" : questIconBox.getValue());
         fields.questDescription = safe(questDescriptionBox == null ? "" : questDescriptionBox.getValue());
+        fields.questMedia = questMediaSelector == null ? "" : questMediaSelector.value();
         fields.questCategory = safe(questCategoryBox == null ? "" : questCategoryBox.getValue());
         fields.questSubCategory = safe(questSubCategoryBox == null ? "" : questSubCategoryBox.getValue());
         fields.questDependencies = safe(questDependenciesBox == null ? "" : questDependenciesBox.getValue());
@@ -3632,6 +3866,15 @@ public final class QuestEditorScreen extends Screen {
         if (v.equals("true")) return true;
         if (v.equals("false")) return false;
         return def;
+    }
+
+    private float parseFloat(String raw, float fallback) {
+        if (raw == null || raw.isBlank()) return fallback;
+        try {
+            return Float.parseFloat(raw.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 
     private ItemStack dependencyIconStack(String dependencyId) {
@@ -3691,6 +3934,8 @@ public final class QuestEditorScreen extends Screen {
         state.catName = safe(catNameBox == null ? "" : catNameBox.getValue());
         state.catIcon = safe(catIconBox == null ? "" : catIconBox.getValue());
         state.catBackground = encodedCategoryBackground();
+        state.catBackgroundDarkening = catBackgroundDarkeningToggle != null && catBackgroundDarkeningToggle.isOn();
+        state.catBackgroundDarkeningOpacity = catBackgroundOpacitySlider == null ? 0.45f : catBackgroundOpacitySlider.getOpacity();
         state.catDependency = safe(catDependencyBox == null ? "" : catDependencyBox.getValue());
         state.catAutoComplete = catAutoCompleteToggle != null && catAutoCompleteToggle.isOn();
 
@@ -3704,6 +3949,7 @@ public final class QuestEditorScreen extends Screen {
         state.questName = safe(questNameBox == null ? "" : questNameBox.getValue());
         state.questIcon = safe(questIconBox == null ? "" : questIconBox.getValue());
         state.questDescription = safe(questDescriptionBox == null ? "" : questDescriptionBox.getValue());
+        state.questMedia = questMediaSelector == null ? "" : questMediaSelector.value();
         state.questCategory = safe(questCategoryBox == null ? "" : questCategoryBox.getValue());
         state.questSubCategory = safe(questSubCategoryBox == null ? "" : questSubCategoryBox.getValue());
         state.questDependencies = safe(questDependenciesBox == null ? "" : questDependenciesBox.getValue());
@@ -3770,6 +4016,8 @@ public final class QuestEditorScreen extends Screen {
                 data.name = state.catName;
                 data.icon = state.catIcon;
                 data.background = state.catBackground;
+                data.backgroundDarkening = state.catBackgroundDarkening ? "true" : "false";
+                data.backgroundDarkeningOpacity = Float.toString(state.catBackgroundDarkeningOpacity);
                 data.dependency = state.catDependency;
                 data.autoComplete = state.catAutoComplete ? "true" : "false";
                 showCategoryEditor(data, state.editingPath);
@@ -3789,6 +4037,7 @@ public final class QuestEditorScreen extends Screen {
                 data.name = state.questName;
                 data.icon = state.questIcon;
                 data.description = state.questDescription;
+                data.media = state.questMedia;
                 data.category = state.questCategory;
                 data.subCategory = state.questSubCategory;
                 data.dependencies = state.questDependencies;
@@ -3857,6 +4106,10 @@ public final class QuestEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        mouseX = Math.round(mouseX / uiScale);
+        mouseY = Math.round(mouseY / uiScale);
+        gg.pose().pushPose();
+        gg.pose().scale(uiScale, uiScale, 1.0f);
         pendingEditorTooltip = List.of();
         updateLeftPaneLayout();
         if (editorType == EditorType.PACK_CREATE || editorType == EditorType.PACK_OPTIONS) {
@@ -3920,6 +4173,8 @@ public final class QuestEditorScreen extends Screen {
             questTree.setTooltipSuppressed(isTreeTooltipCovered(mouseX, mouseY));
             questTree.render(gg, mouseX, mouseY, partialTick);
         }
+        gg.pose().pushPose();
+        gg.pose().translate(0, 0, 500);
         for (CategoryWorkspaceTab tab : categoryWorkspaceTabs) {
             if (tab.visible) tab.render(gg, mouseX, mouseY, partialTick);
         }
@@ -3936,6 +4191,7 @@ public final class QuestEditorScreen extends Screen {
         if (treeExpandButton != null && treeExpandButton.visible) treeExpandButton.render(gg, mouseX, mouseY, partialTick);
         if (createPackButton != null && createPackButton.visible) createPackButton.render(gg, mouseX, mouseY, partialTick);
         if (importQuestPackButton != null && importQuestPackButton.visible) importQuestPackButton.render(gg, mouseX, mouseY, partialTick);
+        gg.pose().popPose();
         renderIconOverlays(gg);
         if (!isItemPickerOpen() && leftList != null) leftList.renderHoverTooltipOnTop(gg);
         if (!isItemPickerOpen()) renderTabTooltip(gg, mouseX, mouseY);
@@ -3954,6 +4210,7 @@ public final class QuestEditorScreen extends Screen {
         renderIdSuggestions(gg, mouseX, mouseY);
         renderUnsavedChangesPopup(gg, mouseX, mouseY);
         renderPendingEditorTooltip(gg);
+        gg.pose().popPose();
     }
 
     private void queueEditorTooltip(Component tooltip, int mouseX, int mouseY) {
@@ -4780,6 +5037,11 @@ public final class QuestEditorScreen extends Screen {
 
         int yCursor = py - (int) editorScroll;
         for (FormField field : activeFields) {
+            if (field.widget == catBackgroundOpacitySlider && !catBackgroundDarkeningToggle.isOn()) {
+                field.widget.visible = false;
+                field.widget.active = false;
+                continue;
+            }
             int labelY = yCursor;
             int boxY = labelY + font.lineHeight + FIELD_LABEL_GAP;
             int boxX = pxRight + 2;
@@ -4810,6 +5072,12 @@ public final class QuestEditorScreen extends Screen {
                     selector.setWidth(widgetWidth);
                 } else if (field.widget instanceof QuestTreeBackgroundSelector selector) {
                     selector.setWidth(widgetWidth);
+                } else if (field.widget instanceof CategoryBackgroundOpacitySlider slider) {
+                    slider.setWidth(widgetWidth);
+                } else if (field.widget instanceof FtbImportSection section) {
+                    section.setWidth(widgetWidth);
+                } else if (field.widget instanceof QuestMediaSelector selector) {
+                    selector.setWidth(widgetWidth);
                 }
             }
 
@@ -4827,6 +5095,7 @@ public final class QuestEditorScreen extends Screen {
                 boolean inside = boxY + widgetHeight > clipTop && boxY < clipBottom;
                 field.widget.visible = inside;
                 field.widget.active = inside;
+                if (field.widget == ftbImportSection && ftbImportRunning) field.widget.active = false;
                 EditBox embeddedIcon = embeddedIconBoxForDisplayField(field.widget);
                 if (embeddedIcon != null) {
                     embeddedIcon.setX(boxX);
@@ -5021,6 +5290,8 @@ public final class QuestEditorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        mouseX /= uiScale;
+        mouseY /= uiScale;
         if (scrollTypeMenu(mouseX, mouseY, scrollY)) {
             return true;
         }
@@ -5115,6 +5386,7 @@ public final class QuestEditorScreen extends Screen {
     private int contentHeight() {
         int total = 0;
         for (FormField field : activeFields) {
+            if (field.widget == catBackgroundOpacitySlider && !catBackgroundDarkeningToggle.isOn()) continue;
             total += font.lineHeight + FIELD_LABEL_GAP + fieldHeight(field) + FIELD_ROW_GAP;
             if (editorType == EditorType.PACK_OPTIONS && field.widget == packNameBox) {
                 total += 20 + FIELD_ROW_GAP;
@@ -5593,6 +5865,7 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private void goBack() {
+        flushCategoryBackgroundAutosave();
         if (hasUnsavedEditorChanges()) {
             clearPendingDiscardState();
             pendingBackNavigation = true;
@@ -5626,6 +5899,7 @@ public final class QuestEditorScreen extends Screen {
 
     private void exitEditor() {
         if (closingEditor) return;
+        flushCategoryBackgroundAutosave();
         closingEditor = true;
         clearPendingInitState();
         applyStagedChangesOnClose();
@@ -5661,7 +5935,15 @@ public final class QuestEditorScreen extends Screen {
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        tickCategoryBackgroundAutosave();
+    }
+
+    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        mouseX /= uiScale;
+        mouseY /= uiScale;
         if (isUnsavedChangesPopupOpen()) {
             return handleUnsavedChangesPopupClick(mouseX, mouseY, button);
         }
@@ -5714,7 +5996,11 @@ public final class QuestEditorScreen extends Screen {
             CategoryData category = QuestEditorJsonFiles.loadCategory(currentPack, treeCategoryId);
             if (category != null) showCategoryEditor(category, category.path);
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        boolean categoryBackgroundToggleClicked = button == 0 && catBackgroundDarkeningToggle != null
+                && catBackgroundDarkeningToggle.visible && catBackgroundDarkeningToggle.isMouseOver(mouseX, mouseY);
+        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        if (handled && categoryBackgroundToggleClicked) queueCategoryBackgroundAutosave(true);
+        return handled;
     }
 
     private boolean clickPackBackup(double mouseX, double mouseY) {
@@ -5861,11 +6147,18 @@ public final class QuestEditorScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        mouseX /= uiScale;
+        mouseY /= uiScale;
         if (button == 0 && deleteHoldActive) {
             deleteHoldActive = false;
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        return super.mouseDragged(mouseX / uiScale, mouseY / uiScale, button, dragX / uiScale, dragY / uiScale);
     }
 
     private void clearEntryTextFocus() {
@@ -5976,6 +6269,10 @@ public final class QuestEditorScreen extends Screen {
     }
 
     private boolean clickToolbarButtons(double mouseX, double mouseY) {
+        if (treeExpandButton != null && treeExpandButton.visible && treeExpandButton.active && treeExpandButton.isMouseOver(mouseX, mouseY)) {
+            treeExpandButton.onPress();
+            return true;
+        }
         if (createPackButton != null && createPackButton.visible && createPackButton.active && createPackButton.isMouseOver(mouseX, mouseY)) {
             createPackButton.onPress();
             return true;
@@ -6633,9 +6930,14 @@ public final class QuestEditorScreen extends Screen {
                 id = BuiltInRegistries.ITEM.getKey(picked.getItem());
             }
             if (id == null) return;
+            if (itemPickerIconTarget == stickerIconPickerTarget) {
+                if (questTree != null) questTree.addIconSticker(pendingStickerIconX, pendingStickerIconY, id.toString());
+                return;
+            }
             itemPickerIconTarget.setValue(id.toString());
             itemPickerIconTarget.setCursorPosition(id.toString().length());
-            markCurrentEditorUnsaved();
+            if (itemPickerIconTarget == catBackgroundBox) queueCategoryBackgroundAutosave(true);
+            else markCurrentEditorUnsaved();
             return;
         }
         List<ScaledMultiLineEditBox> rows = entryRows(itemPickerKind);
@@ -6680,6 +6982,10 @@ public final class QuestEditorScreen extends Screen {
 
     private void applyPickedIcon(String id) {
         if (itemPickerIconTarget == null || id == null || id.isBlank()) return;
+        if (itemPickerIconTarget == stickerIconPickerTarget) {
+            if (questTree != null) questTree.addIconSticker(pendingStickerIconX, pendingStickerIconY, id);
+            return;
+        }
         if (itemPickerIconTarget == catBackgroundBox) {
             if (catBackgroundMode == CategoryBackgroundMode.TILEABLE) {
                 setError("Category background must be a full block");
@@ -6687,7 +6993,7 @@ public final class QuestEditorScreen extends Screen {
             }
             itemPickerIconTarget.setValue(id);
             itemPickerIconTarget.setCursorPosition(id.length());
-            markCurrentEditorUnsaved();
+            queueCategoryBackgroundAutosave(true);
             return;
         }
         itemPickerIconTarget.setValue(id);
@@ -6781,6 +7087,138 @@ public final class QuestEditorScreen extends Screen {
         }
     }
 
+    private void selectQuestMediaFile() {
+        try {
+            Files.createDirectories(Config.questMediaRoot());
+            String selected;
+            try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
+                org.lwjgl.PointerBuffer filters = stack.mallocPointer(4);
+                filters.put(stack.UTF8("*.png"));
+                filters.put(stack.UTF8("*.jpg"));
+                filters.put(stack.UTF8("*.jpeg"));
+                filters.put(stack.UTF8("*.gif"));
+                filters.flip();
+                selected = TinyFileDialogs.tinyfd_openFileDialog(
+                        "Select quest image or looping GIF",
+                        Config.questMediaRoot().toAbsolutePath().toString(),
+                        filters,
+                        "Images and looping GIFs",
+                        false);
+            }
+            if (selected == null || selected.isBlank()) return;
+            Path source = Path.of(selected).toAbsolutePath().normalize();
+            String fileName = source.getFileName() == null ? "quest-media.png" : source.getFileName().toString();
+            Path target = Config.questMediaRoot().resolve(fileName).normalize();
+            if (!target.startsWith(Config.questMediaRoot().normalize())) throw new IOException("Invalid media path");
+            if (!source.equals(target.toAbsolutePath().normalize())) {
+                Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            questMediaSelector.setValue(fileName);
+            net.revilodev.boundless.client.QuestMediaRenderer.clear();
+            markCurrentEditorUnsaved();
+            statusMessage = "Media copied to config/boundless/media";
+            statusColor = 0xA0FFA0;
+        } catch (Exception exception) {
+            setError("Could not import quest media");
+        }
+    }
+
+    private final class QuestMediaSelector extends AbstractWidget {
+        private String value = "";
+
+        QuestMediaSelector() {
+            super(0, 0, 1, BOX_H, Component.empty());
+        }
+
+        String value() {
+            return value;
+        }
+
+        void setValue(String value) {
+            this.value = value == null ? "" : value;
+        }
+
+        @Override
+        public boolean mouseClicked(double mouseX, double mouseY, int button) {
+            if (!visible || !active || !isMouseOver(mouseX, mouseY)) return false;
+            if (button == 1) {
+                setValue("");
+                markCurrentEditorUnsaved();
+                return true;
+            }
+            if (button != 0) return false;
+            selectQuestMediaFile();
+            return true;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            ResourceLocation sprite = isMouseOver(mouseX, mouseY)
+                    ? ResourceLocation.withDefaultNamespace("widget/button_highlighted")
+                    : ResourceLocation.withDefaultNamespace("widget/button");
+            graphics.blitSprite(sprite, getX(), getY(), getWidth(), getHeight());
+            String label = value.isBlank() ? "Browse config/boundless/media..." : value;
+            String clipped = font.plainSubstrByWidth(label, Math.max(1, getWidth() - 8));
+            graphics.drawString(font, clipped, getX() + 4, getY() + 6, 0xFFFFFFFF, false);
+        }
+
+        @Override
+        protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput narration) {
+        }
+    }
+
+    private final class FtbImportSection extends AbstractWidget {
+        private static final int HEIGHT = 138;
+        private static final int BUTTON_HEIGHT = 20;
+        private static final String DESCRIPTION = "Select config/ftbquests/quests. Chapters become tree categories. "
+                + "Quest positions, dependencies, icons, text, tasks and rewards are converted. Unsupported entries "
+                + "are replaced where possible and listed in ftb-import-report.txt. Your FTB files are never changed.";
+
+        FtbImportSection() {
+            super(0, 0, 1, HEIGHT, Component.empty());
+        }
+
+        @Override
+        public boolean mouseClicked(double mouseX, double mouseY, int button) {
+            if (!active || !visible || button != 0 || !isButtonHovered(mouseX, mouseY)) return false;
+            selectFtbQuestImportFolder();
+            return true;
+        }
+
+        @Override
+        public boolean isMouseOver(double mouseX, double mouseY) {
+            return isButtonHovered(mouseX, mouseY);
+        }
+
+        private boolean isButtonHovered(double mouseX, double mouseY) {
+            return mouseX >= getX() && mouseX <= getX() + getWidth()
+                    && mouseY >= getY() && mouseY <= getY() + BUTTON_HEIGHT;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            ResourceLocation sprite = !active
+                    ? ResourceLocation.withDefaultNamespace("widget/button_disabled")
+                    : (isButtonHovered(mouseX, mouseY)
+                    ? ResourceLocation.withDefaultNamespace("widget/button_highlighted")
+                    : ResourceLocation.withDefaultNamespace("widget/button"));
+            graphics.blitSprite(sprite, getX(), getY(), getWidth(), BUTTON_HEIGHT);
+            String label = ftbImportRunning ? "Importing..." : "Import from FTB Quests";
+            graphics.drawString(font, label, getX() + (getWidth() - font.width(label)) / 2,
+                    getY() + 6, active ? 0xFFFFFFFF : 0xFF808080, false);
+            int lineY = getY() + BUTTON_HEIGHT + 6;
+            for (var line : font.split(Component.literal(DESCRIPTION), Math.max(20, getWidth()))) {
+                if (lineY + font.lineHeight > getY() + getHeight()) break;
+                graphics.drawString(font, line, getX(), lineY, 0xFFA0A0A0, false);
+                lineY += font.lineHeight;
+            }
+        }
+
+        @Override
+        protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput narration) {
+        }
+    }
+
     private final class PackLayoutSelector extends AbstractWidget {
         private static final int HEIGHT = 22;
         private boolean treeLayout;
@@ -6839,6 +7277,32 @@ public final class QuestEditorScreen extends Screen {
 
         @Override
         protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput narration) {
+        }
+    }
+
+    private final class CategoryBackgroundOpacitySlider extends AbstractSliderButton {
+        CategoryBackgroundOpacitySlider(int x, int y, int width, int height, float opacity) {
+            super(x, y, width, height, Component.empty(), Math.max(0d, Math.min(1d, opacity)));
+            updateMessage();
+        }
+
+        float getOpacity() {
+            return (float) value;
+        }
+
+        void setOpacity(float opacity) {
+            value = Math.max(0d, Math.min(1d, opacity));
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            setMessage(Component.literal(Math.round(value * 100d) + "%"));
+        }
+
+        @Override
+        protected void applyValue() {
+            queueCategoryBackgroundAutosave(false);
         }
     }
 
@@ -7058,9 +7522,11 @@ public final class QuestEditorScreen extends Screen {
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
             if (!active || !visible || button != 0 || !isMouseOver(mouseX, mouseY)) return false;
             if (category == null) {
+                flushCategoryBackgroundAutosave();
                 showCategoryEditor(new CategoryData(), null);
                 return true;
             }
+            flushCategoryBackgroundAutosave();
             selectTreeCategory(category);
             return true;
         }

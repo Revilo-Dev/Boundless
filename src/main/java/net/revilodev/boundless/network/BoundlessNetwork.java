@@ -235,6 +235,7 @@ public final class BoundlessNetwork {
             double questTextScale,
             double questIconScale,
             boolean enableQuestSearchBox,
+            boolean customBackgrounds,
             boolean enableDescriptionColors,
             String questWidgetTextColor,
             String descriptionTextColor,
@@ -263,6 +264,7 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questTextScale);
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.customBackgrounds);
                     buf.writeBoolean(p.enableDescriptionColors);
                     buf.writeUtf(p.questWidgetTextColor == null ? "" : p.questWidgetTextColor);
                     buf.writeUtf(p.descriptionTextColor == null ? "" : p.descriptionTextColor);
@@ -288,6 +290,7 @@ public final class BoundlessNetwork {
                         buf.readBoolean(),
                         buf.readDouble(),
                         buf.readDouble(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
@@ -569,6 +572,7 @@ public final class BoundlessNetwork {
             double questTextScale,
             double questIconScale,
             boolean enableQuestSearchBox,
+            boolean customBackgrounds,
             boolean enableDescriptionColors,
             String questWidgetTextColor,
             String descriptionTextColor,
@@ -601,6 +605,7 @@ public final class BoundlessNetwork {
                     buf.writeDouble(p.questTextScale);
                     buf.writeDouble(p.questIconScale);
                     buf.writeBoolean(p.enableQuestSearchBox);
+                    buf.writeBoolean(p.customBackgrounds);
                     buf.writeBoolean(p.enableDescriptionColors);
                     buf.writeUtf(p.questWidgetTextColor == null ? "" : p.questWidgetTextColor);
                     buf.writeUtf(p.descriptionTextColor == null ? "" : p.descriptionTextColor);
@@ -630,6 +635,7 @@ public final class BoundlessNetwork {
                         buf.readBoolean(),
                         buf.readDouble(),
                         buf.readDouble(),
+                        buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readBoolean(),
                         buf.readUtf(),
@@ -811,6 +817,7 @@ public final class BoundlessNetwork {
                 Config.questTextScale(),
                 Config.questIconScale(),
                 Config.enableQuestSearchBox(),
+                Config.customBackgrounds(),
                 Config.enableDescriptionColors(),
                 String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor()),
                 String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor()),
@@ -910,6 +917,18 @@ public final class BoundlessNetwork {
             o.addProperty("autoComplete", c.autoComplete);
             o.addProperty("treeLayout", c.treeLayout);
             o.addProperty("background", c.background);
+            o.addProperty("backgroundDarkening", c.backgroundDarkening);
+            o.addProperty("backgroundDarkeningOpacity", c.backgroundDarkeningOpacity);
+            JsonArray stickers = new JsonArray();
+            for (QuestData.Sticker sticker : c.stickers) {
+                JsonObject stickerJson = new JsonObject();
+                stickerJson.addProperty("type", sticker.type());
+                stickerJson.addProperty("value", sticker.value());
+                stickerJson.addProperty("x", sticker.x());
+                stickerJson.addProperty("y", sticker.y());
+                stickers.add(stickerJson);
+            }
+            o.add("stickers", stickers);
             cats.add(o);
         }
         root.add("categories", cats);
@@ -942,6 +961,7 @@ public final class BoundlessNetwork {
             o.addProperty("name", q.name);
             o.addProperty("icon", q.icon);
             o.addProperty("description", q.description);
+            if (q.media != null && !q.media.isBlank()) o.addProperty("media", q.media);
 
             JsonArray deps = new JsonArray();
             for (String d : q.dependencies) deps.add(d);
@@ -1266,6 +1286,7 @@ public final class BoundlessNetwork {
             Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questTextScale())));
             Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
             Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
+            Config.CUSTOM_BACKGROUNDS.set(p.customBackgrounds());
             Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
             Config.QUEST_WIDGET_TEXT_COLOR.set(p.questWidgetTextColor());
             Config.DESCRIPTION_TEXT_COLOR.set(p.descriptionTextColor());
@@ -1578,6 +1599,7 @@ public final class BoundlessNetwork {
                 p.questTextScale(),
                 p.questIconScale(),
                 p.enableQuestSearchBox(),
+                p.customBackgrounds(),
                 p.enableDescriptionColors(),
                 p.questWidgetTextColor(),
                 p.descriptionTextColor(),

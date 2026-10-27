@@ -244,6 +244,8 @@ public final class QuestEditorModels {
         public String dependency = "";
         public String autoComplete = "";
         public String background = "";
+        public String backgroundDarkening = "";
+        public String backgroundDarkeningOpacity = "";
     }
 
     // sub category data
@@ -264,6 +266,7 @@ public final class QuestEditorModels {
         public String name = "";
         public String icon = "";
         public String description = "";
+        public String media = "";
         public String category = "";
         public String subCategory = "";
         public String dependencies = "";
@@ -487,6 +490,10 @@ public final class QuestEditorModels {
 
         public String catBackground = "";
 
+        public boolean catBackgroundDarkening = false;
+
+        public float catBackgroundDarkeningOpacity = 0.45f;
+
         public String catDependency = "";
 
         public boolean catAutoComplete = false;
@@ -508,6 +515,7 @@ public final class QuestEditorModels {
         public String questIcon = "";
 
         public String questDescription = "";
+        public String questMedia = "";
 
         public String questCategory = "";
 

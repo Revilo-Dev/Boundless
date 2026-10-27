@@ -7,6 +7,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.editor.QuestEditorCustomIcons;
 
 public final class QuestCategoryBackgroundRenderer {
@@ -16,29 +17,36 @@ public final class QuestCategoryBackgroundRenderer {
     }
 
     public static void render(GuiGraphics graphics, String background, int x, int y, int width, int height) {
-        if (background == null || background.isBlank() || width <= 0 || height <= 0) return;
+        render(graphics, background, false, 0f, x, y, width, height);
+    }
+
+    public static void render(GuiGraphics graphics, String background, boolean darkening, float darkeningOpacity,
+                              int x, int y, int width, int height) {
+        if (!Config.customBackgrounds() || background == null || background.isBlank() || width <= 0 || height <= 0) return;
         String value = background.trim();
         if (value.startsWith("custom_tile:")) {
             renderTexture(graphics, value.substring("custom_tile:".length()), x, y, width, height, true);
-            return;
-        }
-        if (value.startsWith("full:")) {
+        } else if (value.startsWith("full:")) {
             renderTexture(graphics, value.substring("full:".length()), x, y, width, height, false);
-            return;
-        }
-        if (value.startsWith("tile:")) value = value.substring("tile:".length());
-        Block block = block(value);
-        if (block == null || block == Blocks.AIR) return;
-
-        TextureAtlasSprite sprite = Minecraft.getInstance().getBlockRenderer()
-                .getBlockModelShaper().getParticleIcon(block.defaultBlockState());
-        graphics.enableScissor(x, y, x + width, y + height);
-        for (int tileY = y; tileY < y + height; tileY += TILE_SIZE) {
-            for (int tileX = x; tileX < x + width; tileX += TILE_SIZE) {
-                graphics.blit(tileX, tileY, 0, TILE_SIZE, TILE_SIZE, sprite);
+        } else {
+            if (value.startsWith("tile:")) value = value.substring("tile:".length());
+            Block block = block(value);
+            if (block != null && block != Blocks.AIR) {
+                TextureAtlasSprite sprite = Minecraft.getInstance().getBlockRenderer()
+                        .getBlockModelShaper().getParticleIcon(block.defaultBlockState());
+                graphics.enableScissor(x, y, x + width, y + height);
+                for (int tileY = y; tileY < y + height; tileY += TILE_SIZE) {
+                    for (int tileX = x; tileX < x + width; tileX += TILE_SIZE) {
+                        graphics.blit(tileX, tileY, 0, TILE_SIZE, TILE_SIZE, sprite);
+                    }
+                }
+                graphics.disableScissor();
             }
         }
-        graphics.disableScissor();
+        if (darkening) {
+            int alpha = Math.max(0, Math.min(255, Math.round(darkeningOpacity * 255f)));
+            if (alpha > 0) graphics.fill(x, y, x + width, y + height, alpha << 24);
+        }
     }
 
     private static void renderTexture(GuiGraphics graphics, String assetId, int x, int y, int width, int height, boolean tiled) {

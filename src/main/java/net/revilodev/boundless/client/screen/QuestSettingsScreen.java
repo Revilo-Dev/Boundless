@@ -112,7 +112,10 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiHideQuestWidgetIconsRow;
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
+    private ConfigRow uiEditorScaleRow;
+    private ConfigRow uiQuestBookScaleRow;
     private ConfigRow uiEnableSearchBoxRow;
+    private ConfigRow uiCustomBackgroundsRow;
     private ConfigRow uiStickySubCategoryHeadersRow;
     private ConfigRow uiStickyDescriptionHeadersRow;
     private ConfigRow uiEnableDescriptionColorsRow;
@@ -181,7 +184,10 @@ public final class QuestSettingsScreen extends Screen {
     private boolean hideQuestWidgetIcons;
     private double questTextScale;
     private double questIconScale;
+    private double editorScale;
+    private double questBookScale;
     private boolean enableQuestSearchBox;
+    private boolean customBackgrounds;
     private boolean stickySubCategoryHeaders;
     private boolean stickyDescriptionHeaders;
     private boolean enableDescriptionColors;
@@ -321,10 +327,22 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.icon_scale.subtitle"),
                 this::formatQuestIconScale,
                 this::cycleQuestIconScale);
+        uiEditorScaleRow = new ConfigRow(px, uiQuestIconScaleBaseY, pw, "Editor scale",
+                "Scale the complete quest tree editor interface.",
+                () -> formatUiScale(editorScale),
+                () -> editorScale = nextUiScale(editorScale));
+        uiQuestBookScaleRow = new ConfigRow(px, uiQuestIconScaleBaseY, pw, "Quest book scale",
+                "Scale the standalone and inventory quest book interface.",
+                () -> formatUiScale(questBookScale),
+                () -> questBookScale = nextUiScale(questBookScale));
         uiEnableSearchBoxRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.search_widget"),
                 trs("row.search_widget.subtitle"),
                 () -> trs(enableQuestSearchBox ? "state.on" : "state.off"),
                 () -> enableQuestSearchBox = !enableQuestSearchBox);
+        uiCustomBackgroundsRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Custom backgrounds",
+                "Render category backgrounds in quest lists and trees.",
+                () -> trs(customBackgrounds ? "state.on" : "state.off"),
+                () -> customBackgrounds = !customBackgrounds);
         uiStickySubCategoryHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Sticky sub-category headers",
                 "Keep the active sub-category heading visible while scrolling.",
                 () -> trs(stickySubCategoryHeaders ? "state.on" : "state.off"),
@@ -392,6 +410,8 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiHideQuestWidgetIconsRow, ConfigTab.STYLE);
         addConfigRow(uiQuestTextScaleRow, ConfigTab.STYLE);
         addConfigRow(uiQuestIconScaleRow, ConfigTab.STYLE);
+        addConfigRow(uiEditorScaleRow, ConfigTab.UI);
+        addConfigRow(uiQuestBookScaleRow, ConfigTab.UI);
         addConfigRow(uiEnableDescriptionColorsRow, ConfigTab.STYLE);
         addConfigRow(uiQuestWidgetTextColorRow, ConfigTab.STYLE);
         addConfigRow(uiDescriptionTextColorRow, ConfigTab.STYLE);
@@ -399,6 +419,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiEnableDescriptionWrappingRow, ConfigTab.STYLE);
         addConfigRow(uiDescriptionAlignmentRow, ConfigTab.STYLE);
         addConfigRow(uiHideHeaderRow, ConfigTab.STYLE);
+        addConfigRow(uiCustomBackgroundsRow, ConfigTab.STYLE);
 
         addConfigRow(uiPinnedRow, ConfigTab.UI);
         addConfigRow(uiHideInventoryRow, ConfigTab.UI);
@@ -594,7 +615,10 @@ public final class QuestSettingsScreen extends Screen {
         hideQuestWidgetIcons = Config.hideQuestWidgetIcons();
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
+        editorScale = Config.editorScale();
+        questBookScale = Config.questBookScale();
         enableQuestSearchBox = Config.enableQuestSearchBox();
+        customBackgrounds = Config.customBackgrounds();
         stickySubCategoryHeaders = Config.stickySubCategoryHeaders();
         stickyDescriptionHeaders = Config.stickyDescriptionHeaders();
         enableDescriptionColors = Config.enableDescriptionColors();
@@ -666,6 +690,19 @@ public final class QuestSettingsScreen extends Screen {
         return String.format(java.util.Locale.ROOT, "%.1fx", Math.max(0.5D, Math.min(1.0D, questIconScale)));
     }
 
+    private double nextUiScale(double scale) {
+        if (scale < 1.25D) return 1.25D;
+        if (scale < 1.5D) return 1.5D;
+        if (scale < 2.0D) return 2.0D;
+        return 1.0D;
+    }
+
+    private String formatUiScale(double scale) {
+        double normalized = scale == 1.25D || scale == 1.5D || scale == 2.0D ? scale : 1.0D;
+        if (normalized == 1.25D) return "1.25x";
+        return String.format(java.util.Locale.ROOT, normalized == 1.0D || normalized == 2.0D ? "%.0fx" : "%.1fx", normalized);
+    }
+
     private void cycleQuestWidgetTextColor() {
         questWidgetTextColor = nextThemeColor(questWidgetTextColor, "FFFFFF");
     }
@@ -721,7 +758,10 @@ public final class QuestSettingsScreen extends Screen {
         Config.HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
+        Config.EDITOR_SCALE.set(editorScale);
+        Config.QUEST_BOOK_SCALE.set(questBookScale);
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
+        Config.CUSTOM_BACKGROUNDS.set(customBackgrounds);
         Config.STICKY_SUBCATEGORY_HEADERS.set(stickySubCategoryHeaders);
         Config.STICKY_DESCRIPTION_HEADERS.set(stickyDescriptionHeaders);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
@@ -760,6 +800,7 @@ public final class QuestSettingsScreen extends Screen {
                     questTextScale,
                     questIconScale,
                     enableQuestSearchBox,
+                    customBackgrounds,
                     enableDescriptionColors,
                     normalizeThemeColor(questWidgetTextColor, "FFFFFF"),
                     normalizeThemeColor(descriptionTextColor, "CFCFCF"),
@@ -795,6 +836,8 @@ public final class QuestSettingsScreen extends Screen {
             disableCategories = false;
             showIdField = false;
             enableQuestSearchBox = false;
+            editorScale = 1.0D;
+            questBookScale = 1.0D;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.STYLE) {
             hideQuestWidgetIcons = false;
@@ -809,6 +852,7 @@ public final class QuestSettingsScreen extends Screen {
             hideCategoryHeader = false;
             stickySubCategoryHeaders = true;
             stickyDescriptionHeaders = true;
+            customBackgrounds = true;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
             enableQuestToasts = true;
