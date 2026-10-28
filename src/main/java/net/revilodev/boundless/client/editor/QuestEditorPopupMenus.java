@@ -46,6 +46,10 @@ public final class QuestEditorPopupMenus {
         openDropdownScroll = 0;
     }
 
+    public boolean hasOpenMenu() {
+        return (openTypeMenuKind != null && openTypeMenuRow >= 0) || openDropdownTarget != null;
+    }
+
     public void openTypeMenu(EntryRowKind kind, int row, int x, int y, int width) {
         openTypeMenuKind = kind;
         openTypeMenuRow = row;

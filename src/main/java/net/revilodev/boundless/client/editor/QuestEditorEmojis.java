@@ -65,7 +65,17 @@ public final class QuestEditorEmojis {
     public static ResourceLocation texture(String name) {
         names();
         ResourceLocation texture = cachedTextures.get(name);
-        return texture == null ? ResourceLocation.fromNamespaceAndPath("boundless", RESOURCE_PATH + "/" + name + ".png") : texture;
+        if (texture != null) return texture;
+        String cachedName = normalizeCachedName(name);
+        texture = cachedTextures.get(cachedName);
+        if (texture != null) return texture;
+        String normalized = normalizeTextureName(name);
+        texture = cachedTextures.get(normalized);
+        if (texture != null) return texture;
+        ResourceLocation fallback = ResourceLocation.tryParse("boundless:" + RESOURCE_PATH + "/" + normalized + ".png");
+        return fallback == null
+                ? ResourceLocation.fromNamespaceAndPath("boundless", RESOURCE_PATH + "/emojis.png")
+                : fallback;
     }
     public static int glyphSize() { return GLYPH_SIZE; }
     public static String text(String name) { return ":" + name + ":"; }
@@ -131,5 +141,20 @@ public final class QuestEditorEmojis {
         if (start < 0 && path.startsWith("textures/emoji/")) start = "textures/emoji/".length();
         if (start < 0 || !path.endsWith(".png")) return "";
         return path.substring(start, path.length() - 4);
+    }
+
+    private static String normalizeTextureName(String name) {
+        String normalized = normalizeCachedName(name);
+        while (normalized.endsWith(".png")) normalized = normalized.substring(0, normalized.length() - 4);
+        int namespaceSeparator = normalized.indexOf(':');
+        if (namespaceSeparator >= 0) normalized = normalized.substring(namespaceSeparator + 1);
+        normalized = normalized.replaceAll("[^a-z0-9_./-]", "_").replaceAll("^/+", "");
+        return normalized.isBlank() ? "emojis" : normalized;
+    }
+
+    private static String normalizeCachedName(String name) {
+        String normalized = name == null ? "" : name.trim();
+        if (normalized.startsWith(ICON_PREFIX)) normalized = normalized.substring(ICON_PREFIX.length());
+        return normalized.replace('\\', '/').toLowerCase(Locale.ROOT);
     }
 }

@@ -89,6 +89,11 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private int stickerDragOffsetX;
     private int stickerDragOffsetY;
     private boolean draggedStickerMoved;
+    private int resizingStickerIndex = -1;
+    private float resizeStartScale;
+    private double resizeStartDistance;
+    private double resizeCenterX;
+    private double resizeCenterY;
     private int lastStickerClickIndex = -1;
     private long lastStickerClickMs;
 
@@ -147,6 +152,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         draggedQuest = null;
         draggedQuestMoved = false;
         draggedStickerIndex = -1;
+        resizingStickerIndex = -1;
         draggedStickerMoved = false;
         if (this.tool != Tool.MOVE) selectedStickerIndex = -1;
         draggingCanvas = false;
@@ -205,12 +211,18 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private void renderStickers(GuiGraphics gg) {
         for (int index = 0; index < stickers.size(); index++) {
             QuestData.Sticker sticker = stickers.get(index);
-            if (tool == Tool.MOVE && index == selectedStickerIndex) drawStickerSelection(gg, sticker);
+            gg.pose().pushPose();
             if ("icon".equals(sticker.type())) {
-                QuestEditorItemIcons.renderIcon(gg, sticker.value(), sticker.x() - 8, sticker.y() - 8);
+                gg.pose().translate(sticker.x(), sticker.y(), 0);
+                gg.pose().scale(sticker.scale(), sticker.scale(), 1f);
+                QuestEditorItemIcons.renderIcon(gg, sticker.value(), -8, -8);
             } else {
-                QuestStickerTextRenderer.render(gg, minecraft.font, sticker.value(), sticker.x(), sticker.y());
+                gg.pose().translate(sticker.x(), sticker.y(), 0);
+                gg.pose().scale(sticker.scale(), sticker.scale(), 1f);
+                QuestStickerTextRenderer.render(gg, minecraft.font, sticker.value(), 0, 0);
             }
+            gg.pose().popPose();
+            if (tool == Tool.MOVE && index == selectedStickerIndex) drawStickerSelection(gg, sticker);
         }
     }
 
@@ -219,21 +231,24 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         int top;
         int right;
         int bottom;
-        if ("icon".equals(sticker.type())) {
-            left = sticker.x() - 10;
-            top = sticker.y() - 10;
-            right = sticker.x() + 10;
-            bottom = sticker.y() + 10;
-        } else {
-            left = sticker.x() - 2;
-            top = sticker.y() - 2;
-            right = sticker.x() + QuestStickerTextRenderer.width(minecraft.font, sticker.value()) + 2;
-            bottom = sticker.y() + QuestStickerTextRenderer.height(minecraft.font, sticker.value()) + 2;
-        }
+        float[] bounds = stickerBounds(sticker);
+        left = Mth.floor(bounds[0]) - 2;
+        top = Mth.floor(bounds[1]) - 2;
+        right = Mth.ceil(bounds[2]) + 2;
+        bottom = Mth.ceil(bounds[3]) + 2;
         gg.fill(left, top, right, top + 1, 0xFFFFFFFF);
         gg.fill(left, bottom - 1, right, bottom, 0xFFFFFFFF);
         gg.fill(left, top, left + 1, bottom, 0xFFFFFFFF);
         gg.fill(right - 1, top, right, bottom, 0xFFFFFFFF);
+        drawResizeHandle(gg, left, top);
+        drawResizeHandle(gg, right - 3, top);
+        drawResizeHandle(gg, left, bottom - 3);
+        drawResizeHandle(gg, right - 3, bottom - 3);
+    }
+
+    private void drawResizeHandle(GuiGraphics gg, int x, int y) {
+        gg.fill(x, y, x + 3, y + 3, 0xFF000000);
+        gg.fill(x + 1, y + 1, x + 2, y + 2, 0xFFFFFFFF);
     }
 
     private void renderStickerMenu(GuiGraphics gg, int mouseX, int mouseY) {
@@ -355,6 +370,19 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         if (button != 0) return false;
         if (handleZoomClick(mouseX, mouseY)) return true;
 
+        if (tool == Tool.MOVE && selectedStickerIndex >= 0 && resizeHandleContains(selectedStickerIndex, mouseX, mouseY)) {
+            QuestData.Sticker sticker = stickers.get(selectedStickerIndex);
+            float[] bounds = stickerBounds(sticker);
+            resizingStickerIndex = selectedStickerIndex;
+            draggedStickerIndex = -1;
+            resizeCenterX = (bounds[0] + bounds[2]) / 2d;
+            resizeCenterY = (bounds[1] + bounds[3]) / 2d;
+            resizeStartDistance = Math.max(1d, Math.hypot(canvasX(mouseX) - resizeCenterX, canvasY(mouseY) - resizeCenterY));
+            resizeStartScale = sticker.scale();
+            draggedStickerMoved = false;
+            return true;
+        }
+
         int clickedStickerIndex = stickerAt(mouseX, mouseY);
         if (clickedStickerIndex >= 0 && tool != Tool.DELETE && tool != Tool.CONNECT && tool != Tool.CREATE) {
             QuestData.Sticker sticker = stickers.get(clickedStickerIndex);
@@ -473,7 +501,19 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             int nextY = canvasNodeY(mouseY) - stickerDragOffsetY;
             if (nextX != sticker.x() || nextY != sticker.y()) {
                 List<QuestData.Sticker> updated = new ArrayList<>(stickers);
-                updated.set(draggedStickerIndex, new QuestData.Sticker(sticker.type(), sticker.value(), nextX, nextY));
+                updated.set(draggedStickerIndex, new QuestData.Sticker(sticker.type(), sticker.value(), nextX, nextY, sticker.scale()));
+                stickers = List.copyOf(updated);
+                draggedStickerMoved = true;
+            }
+            return true;
+        }
+        if (tool == Tool.MOVE && resizingStickerIndex >= 0 && resizingStickerIndex < stickers.size()) {
+            QuestData.Sticker sticker = stickers.get(resizingStickerIndex);
+            double distance = Math.hypot(canvasX(mouseX) - resizeCenterX, canvasY(mouseY) - resizeCenterY);
+            float nextScale = Mth.clamp((float) (resizeStartScale * distance / resizeStartDistance), 0.25f, 4f);
+            if (Math.abs(nextScale - sticker.scale()) > 0.001f) {
+                List<QuestData.Sticker> updated = new ArrayList<>(stickers);
+                updated.set(resizingStickerIndex, new QuestData.Sticker(sticker.type(), sticker.value(), sticker.x(), sticker.y(), nextScale));
                 stickers = List.copyOf(updated);
                 draggedStickerMoved = true;
             }
@@ -510,6 +550,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         draggedQuest = null;
         draggedQuestMoved = false;
         draggedStickerIndex = -1;
+        resizingStickerIndex = -1;
         draggedStickerMoved = false;
         draggingCanvas = false;
         return true;
@@ -614,17 +655,37 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         double canvasY = canvasY(mouseY);
         for (int index = stickers.size() - 1; index >= 0; index--) {
             QuestData.Sticker sticker = stickers.get(index);
-            if ("icon".equals(sticker.type())) {
-                if (canvasX >= sticker.x() - 8 && canvasX <= sticker.x() + 8
-                        && canvasY >= sticker.y() - 8 && canvasY <= sticker.y() + 8) return index;
-            } else {
-                int width = QuestStickerTextRenderer.width(minecraft.font, sticker.value());
-                int height = QuestStickerTextRenderer.height(minecraft.font, sticker.value());
-                if (canvasX >= sticker.x() && canvasX <= sticker.x() + width
-                        && canvasY >= sticker.y() && canvasY <= sticker.y() + height) return index;
-            }
+            float[] bounds = stickerBounds(sticker);
+            if (canvasX >= bounds[0] && canvasX <= bounds[2]
+                    && canvasY >= bounds[1] && canvasY <= bounds[3]) return index;
         }
         return -1;
+    }
+
+    private float[] stickerBounds(QuestData.Sticker sticker) {
+        if ("icon".equals(sticker.type())) {
+            float radius = 8f * sticker.scale();
+            return new float[]{sticker.x() - radius, sticker.y() - radius, sticker.x() + radius, sticker.y() + radius};
+        }
+        float width = QuestStickerTextRenderer.width(minecraft.font, sticker.value()) * sticker.scale();
+        float height = QuestStickerTextRenderer.height(minecraft.font, sticker.value()) * sticker.scale();
+        return new float[]{sticker.x(), sticker.y(), sticker.x() + width, sticker.y() + height};
+    }
+
+    private boolean resizeHandleContains(int index, double mouseX, double mouseY) {
+        if (index < 0 || index >= stickers.size()) return false;
+        float[] bounds = stickerBounds(stickers.get(index));
+        double x = canvasX(mouseX);
+        double y = canvasY(mouseY);
+        float tolerance = 5f / Math.max(0.15f, zoom);
+        return nearCorner(x, y, bounds[0], bounds[1], tolerance)
+                || nearCorner(x, y, bounds[2], bounds[1], tolerance)
+                || nearCorner(x, y, bounds[0], bounds[3], tolerance)
+                || nearCorner(x, y, bounds[2], bounds[3], tolerance);
+    }
+
+    private boolean nearCorner(double x, double y, float cornerX, float cornerY, float tolerance) {
+        return Math.abs(x - cornerX) <= tolerance && Math.abs(y - cornerY) <= tolerance;
     }
 
     private DependencyEdge edgeAt(double mouseX, double mouseY) {

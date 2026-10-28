@@ -72,15 +72,17 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
 
         selectedCategory = lastSelectedCategory;
-        int maxPanelWidth = Math.max(96, (this.width - 49) / 2);
         boolean expandTree = expanded && usesTreeView();
-        panelWidth = Math.min(expandTree ? 220 : 147, maxPanelWidth);
-        detailsPanelWidth = Math.min(expanded ? 220 : 147, maxPanelWidth);
+        detailsPanelWidth = Math.min(147, Math.max(96, (this.width - 49) / 2));
+        int maxTreeWidth = Math.max(96, this.width - 49 - detailsPanelWidth - 4);
+        panelWidth = Math.min(expandTree ? 220 : 147, maxTreeWidth);
         panelHeight = Math.min(166, Math.max(120, this.height - 16));
 
         int cy = this.height / 2;
 
-        leftX = (this.width - panelWidth - detailsPanelWidth - 4) / 2;
+        int tabsWidth = Config.disableCategories() ? 0 : 41;
+        int fullWidth = tabsWidth + panelWidth + detailsPanelWidth + 4;
+        leftX = Math.max(tabsWidth + 2, (this.width - fullWidth) / 2 + tabsWidth);
         rightX = leftX + panelWidth + 4;
         topY = cy - panelHeight / 2;
 
@@ -99,6 +101,11 @@ public final class StandaloneQuestBookScreen extends Screen {
             refreshTree();
             showingDetails = false;
             selectedQuest = null;
+            if (expanded && !usesTreeView()) {
+                expanded = false;
+                resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
+                return;
+            }
             updateVisibility();
         });
         if (!Config.disableCategories()) {
@@ -164,7 +171,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             if (!canAccessSettings()) return;
             minecraft.setScreen(new QuestSettingsScreen(this));
         });
-        expandButton = new QuestPanelExpandButton(leftX + panelWidth - 50, topY + 11, () -> expanded, () -> {
+        expandButton = new QuestPanelExpandButton(leftX + panelWidth - 49, topY + 11, () -> expanded, () -> {
             expanded = !expanded;
             resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
         });
@@ -276,6 +283,11 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
 
         showingDetails = false;
+        if (expanded && !usesTreeView()) {
+            expanded = false;
+            resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
+            return;
+        }
         updateVisibility();
     }
 
