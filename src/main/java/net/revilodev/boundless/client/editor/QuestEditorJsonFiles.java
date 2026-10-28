@@ -113,6 +113,8 @@ public final class QuestEditorJsonFiles {
         data.autoComplete = optStringFlexible(obj, "auto_complete",
                 optStringFlexible(obj, "autoComplete", ""));
         data.background = optString(obj, "background", "");
+        data.backgroundDarkening = optStringFlexible(obj, "background_darkening", "false");
+        data.backgroundDarkeningOpacity = optStringFlexible(obj, "background_darkening_opacity", "0.45");
         return data;
     }
 
@@ -176,6 +178,7 @@ public final class QuestEditorJsonFiles {
         data.name = optString(obj, "name", "");
         data.icon = optString(obj, "icon", "");
         data.description = optString(obj, "description", "");
+        data.media = optString(obj, "media", "");
         data.category = optString(obj, "category", "");
         data.subCategory = optString(obj, "sub-category", optString(obj, "subCategory", ""));
         data.dependencies = formatDependenciesLines(obj.get("dependencies"));

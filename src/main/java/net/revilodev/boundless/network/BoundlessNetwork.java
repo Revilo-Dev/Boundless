@@ -1324,7 +1324,7 @@ public final class BoundlessNetwork {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
             String id = normalizeQuestPackFolderName(p.id());
-            if (id.isBlank()) return;
+            if (id.isBlank() || "boundless".equalsIgnoreCase(id)) return;
             pruneUploadSessions();
             if (p.totalParts() <= 0 || p.totalParts() > QuestPackTransfer.MAX_UPLOAD_PARTS) return;
             if (p.index() < 0 || p.index() >= p.totalParts()) return;

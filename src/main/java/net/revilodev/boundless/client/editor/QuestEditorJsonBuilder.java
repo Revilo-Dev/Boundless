@@ -13,7 +13,8 @@ public final class QuestEditorJsonBuilder {
 
     // build category
     public static JsonObject buildCategory(String id, String name, String icon, int order, String dependency,
-                                           boolean autoComplete, String background, Consumer<String> onError) {
+                                           boolean autoComplete, String background, boolean backgroundDarkening,
+                                           float backgroundDarkeningOpacity, Consumer<String> onError) {
         String categoryId = safe(id).trim();
         if (categoryId.isBlank()) {
             setError(onError, "Category id required");
@@ -27,6 +28,8 @@ public final class QuestEditorJsonBuilder {
         addOptional(obj, "dependency", dependency);
         obj.addProperty("auto_complete", autoComplete);
         addOptional(obj, "background", background);
+        obj.addProperty("background_darkening", backgroundDarkening);
+        obj.addProperty("background_darkening_opacity", Math.max(0f, Math.min(1f, backgroundDarkeningOpacity)));
         return obj;
     }
 
@@ -75,6 +78,7 @@ public final class QuestEditorJsonBuilder {
         addOptional(obj, "name", nameRaw);
         addOptional(obj, "icon", fields.icon);
         addOptional(obj, "description", fields.description);
+        addOptional(obj, "media", fields.media);
         addOptional(obj, "category", categoryRaw);
         addOptional(obj, "sub-category", fields.subCategory);
         obj.addProperty("optional", fields.optional);
@@ -148,6 +152,7 @@ public final class QuestEditorJsonBuilder {
         public String name = "";
         public String icon = "";
         public String description = "";
+        public String media = "";
         public String category = "";
         public String subCategory = "";
         public boolean optional;

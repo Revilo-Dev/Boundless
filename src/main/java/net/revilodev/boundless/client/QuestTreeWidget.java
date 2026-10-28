@@ -144,11 +144,17 @@ public final class QuestTreeWidget extends AbstractWidget {
 
     private void renderStickers(GuiGraphics gg) {
         for (QuestData.Sticker sticker : stickers) {
+            gg.pose().pushPose();
             if ("icon".equals(sticker.type())) {
-                QuestEditorItemIcons.renderIcon(gg, sticker.value(), sticker.x() - 8, sticker.y() - 8);
+                gg.pose().translate(sticker.x(), sticker.y(), 0);
+                gg.pose().scale(sticker.scale(), sticker.scale(), 1f);
+                QuestEditorItemIcons.renderIcon(gg, sticker.value(), -8, -8);
             } else {
-                QuestStickerTextRenderer.render(gg, minecraft.font, sticker.value(), sticker.x(), sticker.y());
+                gg.pose().translate(sticker.x(), sticker.y(), 0);
+                gg.pose().scale(sticker.scale(), sticker.scale(), 1f);
+                QuestStickerTextRenderer.render(gg, minecraft.font, sticker.value(), 0, 0);
             }
+            gg.pose().popPose();
         }
     }
 

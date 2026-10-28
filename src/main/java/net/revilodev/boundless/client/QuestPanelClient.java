@@ -103,6 +103,8 @@ public final class QuestPanelClient {
 
         st.bg = new PanelBackground(0, 0, st.panelWidth, st.panelHeight);
         e.addListener(st.bg);
+        st.detailsBg = new PanelBackground(0, 0, st.detailsPanelWidth, st.panelHeight);
+        e.addListener(st.detailsBg);
 
         st.list = new QuestListWidget(0, 0, st.panelWidth - 20, st.panelHeight - 20, q -> openDetails(st, q));
         st.list.setQuests(QuestData.all());
@@ -138,6 +140,7 @@ public final class QuestPanelClient {
             if (st.list != null) st.list.setCategory(id);
             refreshTree(st);
             st.showingDetails = false;
+            if (!usesTreeView(st)) st.expanded = false;
             relayoutPanel(inv, st);
         });
         if (!Config.disableCategories()) {
@@ -384,13 +387,20 @@ public final class QuestPanelClient {
         int screenW = inv.width;
         int invW = inv.getXSize();
         int tabsWidth = Config.disableCategories() ? 0 : 41;
-        int total = tabsWidth + st.panelWidth + 2 + invW;
-        return (screenW - total) / 2 + tabsWidth + st.panelWidth + 2;
+        int panelSpan = st.panelWidth + (detailsDocked(st) ? st.detailsPanelWidth + 2 : 0);
+        int total = tabsWidth + panelSpan + 2 + invW;
+        int centered = (screenW - total) / 2 + tabsWidth + panelSpan + 2;
+        return Math.min(screenW - invW, Math.max(panelSpan + tabsWidth + 2, centered));
     }
 
     // place the quest panel to the left of inventory
     private static int computePanelX(InventoryScreen inv, State st) {
-        return inv.getGuiLeft() - st.panelWidth - 2;
+        int dockedDetailsWidth = detailsDocked(st) ? st.detailsPanelWidth + 2 : 0;
+        return inv.getGuiLeft() - st.panelWidth - dockedDetailsWidth - 2;
+    }
+
+    private static int computeDetailsX(InventoryScreen inv, State st) {
+        return detailsDocked(st) ? computePanelX(inv, st) + st.panelWidth + 2 : computePanelX(inv, st);
     }
 
     // place category tabs beside the quest panel
@@ -403,8 +413,10 @@ public final class QuestPanelClient {
     }
 
     private static void updatePanelSize(InventoryScreen inv, State st) {
-        int maxWidth = Math.max(96, inv.width - inv.getXSize() - 49);
         float scale = Config.questBookScale();
+        st.detailsPanelWidth = Math.round(PANEL_W * scale);
+        int reservedDetails = detailsDocked(st) ? st.detailsPanelWidth + 2 : 0;
+        int maxWidth = Math.max(96, inv.width - inv.getXSize() - 49 - reservedDetails);
         int desiredWidth = Math.round((st.expanded ? 220 : PANEL_W) * scale);
         int desiredHeight = Math.round(PANEL_H * scale);
         st.panelWidth = Math.min(desiredWidth, maxWidth);
@@ -442,6 +454,9 @@ public final class QuestPanelClient {
         int ph = st.panelHeight - 20;
 
         if (st.bg != null) st.bg.setBounds(bgx, bgy, st.panelWidth, st.panelHeight);
+        if (st.detailsBg != null) {
+            st.detailsBg.setBounds(computeDetailsX(inv, st), bgy, st.detailsPanelWidth, st.panelHeight);
+        }
 
         if (st.searchBox != null) {
             st.searchBox.setPosition(px, py);
@@ -461,7 +476,11 @@ public final class QuestPanelClient {
             refreshTree(st);
         }
         if (st.details != null) {
-            st.details.setBounds(px, py, pw, ph);
+            if (detailsDocked(st)) {
+                st.details.setBounds(computeDetailsX(inv, st) + 10, py, st.detailsPanelWidth - 20, ph);
+            } else {
+                st.details.setBounds(px, py, pw, ph);
+            }
         }
 
         if (st.tabs != null) st.tabs.setBounds(computeTabsX(inv, st), bgy + 4, 44, st.panelHeight + 34);
@@ -490,7 +509,7 @@ public final class QuestPanelClient {
             st.settingsButton.setPosition(bgx - 22, bgy + st.panelHeight - st.settingsButton.getHeight());
         }
         if (st.expandButton != null && st.tree != null) {
-            st.expandButton.setPosition(st.tree.getX() + st.tree.getWidth() - 41, st.tree.getY() + 3);
+            st.expandButton.setPosition(st.tree.getX() + st.tree.getWidth() - 40, st.tree.getY() + 3);
         }
     }
 
@@ -570,6 +589,7 @@ public final class QuestPanelClient {
         if (st.details == null) return;
         st.details.setQuest(quest);
         st.showingDetails = true;
+        if (!usesTreeView(st)) st.expanded = false;
         relayoutPanel(st.inv, st);
     }
 
@@ -624,6 +644,10 @@ public final class QuestPanelClient {
         return false;
     }
 
+    private static boolean detailsDocked(State st) {
+        return st != null && st.expanded && st.showingDetails && usesTreeView(st);
+    }
+
     // return from quest details to the quest list
     private static void closeDetails(State st) {
         st.showingDetails = false;
@@ -634,7 +658,7 @@ public final class QuestPanelClient {
     private static void updateVisibility(State st) {
         boolean treeView = usesTreeView(st);
         boolean listVisible = st.open && !st.showingDetails && !treeView;
-        boolean treeVisible = st.open && !st.showingDetails && treeView;
+        boolean treeVisible = st.open && treeView && (!st.showingDetails || st.expanded);
         boolean detailsVisible = st.open && st.showingDetails;
 
         if (st.bg != null) {
@@ -697,6 +721,11 @@ public final class QuestPanelClient {
             boolean showFilters = st.open && !Config.hideFilters();
             st.filter.visible = showFilters;
             st.filter.active = showFilters;
+        }
+        if (st.detailsBg != null) {
+            boolean showDetailsBackground = detailsVisible && detailsDocked(st);
+            st.detailsBg.visible = showDetailsBackground;
+            st.detailsBg.active = false;
         }
         if (st.settingsButton != null) {
             boolean canAccessSettings = canAccessSettings();
@@ -807,6 +836,7 @@ public final class QuestPanelClient {
         SettingsButton settingsButton;
         QuestPanelExpandButton expandButton;
         PanelBackground bg;
+        PanelBackground detailsBg;
         QuestListWidget list;
         QuestTreeWidget tree;
         QuestDetailsPanel details;
@@ -817,6 +847,7 @@ public final class QuestPanelClient {
         boolean showingDetails;
         boolean expanded;
         int panelWidth = PANEL_W;
+        int detailsPanelWidth = PANEL_W;
         int panelHeight = PANEL_H;
         boolean open;
         Integer originalLeft;

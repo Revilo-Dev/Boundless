@@ -52,7 +52,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
     private static final float CONTROL_ICON_SCALE = 1.0f;
     private static final int CONTROL_ICON = (int) (CONTROL_ICON_BASE * CONTROL_ICON_SCALE);
     private static final int CONTROL_GAP = 3;
-    private static final int CONTROL_X_SHIFT = -2;
+    private static final int CONTROL_X_SHIFT = 3;
 
     private final Minecraft mc = Minecraft.getInstance();
 

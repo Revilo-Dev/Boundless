@@ -19,8 +19,10 @@ import java.util.function.Consumer;
 public final class StickerTextEditorScreen extends Screen {
     private static final ResourceLocation EMOJI_GUI = ResourceLocation.fromNamespaceAndPath(
             "boundless", "textures/gui/sprites/editor/emoji-gui.png");
-    private static final int PANEL_WIDTH = 360;
-    private static final int PANEL_HEIGHT = 170;
+    private static final ResourceLocation PANEL_GUI = ResourceLocation.fromNamespaceAndPath(
+            "boundless", "textures/gui/20x20-9-slice.png");
+    private static final int PANEL_WIDTH = 280;
+    private static final int PANEL_HEIGHT = 132;
     private static final int EMOJI_WIDTH = 81;
     private static final int EMOJI_HEIGHT = 112;
     private static final int EMOJI_COLUMNS = 4;
@@ -47,9 +49,9 @@ public final class StickerTextEditorScreen extends Screen {
         formatButtons.clear();
         panelX = (width - PANEL_WIDTH) / 2;
         panelY = (height - PANEL_HEIGHT) / 2;
-        int textX = panelX + 10;
-        int textWidth = 249;
-        textBox = new ScaledMultiLineEditBox(font, textX, panelY + 25, textWidth, 70,
+        int textX = panelX + 7;
+        int textWidth = 181;
+        textBox = new ScaledMultiLineEditBox(font, textX, panelY + 17, textWidth, 48,
                 Component.literal("Sticker text"), Component.empty(), 0.85f, true);
         textBox.setCharacterLimit(1024);
         textBox.setValue(initialText);
@@ -57,7 +59,7 @@ public final class StickerTextEditorScreen extends Screen {
         addRenderableWidget(textBox);
 
         int x = textX;
-        int y = panelY + 101;
+        int y = panelY + 70;
         x = addFormatButton(x, y, 12, "<", "__undo__", 0xFF4A4A4A, 0.75f);
         x = addFormatButton(x, y, 12, ">", "__redo__", 0xFF4A4A4A, 0.75f);
         x = addFormatButton(x, y, 12, "X", "/x", 0xFF4A4A4A, 0.75f);
@@ -75,9 +77,9 @@ public final class StickerTextEditorScreen extends Screen {
         addFormatButton(x, y, 12, "H", "/h", 0xFF777733, 0.75f);
 
         addRenderableWidget(Button.builder(Component.literal("Save"), button -> save())
-                .bounds(textX, panelY + 137, 118, 20).build());
+                .bounds(textX, panelY + 99, 86, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> onClose())
-                .bounds(textX + 131, panelY + 137, 118, 20).build());
+                .bounds(textX + 95, panelY + 99, 86, 20).build());
     }
 
     private int addFormatButton(int x, int y, int width, String label, String action, int color, float scale) {
@@ -100,11 +102,17 @@ public final class StickerTextEditorScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    }
+
+    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (parent != null) parent.render(graphics, mouseX, mouseY, partialTick);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 700);
         graphics.fill(0, 0, width, height, 0xA0000000);
-        graphics.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xFFFFFFFF);
-        graphics.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT - 1, 0xFF242424);
-        graphics.drawString(font, title, panelX + 10, panelY + 9, 0xFFFFFFFF, false);
+        renderNineSlice(graphics, panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT);
+        graphics.drawString(font, title, panelX + 7, panelY + 5, 0xFF000000, false);
         renderEmojiPanel(graphics);
         for (TextInsertButton button : formatButtons) {
             String action = button.insertText();
@@ -112,11 +120,27 @@ public final class StickerTextEditorScreen extends Screen {
             if ("__redo__".equals(action)) button.active = textBox.canRedo();
         }
         super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.pose().popPose();
+    }
+
+    private void renderNineSlice(GuiGraphics graphics, int x, int y, int width, int height) {
+        int slice = 5;
+        int center = 10;
+        graphics.blit(PANEL_GUI, x, y, 0, 0, slice, slice, 20, 20);
+        graphics.blit(PANEL_GUI, x + width - slice, y, 15, 0, slice, slice, 20, 20);
+        graphics.blit(PANEL_GUI, x, y + height - slice, 0, 15, slice, slice, 20, 20);
+        graphics.blit(PANEL_GUI, x + width - slice, y + height - slice, 15, 15, slice, slice, 20, 20);
+        graphics.blit(PANEL_GUI, x + slice, y, width - slice * 2, slice, slice, 0, center, slice, 20, 20);
+        graphics.blit(PANEL_GUI, x + slice, y + height - slice, width - slice * 2, slice, slice, 15, center, slice, 20, 20);
+        graphics.blit(PANEL_GUI, x, y + slice, slice, height - slice * 2, 0, slice, slice, center, 20, 20);
+        graphics.blit(PANEL_GUI, x + width - slice, y + slice, slice, height - slice * 2, 15, slice, slice, center, 20, 20);
+        graphics.blit(PANEL_GUI, x + slice, y + slice, width - slice * 2, height - slice * 2,
+                slice, slice, center, center, 20, 20);
     }
 
     private void renderEmojiPanel(GuiGraphics graphics) {
-        int x = panelX + PANEL_WIDTH - EMOJI_WIDTH - 10;
-        int y = panelY + 25;
+        int x = panelX + PANEL_WIDTH - EMOJI_WIDTH - 5;
+        int y = panelY + 15;
         graphics.blit(EMOJI_GUI, x, y, 0, 0, EMOJI_WIDTH, EMOJI_HEIGHT, EMOJI_WIDTH, EMOJI_HEIGHT);
         graphics.drawCenteredString(font, Component.literal("Emojis"), x + EMOJI_WIDTH / 2, y + 1, 0xFFFFFFFF);
         List<String> emojis = QuestEditorEmojis.names();
@@ -139,8 +163,8 @@ public final class StickerTextEditorScreen extends Screen {
     }
 
     private boolean clickEmojiPanel(double mouseX, double mouseY) {
-        int x = panelX + PANEL_WIDTH - EMOJI_WIDTH - 10;
-        int y = panelY + 25;
+        int x = panelX + PANEL_WIDTH - EMOJI_WIDTH - 5;
+        int y = panelY + 15;
         if (mouseX < x || mouseX >= x + EMOJI_WIDTH || mouseY < y || mouseY >= y + EMOJI_HEIGHT) return false;
         List<String> emojis = QuestEditorEmojis.names();
         int maxPage = Math.max(0, (emojis.size() - 1) / (EMOJI_COLUMNS * EMOJI_ROWS));

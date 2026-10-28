@@ -193,6 +193,15 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> DEV_MODE =
             BUILDER.comment("Enables Boundless development performance diagnostics. Keep false during normal play.")
                     .define("devMode", false);
+    public static final ModConfigSpec.ConfigValue<Boolean> DEBUG_QUEST_LOADING =
+            BUILDER.comment("Logs questpack discovery, parsing, reload, and evaluation timings while devMode is enabled.")
+                    .define("debugQuestLoading", true);
+    public static final ModConfigSpec.ConfigValue<Boolean> DEBUG_UI_PERFORMANCE =
+            BUILDER.comment("Logs slow quest book and editor UI frames while devMode is enabled.")
+                    .define("debugUiPerformance", true);
+    public static final ModConfigSpec.ConfigValue<Boolean> DEBUG_NETWORK_TRANSFERS =
+            BUILDER.comment("Logs questpack upload, download, and synchronization diagnostics while devMode is enabled.")
+                    .define("debugNetworkTransfers", true);
     static {
         BUILDER.pop();
     }
@@ -231,6 +240,18 @@ public final class Config {
 
     public static boolean devMode() {
         return DEV_MODE.get();
+    }
+
+    public static boolean debugQuestLoading() {
+        return DEBUG_QUEST_LOADING.get();
+    }
+
+    public static boolean debugUiPerformance() {
+        return DEBUG_UI_PERFORMANCE.get();
+    }
+
+    public static boolean debugNetworkTransfers() {
+        return DEBUG_NETWORK_TRANSFERS.get();
     }
 
     public static List<? extends String> disabledCategories() {

@@ -515,7 +515,7 @@ public final class QuestSettingsScreen extends Screen {
         int btnY = py + ph - 20;
         backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
         resetConfigButton = new HoldResetButton(px + 2, btnY, pw - 4, 20, () -> tr(configTab == ConfigTab.ALL ? "reset.all" : "reset.current"), this::resetCurrentConfigTab);
-        debugButton = new DebugButton(width - 14, height - 16);
+        debugButton = new DebugButton(leftX + PANEL_W - 14, topY + PANEL_H - 16);
 
         addRenderableWidget(backButton);
         addRenderableWidget(resetConfigButton);
@@ -989,7 +989,14 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void renderVersionFooter(GuiGraphics graphics) {
-        graphics.drawString(font, versionLabel(), 4, height - font.lineHeight - 3, 0xFFAAAAAA, false);
+        String label = versionLabel();
+        int availableWidth = PANEL_W - 22;
+        float scale = Math.min(1f, availableWidth / (float) Math.max(1, font.width(label)));
+        graphics.pose().pushPose();
+        graphics.pose().translate(leftX + 5, topY + PANEL_H - font.lineHeight * scale - 3, 0);
+        graphics.pose().scale(scale, scale, 1f);
+        graphics.drawString(font, label, 0, 0, 0xFFAAAAAA, false);
+        graphics.pose().popPose();
     }
 
     private String versionLabel() {
@@ -1490,7 +1497,9 @@ public final class QuestSettingsScreen extends Screen {
             graphics.blit(texture, getX(), getY(), 0, 0, 10, 13, 10, 13);
             if (isMouseOver(mouseX, mouseY)) {
                 graphics.renderTooltip(Minecraft.getInstance().font,
-                        Component.literal(Config.devMode() ? "Disable debug mode" : "Enable debug mode"), mouseX, mouseY);
+                        Component.literal(Config.devMode()
+                                ? "Disable debug diagnostics"
+                                : "Enable quest, UI, and network diagnostics"), mouseX, mouseY - 12);
             }
         }
 
