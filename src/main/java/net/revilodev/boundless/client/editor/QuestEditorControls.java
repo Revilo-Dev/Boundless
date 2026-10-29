@@ -19,6 +19,7 @@ import java.util.function.Function;
 import net.minecraft.world.item.ItemStack;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EditorEntry;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EditorEntryKind;
+import net.revilodev.boundless.client.QuestSubCategoryHeaderRenderer;
 import net.revilodev.boundless.client.editor.QuestEditorModels.MoveDirection;
 
 // shared editor button controls
@@ -65,8 +66,6 @@ public final class QuestEditorControls {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_up_highlighted.png");
     private static final ResourceLocation MOVE_DOWN_HIGHLIGHTED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_down_highlighted.png");
-    private static final ResourceLocation EDITOR_SUBHEADER_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
     private static final int ROW_H = 27;
     private static final int ROW_PAD = 1;
     private static final int LIST_CREATE_BUTTON_W = 127;
@@ -77,9 +76,6 @@ public final class QuestEditorControls {
     private static final int MOVE_ICON_BOTTOM_OFFSET = 13;
     private static final int EDITOR_SUBHEADER_H = 12;
     private static final int EDITOR_SUBHEADER_GAP = 3;
-    private static final int EDITOR_SUBHEADER_TEX_W = 72;
-    private static final int EDITOR_SUBHEADER_TEX_H = 10;
-    private static final int EDITOR_SUBHEADER_SLICE = 3;
     private static final String ENTRY_NEW = "__new__";
 
     private QuestEditorControls() {
@@ -530,7 +526,7 @@ public final class QuestEditorControls {
                     } else {
                         gg.pose().pushPose();
                         gg.pose().translate(0, 0, 200);
-                        renderSubheaderBackground(gg, getX(), top, width, rowH);
+                        QuestSubCategoryHeaderRenderer.renderBackground(gg, getX(), top, width, rowH);
                         float iconScale = 0.45f;
                         int iconSize = (int) (16 * iconScale);
                         int iconX = getX() + 2;
@@ -547,7 +543,7 @@ public final class QuestEditorControls {
 
                         float textScale = 0.66f;
                         boolean collapsed = entry.label != null && entry.label.startsWith("+ ");
-                        String marker = collapsed ? "+" : "=";
+                        String marker = collapsed ? "+" : "-";
                         String name = entry.label == null ? "" : entry.label.substring(Math.min(2, entry.label.length()));
                         textX = iconX + textIconSize + 2;
                         int textH = (int) (Minecraft.getInstance().font.lineHeight * textScale);
@@ -558,12 +554,11 @@ public final class QuestEditorControls {
                         if (Minecraft.getInstance().font.width(name) > maxWUnscaled) {
                             name = Minecraft.getInstance().font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - Minecraft.getInstance().font.width("..."))) + "...";
                         }
-                        if (entry.kind == EditorEntryKind.CATEGORY_HEADER) {
-                            drawScaledComponent(gg, Component.literal(name).withStyle(style -> style.withBold(true)), textScale, textX, textY, 0xFFFFFF);
-                        } else {
-                            drawScaledString(gg, name, textScale, textX, textY, 0xD0D0D0);
-                        }
-                        drawScaledString(gg, marker, textScale, markerX, textY, 0xD0D0D0);
+                        int headerColor = entry.kind == EditorEntryKind.CATEGORY_HEADER ? 0xFFFFFF : 0xD0D0D0;
+                        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, Minecraft.getInstance().font,
+                                name, textScale, textX, textY, headerColor);
+                        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, Minecraft.getInstance().font,
+                                marker, textScale, markerX, textY, headerColor);
                         gg.pose().popPose();
                         yCursor += rowH + rowGap;
                         continue;
@@ -637,19 +632,6 @@ public final class QuestEditorControls {
                 int barY = getY() + (int) ((height - barH) * scrollRatio);
                 gg.fill(getX() + width + 4, barY, getX() + width + 6, barY + barH, 0xFF808080);
             }
-        }
-
-        private void renderSubheaderBackground(GuiGraphics graphics, int x, int y, int width, int height) {
-            int textureY = y + (height - EDITOR_SUBHEADER_TEX_H) / 2;
-            graphics.blit(EDITOR_SUBHEADER_TEX, x, textureY, 0, 0, EDITOR_SUBHEADER_SLICE,
-                    EDITOR_SUBHEADER_TEX_H, EDITOR_SUBHEADER_TEX_W, EDITOR_SUBHEADER_TEX_H);
-            for (int offset = EDITOR_SUBHEADER_SLICE; offset < width - EDITOR_SUBHEADER_SLICE; offset++) {
-                graphics.blit(EDITOR_SUBHEADER_TEX, x + offset, textureY, EDITOR_SUBHEADER_SLICE, 0, 1,
-                        EDITOR_SUBHEADER_TEX_H, EDITOR_SUBHEADER_TEX_W, EDITOR_SUBHEADER_TEX_H);
-            }
-            graphics.blit(EDITOR_SUBHEADER_TEX, x + width - EDITOR_SUBHEADER_SLICE, textureY,
-                    EDITOR_SUBHEADER_TEX_W - EDITOR_SUBHEADER_SLICE, 0, EDITOR_SUBHEADER_SLICE,
-                    EDITOR_SUBHEADER_TEX_H, EDITOR_SUBHEADER_TEX_W, EDITOR_SUBHEADER_TEX_H);
         }
 
         private void blitQuestWidget(GuiGraphics gg, ResourceLocation texture, int x, int y, int w, int h, boolean hovered) {
@@ -738,13 +720,5 @@ public final class QuestEditorControls {
             gg.pose().popPose();
         }
 
-        private void drawScaledComponent(GuiGraphics gg, Component text, float scale, int x, int y, int color) {
-            if (text == null) return;
-            gg.pose().pushPose();
-            gg.pose().scale(scale, scale, 1f);
-            float inv = 1f / scale;
-            gg.drawString(Minecraft.getInstance().font, text, (int) (x * inv), (int) (y * inv), color, false);
-            gg.pose().popPose();
-        }
     }
 }

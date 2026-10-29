@@ -169,10 +169,10 @@ public final class QuestEditorPackFiles {
         Path questsRoot = root.resolve("data").resolve("boundless").resolve("quests");
         Path materializedMarker = root.resolve(".boundless-workspace");
         try {
-            if (!Files.exists(materializedMarker)) {
+            if (!Files.exists(materializedMarker) || !containsCompleteBuiltinWorkspace(questsRoot)) {
                 copyBundledQuestFiles(questsRoot);
                 if (containsCompleteBuiltinWorkspace(questsRoot)) {
-                    Files.writeString(materializedMarker, "1\n", StandardCharsets.UTF_8);
+                    Files.writeString(materializedMarker, "2\n", StandardCharsets.UTF_8);
                 }
             }
             if (!Files.exists(packMetaPath(root))) {
@@ -191,8 +191,15 @@ public final class QuestEditorPackFiles {
         }
     }
 
+    private static boolean containsDirectQuestFiles(Path questsRoot) throws IOException {
+        if (!Files.isDirectory(questsRoot)) return false;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(questsRoot, "*.json")) {
+            return files.iterator().hasNext();
+        }
+    }
+
     private static boolean containsCompleteBuiltinWorkspace(Path questsRoot) throws IOException {
-        return containsQuestFiles(questsRoot)
+        return containsDirectQuestFiles(questsRoot)
                 && containsQuestFiles(questsRoot.resolve("categories"))
                 && containsQuestFiles(questsRoot.resolve("sub-category"));
     }
@@ -205,7 +212,7 @@ public final class QuestEditorPackFiles {
             Path modQuestDirectory = modFileInfo.getFile().findResource("data", "boundless", "quests");
             if (Files.isDirectory(modQuestDirectory)) copyQuestDirectory(modQuestDirectory, questsRoot);
         }
-        if (containsQuestFiles(questsRoot)) return;
+        if (containsCompleteBuiltinWorkspace(questsRoot)) return;
         ClassLoader loader = QuestEditorPackFiles.class.getClassLoader();
         Enumeration<URL> resources = loader.getResources(resourceDirectory);
         while (resources.hasMoreElements()) {
@@ -219,7 +226,7 @@ public final class QuestEditorPackFiles {
                 }
             }
         }
-        if (containsQuestFiles(questsRoot)) return;
+        if (containsCompleteBuiltinWorkspace(questsRoot)) return;
         URL codeSource = QuestEditorPackFiles.class.getProtectionDomain().getCodeSource().getLocation();
         if (codeSource != null && "file".equals(codeSource.getProtocol())) {
             Path source = Path.of(codeSource.toURI());

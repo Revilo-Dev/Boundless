@@ -244,6 +244,7 @@ public final class QuestEditorModels {
         public String dependency = "";
         public String autoComplete = "";
         public String background = "";
+        public String backgroundTileScale = "";
         public String backgroundDarkening = "";
         public String backgroundDarkeningOpacity = "";
     }
@@ -493,6 +494,8 @@ public final class QuestEditorModels {
         public String catIcon = "";
 
         public String catBackground = "";
+
+        public float catBackgroundTileScale = 0.5f;
 
         public boolean catBackgroundDarkening = false;
 

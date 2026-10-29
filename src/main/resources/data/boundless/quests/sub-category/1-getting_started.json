@@ -1,5 +1,8 @@
 {
   "id": "getting_started",
-  "icon":"minecraft:wooden_pickaxe",
-  "name": "Getting Started"
+  "category": "minecraft",
+  "icon": "minecraft:wooden_pickaxe",
+  "name": "Getting Started",
+  "order": 0,
+  "default_open": true
 }

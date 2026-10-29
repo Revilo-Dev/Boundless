@@ -924,6 +924,7 @@ public final class BoundlessNetwork {
             o.addProperty("autoComplete", c.autoComplete);
             o.addProperty("treeLayout", c.treeLayout);
             o.addProperty("background", c.background);
+            o.addProperty("backgroundTileScale", c.backgroundTileScale);
             o.addProperty("backgroundDarkening", c.backgroundDarkening);
             o.addProperty("backgroundDarkeningOpacity", c.backgroundDarkeningOpacity);
             JsonArray stickers = new JsonArray();

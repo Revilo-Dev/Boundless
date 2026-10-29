@@ -1,5 +1,8 @@
 {
   "id": "mid_game",
-  "icon":"minecraft:diamond",
-  "name": "Mid Game"
+  "category": "minecraft",
+  "icon": "minecraft:diamond",
+  "name": "Mid Game",
+  "order": 1,
+  "default_open": true
 }

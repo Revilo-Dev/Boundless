@@ -25,6 +25,7 @@ public final class QuestEditorEmojis {
     private static List<String> cachedNames;
     private static Set<String> cachedNameSet;
     private static Map<String, ResourceLocation> cachedTextures;
+    private static Map<String, Path> customFiles;
     private static final Set<ResourceLocation> CUSTOM_TEXTURES = new HashSet<>();
 
     private QuestEditorEmojis() {}
@@ -43,7 +44,7 @@ public final class QuestEditorEmojis {
                     if ("boundless".equals(texture.getNamespace())) discovered.putIfAbsent(name, texture);
                 });
         discoverCustomEmojis(discovered);
-        cachedTextures = Map.copyOf(discovered);
+        cachedTextures = discovered;
         cachedNames = discovered.keySet().stream()
                 .filter(name -> !name.startsWith("boundless:"))
                 .sorted(Comparator.naturalOrder())
@@ -64,13 +65,13 @@ public final class QuestEditorEmojis {
 
     public static ResourceLocation texture(String name) {
         names();
-        ResourceLocation texture = cachedTextures.get(name);
+        ResourceLocation texture = cachedTexture(name);
         if (texture != null) return texture;
         String cachedName = normalizeCachedName(name);
-        texture = cachedTextures.get(cachedName);
+        texture = cachedTexture(cachedName);
         if (texture != null) return texture;
         String normalized = normalizeTextureName(name);
-        texture = cachedTextures.get(normalized);
+        texture = cachedTexture(normalized);
         if (texture != null) return texture;
         ResourceLocation fallback = ResourceLocation.tryParse("boundless:" + RESOURCE_PATH + "/" + normalized + ".png");
         return fallback == null
@@ -89,6 +90,7 @@ public final class QuestEditorEmojis {
         cachedNames = null;
         cachedNameSet = null;
         cachedTextures = null;
+        customFiles = null;
     }
 
     public static Path directory() {
@@ -96,34 +98,53 @@ public final class QuestEditorEmojis {
     }
 
     private static void discoverCustomEmojis(Map<String, ResourceLocation> discovered) {
+        Map<String, Path> files = new LinkedHashMap<>();
         try {
             Files.createDirectories(directory());
             try (var paths = Files.walk(directory())) {
                 paths.filter(Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".png"))
                         .sorted(Comparator.comparing(Path::toString))
-                        .forEach(path -> loadCustomEmoji(path, discovered));
+                        .forEach(path -> indexCustomEmoji(path, discovered, files));
             }
+        } catch (Exception ignored) {
+        }
+        customFiles = files;
+    }
+
+    private static void indexCustomEmoji(Path path, Map<String, ResourceLocation> discovered, Map<String, Path> files) {
+        try {
+            String relative = directory().relativize(path).toString().replace('\\', '/');
+            String name = relative.substring(0, relative.length() - 4).toLowerCase(Locale.ROOT)
+                    .replaceAll("[^a-z0-9_./-]", "_");
+            discovered.put(name, null);
+            files.put(name, path);
         } catch (Exception ignored) {
         }
     }
 
-    private static void loadCustomEmoji(Path path, Map<String, ResourceLocation> discovered) {
+    private static ResourceLocation cachedTexture(String name) {
+        if (name == null || cachedTextures == null || !cachedTextures.containsKey(name)) return null;
+        ResourceLocation existing = cachedTextures.get(name);
+        if (existing != null) return existing;
+        Path path = customFiles == null ? null : customFiles.get(name);
+        if (path == null) return null;
         try (InputStream input = Files.newInputStream(path)) {
             NativeImage image = NativeImage.read(input);
             if (image.getWidth() != image.getHeight()) {
                 image.close();
-                return;
+                customFiles.remove(name);
+                return null;
             }
-            String relative = directory().relativize(path).toString().replace('\\', '/');
-            String name = relative.substring(0, relative.length() - 4).toLowerCase(Locale.ROOT)
-                    .replaceAll("[^a-z0-9_./-]", "_");
             ResourceLocation texture = Minecraft.getInstance().getTextureManager().register(
                     "boundless_custom_emoji/" + Integer.toHexString(path.toAbsolutePath().toString().hashCode()),
                     new DynamicTexture(image));
             CUSTOM_TEXTURES.add(texture);
-            discovered.put(name, texture);
+            cachedTextures.put(name, texture);
+            return texture;
         } catch (Exception ignored) {
+            customFiles.remove(name);
+            return null;
         }
     }
 

@@ -13,7 +13,8 @@ public final class QuestEditorJsonBuilder {
 
     // build category
     public static JsonObject buildCategory(String id, String name, String icon, int order, String dependency,
-                                           boolean autoComplete, String background, boolean backgroundDarkening,
+                                           boolean autoComplete, String background, float backgroundTileScale,
+                                           boolean backgroundDarkening,
                                            float backgroundDarkeningOpacity, Consumer<String> onError) {
         String categoryId = safe(id).trim();
         if (categoryId.isBlank()) {
@@ -28,6 +29,7 @@ public final class QuestEditorJsonBuilder {
         addOptional(obj, "dependency", dependency);
         obj.addProperty("auto_complete", autoComplete);
         addOptional(obj, "background", background);
+        obj.addProperty("background_tile_scale", Math.max(0.1f, Math.min(2f, backgroundTileScale)));
         obj.addProperty("background_darkening", backgroundDarkening);
         obj.addProperty("background_darkening_opacity", Math.max(0f, Math.min(1f, backgroundDarkeningOpacity)));
         return obj;

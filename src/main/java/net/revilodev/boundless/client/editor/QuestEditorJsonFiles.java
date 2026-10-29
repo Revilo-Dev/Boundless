@@ -113,6 +113,7 @@ public final class QuestEditorJsonFiles {
         data.autoComplete = optStringFlexible(obj, "auto_complete",
                 optStringFlexible(obj, "autoComplete", ""));
         data.background = optString(obj, "background", "");
+        data.backgroundTileScale = optStringFlexible(obj, "background_tile_scale", "0.5");
         data.backgroundDarkening = optStringFlexible(obj, "background_darkening", "false");
         data.backgroundDarkeningOpacity = optStringFlexible(obj, "background_darkening_opacity", "0.45");
         return data;

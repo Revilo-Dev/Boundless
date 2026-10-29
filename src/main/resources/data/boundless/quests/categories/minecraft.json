@@ -1,7 +1,10 @@
 {
   "id": "minecraft",
-  "icon":"minecraft:grass_block",
+  "icon": "minecraft:grass_block",
   "name": "Minecraft",
-  "order": "1",
-  "dependency": ""
+  "order": 0,
+  "auto_complete": false,
+  "background_tile_scale": 0.5,
+  "background_darkening": false,
+  "background_darkening_opacity": 0.45
 }

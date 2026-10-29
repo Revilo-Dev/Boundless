@@ -91,12 +91,6 @@ public final class Config {
     public static final ModConfigSpec.DoubleValue QUEST_ICON_SCALE =
             BUILDER.comment("Scales quest widget icons and quest detail panel icons. Range: 0.5 to 1.0.")
                     .defineInRange("questIconScale", 1.0D, 0.5D, 1.0D);
-    public static final ModConfigSpec.ConfigValue<Double> EDITOR_SCALE =
-            BUILDER.comment("Quest editor UI scale: 1.0, 1.25, 1.5, or 2.0.")
-                    .define("editorScale", 1.0D, Config::isUiScale);
-    public static final ModConfigSpec.ConfigValue<Double> QUEST_BOOK_SCALE =
-            BUILDER.comment("Quest book UI scale: 1.0, 1.25, 1.5, or 2.0.")
-                    .define("questBookScale", 1.0D, Config::isUiScale);
     // enableQuestSearchBox shows the quest search field
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
@@ -122,6 +116,34 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<String> DESCRIPTION_TEXT_COLOR =
             BUILDER.comment("Hex color used for quest description text when no inline color token overrides it. Example: CFCFCF")
                     .define("descriptionTextColor", "CFCFCF", Config::isHexColor);
+    public static final ModConfigSpec.ConfigValue<String> DESCRIPTION_TITLE_COLOR = colorConfig(
+            "descriptionTitleColor", "FFFFFF", "quest description titles");
+    public static final ModConfigSpec.ConfigValue<String> REQUIRES_TEXT_COLOR = colorConfig(
+            "requiresTextColor", "FF9F0F", "requirement headings");
+    public static final ModConfigSpec.ConfigValue<String> SUBMIT_TEXT_COLOR = colorConfig(
+            "submitTextColor", "1D9633", "submit and input headings");
+    public static final ModConfigSpec.ConfigValue<String> COLLECT_TEXT_COLOR = colorConfig(
+            "collectTextColor", "1D9633", "collect headings");
+    public static final ModConfigSpec.ConfigValue<String> KILL_TEXT_COLOR = colorConfig(
+            "killTextColor", "FF5555", "kill headings");
+    public static final ModConfigSpec.ConfigValue<String> EFFECT_TEXT_COLOR = colorConfig(
+            "effectTextColor", "55FFFF", "effect headings");
+    public static final ModConfigSpec.ConfigValue<String> ACHIEVE_TEXT_COLOR = colorConfig(
+            "achieveTextColor", "55FFFF", "advancement headings");
+    public static final ModConfigSpec.ConfigValue<String> OBSERVE_TEXT_COLOR = colorConfig(
+            "observeTextColor", "B46CFF", "observation headings");
+    public static final ModConfigSpec.ConfigValue<String> BIOME_TEXT_COLOR = colorConfig(
+            "biomeTextColor", "55CC55", "biome headings");
+    public static final ModConfigSpec.ConfigValue<String> DIMENSION_TEXT_COLOR = colorConfig(
+            "dimensionTextColor", "FF5555", "dimension headings");
+    public static final ModConfigSpec.ConfigValue<String> REWARD_TEXT_COLOR = colorConfig(
+            "rewardTextColor", "A8FFA8", "reward headings and entries");
+    public static final ModConfigSpec.ConfigValue<String> COMPLETED_TEXT_COLOR = colorConfig(
+            "completedTextColor", "55FF55", "completed objective text");
+    public static final ModConfigSpec.ConfigValue<String> INCOMPLETE_TEXT_COLOR = colorConfig(
+            "incompleteTextColor", "FF5555", "incomplete and invalid objective text");
+    public static final ModConfigSpec.ConfigValue<String> UNLOCK_TEXT_COLOR = colorConfig(
+            "unlockTextColor", "FFD700", "category unlock text");
     // enableDescriptionReadMore collapses long descriptions
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_DESCRIPTION_READ_MORE =
             BUILDER.comment("If true, long quest descriptions collapse behind a read-more toggle.")
@@ -481,20 +503,6 @@ public final class Config {
         return boundlessConfigRoot().resolve("emoji").normalize();
     }
 
-    public static float editorScale() {
-        return normalizedUiScale(EDITOR_SCALE.get());
-    }
-
-    public static float questBookScale() {
-        return normalizedUiScale(QUEST_BOOK_SCALE.get());
-    }
-
-    private static float normalizedUiScale(Double value) {
-        if (value == null) return 1.0f;
-        float scale = value.floatValue();
-        return scale == 1.25f || scale == 1.5f || scale == 2.0f ? scale : 1.0f;
-    }
-
     public static boolean enableBuiltinQuestPack() {
         return ENABLE_BUILTIN_QUEST_PACK.get();
     }
@@ -505,12 +513,6 @@ public final class Config {
 
     public static boolean enableQuestSearchBox() {
         return ENABLE_QUEST_SEARCH_BOX.get();
-    }
-
-    private static boolean isUiScale(Object value) {
-        if (!(value instanceof Number number)) return false;
-        double scale = number.doubleValue();
-        return scale == 1.0D || scale == 1.25D || scale == 1.5D || scale == 2.0D;
     }
 
     public static boolean customBackgrounds() {
@@ -536,6 +538,21 @@ public final class Config {
     public static int descriptionTextColor() {
         return parseHexColor(DESCRIPTION_TEXT_COLOR.get(), 0xCFCFCF);
     }
+
+    public static int descriptionTitleColor() { return parseHexColor(DESCRIPTION_TITLE_COLOR.get(), 0xFFFFFF); }
+    public static int requiresTextColor() { return parseHexColor(REQUIRES_TEXT_COLOR.get(), 0xFF9F0F); }
+    public static int submitTextColor() { return parseHexColor(SUBMIT_TEXT_COLOR.get(), 0x1D9633); }
+    public static int collectTextColor() { return parseHexColor(COLLECT_TEXT_COLOR.get(), 0x1D9633); }
+    public static int killTextColor() { return parseHexColor(KILL_TEXT_COLOR.get(), 0xFF5555); }
+    public static int effectTextColor() { return parseHexColor(EFFECT_TEXT_COLOR.get(), 0x55FFFF); }
+    public static int achieveTextColor() { return parseHexColor(ACHIEVE_TEXT_COLOR.get(), 0x55FFFF); }
+    public static int observeTextColor() { return parseHexColor(OBSERVE_TEXT_COLOR.get(), 0xB46CFF); }
+    public static int biomeTextColor() { return parseHexColor(BIOME_TEXT_COLOR.get(), 0x55CC55); }
+    public static int dimensionTextColor() { return parseHexColor(DIMENSION_TEXT_COLOR.get(), 0xFF5555); }
+    public static int rewardTextColor() { return parseHexColor(REWARD_TEXT_COLOR.get(), 0xA8FFA8); }
+    public static int completedTextColor() { return parseHexColor(COMPLETED_TEXT_COLOR.get(), 0x55FF55); }
+    public static int incompleteTextColor() { return parseHexColor(INCOMPLETE_TEXT_COLOR.get(), 0xFF5555); }
+    public static int unlockTextColor() { return parseHexColor(UNLOCK_TEXT_COLOR.get(), 0xFFD700); }
 
     public static boolean enableDescriptionReadMore() {
         return ENABLE_DESCRIPTION_READ_MORE.get();
@@ -655,6 +672,11 @@ public final class Config {
         String value = s.trim();
         if (value.startsWith("#")) value = value.substring(1);
         return value.matches("(?i)[0-9a-f]{6}");
+    }
+
+    private static ModConfigSpec.ConfigValue<String> colorConfig(String key, String defaultColor, String usage) {
+        return BUILDER.comment("Hex color used for " + usage + ". Example: " + defaultColor)
+                .define(key, defaultColor, Config::isHexColor);
     }
 
     // normalize config colors into uppercase hex
