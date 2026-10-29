@@ -174,6 +174,7 @@ public final class QuestPanelClient {
         });
         e.addListener(st.expandButton);
 
+        refreshTree(st);
         reposition(inv, st);
 
         if (lastQuestOpen && isQuestBookEnabled()) {
@@ -225,7 +226,13 @@ public final class QuestPanelClient {
             if (st.originalLeft != null) setLeft(inv, st.originalLeft);
         }
         if (st.btn != null && Minecraft.getInstance().player != null) {
-            if (QuestTracker.hasAnyCompleted(Minecraft.getInstance().player)) {
+            var player = Minecraft.getInstance().player;
+            long tick = player.level().getGameTime();
+            if (st.questButtonStatusTick != tick) {
+                st.questButtonHasCompleted = QuestTracker.hasAnyCompleted(player);
+                st.questButtonStatusTick = tick;
+            }
+            if (st.questButtonHasCompleted) {
                 st.btn.setTextures(BTN_TEX_TOAST, BTN_TEX_TOAST_HOVER);
             } else {
                 st.btn.setTextures(BTN_TEX, BTN_TEX_HOVER);
@@ -352,6 +359,7 @@ public final class QuestPanelClient {
                 st.btn.visible = show;
                 st.btn.active = show;
             }
+            refreshTree(st);
             reposition(st.inv, st);
             updateVisibility(st);
         }
@@ -413,7 +421,7 @@ public final class QuestPanelClient {
     }
 
     private static void updatePanelSize(InventoryScreen inv, State st) {
-        float scale = Config.questBookScale();
+        float scale = 1.0f;
         st.detailsPanelWidth = Math.round(PANEL_W * scale);
         int reservedDetails = detailsDocked(st) ? st.detailsPanelWidth + 2 : 0;
         int maxWidth = Math.max(96, inv.width - inv.getXSize() - 49 - reservedDetails);
@@ -473,7 +481,6 @@ public final class QuestPanelClient {
             st.tree.setY(bgy + 8);
             st.tree.setWidth(st.panelWidth - 17);
             st.tree.setHeight(st.panelHeight - 17);
-            refreshTree(st);
         }
         if (st.details != null) {
             if (detailsDocked(st)) {
@@ -615,6 +622,7 @@ public final class QuestPanelClient {
 
     private static void refreshTree(State st) {
         if (st == null || st.tree == null) return;
+        st.tree.setViewKey(st.selectedCategory);
         java.util.List<QuestData.Quest> quests = new java.util.ArrayList<>();
         for (QuestData.Quest quest : QuestData.all()) {
             if ("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category)) quests.add(quest);
@@ -623,7 +631,8 @@ public final class QuestPanelClient {
         QuestData.Category category = QuestData.categoryById(st.selectedCategory).orElse(null);
         st.tree.setBackground(category == null ? "" : category.background,
                 category != null && category.backgroundDarkening,
-                category == null ? 0.45f : category.backgroundDarkeningOpacity);
+                category == null ? 0.45f : category.backgroundDarkeningOpacity,
+                category == null ? 0.5f : category.backgroundTileScale);
         st.tree.setStickers(category == null ? java.util.List.of() : category.stickers);
     }
 
@@ -719,6 +728,7 @@ public final class QuestPanelClient {
 
         if (st.filter != null) {
             boolean showFilters = st.open && !Config.hideFilters();
+            st.filter.setTreeMode(treeView);
             st.filter.visible = showFilters;
             st.filter.active = showFilters;
         }
@@ -857,6 +867,8 @@ public final class QuestPanelClient {
         int recipeOffsetY;
         boolean hasRecipeOffset;
         int questBookDataSignature = Integer.MIN_VALUE;
+        long questButtonStatusTick = Long.MIN_VALUE;
+        boolean questButtonHasCompleted;
 
         State(InventoryScreen inv) {
             this.inv = inv;

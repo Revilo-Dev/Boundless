@@ -71,8 +71,12 @@ public final class QuestFilterBar extends AbstractWidget {
     private static boolean showCompleted = false;
     private static boolean showRejected = false;
     private static boolean showLocked = true;
+    private static boolean treeShowCompleted = true;
+    private static boolean treeShowRejected = false;
+    private static boolean treeShowLocked = true;
 
     private final Runnable onSettings;
+    private boolean treeMode;
 
     public QuestFilterBar(int x, int y) {
         this(x, y, null);
@@ -93,6 +97,49 @@ public final class QuestFilterBar extends AbstractWidget {
 
     public static boolean allowLocked() {
         return showLocked;
+    }
+
+    public static boolean treeAllowCompleted() {
+        return treeShowCompleted;
+    }
+
+    public static boolean treeAllowRejected() {
+        return treeShowRejected;
+    }
+
+    public static boolean treeAllowLocked() {
+        return treeShowLocked;
+    }
+
+    public void setTreeMode(boolean treeMode) {
+        this.treeMode = treeMode;
+    }
+
+    private boolean completedState() {
+        return treeMode ? treeShowCompleted : showCompleted;
+    }
+
+    private boolean rejectedState() {
+        return treeMode ? treeShowRejected : showRejected;
+    }
+
+    private boolean lockedState() {
+        return treeMode ? treeShowLocked : showLocked;
+    }
+
+    private void toggleCompleted() {
+        if (treeMode) treeShowCompleted = !treeShowCompleted;
+        else showCompleted = !showCompleted;
+    }
+
+    private void toggleRejected() {
+        if (treeMode) treeShowRejected = !treeShowRejected;
+        else showRejected = !showRejected;
+    }
+
+    private void toggleLocked() {
+        if (treeMode) treeShowLocked = !treeShowLocked;
+        else showLocked = !showLocked;
     }
 
     public void setBounds(int x, int y, int w, int h) {
@@ -128,15 +175,15 @@ public final class QuestFilterBar extends AbstractWidget {
         int bx = getX();
         int by = getY();
 
-        drawButton(gg, bx, by, showCompleted, TEX_COMPLETE, TEX_COMPLETE_HOVER, TEX_COMPLETE_SELECTED,
+        drawButton(gg, bx, by, completedState(), TEX_COMPLETE, TEX_COMPLETE_HOVER, TEX_COMPLETE_SELECTED,
                 Component.translatable("ui.boundless.filter.show_redeemed"), mouseX, mouseY);
         bx += TAB_W + GAP;
 
-        drawButton(gg, bx, by, showRejected, TEX_REJECT, TEX_REJECT_HOVER, TEX_REJECT_SELECTED,
+        drawButton(gg, bx, by, rejectedState(), TEX_REJECT, TEX_REJECT_HOVER, TEX_REJECT_SELECTED,
                 Component.translatable("ui.boundless.filter.show_rejected"), mouseX, mouseY);
         bx += TAB_W + GAP;
 
-        drawButton(gg, bx, by, showLocked, TEX_LOCKED, TEX_LOCKED_HOVER, TEX_LOCKED_SELECTED,
+        drawButton(gg, bx, by, lockedState(), TEX_LOCKED, TEX_LOCKED_HOVER, TEX_LOCKED_SELECTED,
                 Component.translatable("ui.boundless.filter.show_locked"), mouseX, mouseY);
         bx += TAB_W + GAP;
 
@@ -149,11 +196,11 @@ public final class QuestFilterBar extends AbstractWidget {
     private void renderAsButtons(GuiGraphics gg, int mouseX, int mouseY) {
         int x = getX();
         int y = getY();
-        drawSquareButton(gg, x, y, showCompleted, BTN_COMPLETE, BTN_COMPLETE_HOVER, BTN_COMPLETE_DISABLED, Component.translatable("ui.boundless.filter.show_redeemed"), mouseX, mouseY);
+        drawSquareButton(gg, x, y, completedState(), BTN_COMPLETE, BTN_COMPLETE_HOVER, BTN_COMPLETE_DISABLED, Component.translatable("ui.boundless.filter.show_redeemed"), mouseX, mouseY);
         x += BTN_W + BTN_GAP;
-        drawSquareButton(gg, x, y, showRejected, BTN_REJECT, BTN_REJECT_HOVER, BTN_REJECT_DISABLED, Component.translatable("ui.boundless.filter.show_rejected"), mouseX, mouseY);
+        drawSquareButton(gg, x, y, rejectedState(), BTN_REJECT, BTN_REJECT_HOVER, BTN_REJECT_DISABLED, Component.translatable("ui.boundless.filter.show_rejected"), mouseX, mouseY);
         x += BTN_W + BTN_GAP;
-        drawSquareButton(gg, x, y, showLocked, BTN_LOCKED, BTN_LOCKED_HOVER, BTN_LOCKED_DISABLED, Component.translatable("ui.boundless.filter.show_locked"), mouseX, mouseY);
+        drawSquareButton(gg, x, y, lockedState(), BTN_LOCKED, BTN_LOCKED_HOVER, BTN_LOCKED_DISABLED, Component.translatable("ui.boundless.filter.show_locked"), mouseX, mouseY);
     }
 
     private void drawButton(GuiGraphics gg, int x, int y, boolean state,
@@ -211,17 +258,17 @@ public final class QuestFilterBar extends AbstractWidget {
             int by = getY();
 
             if (hitSquare(mx, my, bx, by)) {
-                showCompleted = !showCompleted;
+                toggleCompleted();
                 return true;
             }
             bx += BTN_W + BTN_GAP;
             if (hitSquare(mx, my, bx, by)) {
-                showRejected = !showRejected;
+                toggleRejected();
                 return true;
             }
             bx += BTN_W + BTN_GAP;
             if (hitSquare(mx, my, bx, by)) {
-                showLocked = !showLocked;
+                toggleLocked();
                 return true;
             }
             return false;
@@ -231,19 +278,19 @@ public final class QuestFilterBar extends AbstractWidget {
         int by = getY();
 
         if (hit(mx, my, bx, by)) {
-            showCompleted = !showCompleted;
+            toggleCompleted();
             return true;
         }
         bx += TAB_W + GAP;
 
         if (hit(mx, my, bx, by)) {
-            showRejected = !showRejected;
+            toggleRejected();
             return true;
         }
         bx += TAB_W + GAP;
 
         if (hit(mx, my, bx, by)) {
-            showLocked = !showLocked;
+            toggleLocked();
             return true;
         }
         bx += TAB_W + GAP;

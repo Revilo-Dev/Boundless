@@ -13,6 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
@@ -118,8 +119,6 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiHideQuestWidgetIconsRow;
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
-    private ConfigRow uiEditorScaleRow;
-    private ConfigRow uiQuestBookScaleRow;
     private ConfigRow uiEnableSearchBoxRow;
     private ConfigRow uiCustomBackgroundsRow;
     private ConfigRow uiStickySubCategoryHeadersRow;
@@ -129,6 +128,9 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiDescriptionTextColorRow;
     private EditBox questWidgetTextColorField;
     private EditBox descriptionTextColorField;
+    private EditBox configSearchField;
+    private String configSearchQuery = "";
+    private final List<ColorConfigControl> detailColorControls = new ArrayList<>();
     private ConfigRow uiEnableDescriptionReadMoreRow;
     private ConfigRow uiEnableDescriptionWrappingRow;
     private ConfigRow uiDescriptionAlignmentRow;
@@ -193,8 +195,6 @@ public final class QuestSettingsScreen extends Screen {
     private boolean hideQuestWidgetIcons;
     private double questTextScale;
     private double questIconScale;
-    private double editorScale;
-    private double questBookScale;
     private boolean enableQuestSearchBox;
     private boolean customBackgrounds;
     private boolean stickySubCategoryHeaders;
@@ -343,14 +343,6 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.icon_scale.subtitle"),
                 this::formatQuestIconScale,
                 this::cycleQuestIconScale);
-        uiEditorScaleRow = new ConfigRow(px, uiQuestIconScaleBaseY, pw, "Editor scale",
-                "Scale the complete quest tree editor interface.",
-                () -> formatUiScale(editorScale),
-                () -> editorScale = nextUiScale(editorScale));
-        uiQuestBookScaleRow = new ConfigRow(px, uiQuestIconScaleBaseY, pw, "Quest book scale",
-                "Scale the standalone and inventory quest book interface.",
-                () -> formatUiScale(questBookScale),
-                () -> questBookScale = nextUiScale(questBookScale));
         uiEnableSearchBoxRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.search_widget"),
                 trs("row.search_widget.subtitle"),
                 () -> trs(enableQuestSearchBox ? "state.on" : "state.off"),
@@ -439,11 +431,10 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiHideQuestWidgetIconsRow, ConfigTab.STYLE);
         addConfigRow(uiQuestTextScaleRow, ConfigTab.STYLE);
         addConfigRow(uiQuestIconScaleRow, ConfigTab.STYLE);
-        addConfigRow(uiEditorScaleRow, ConfigTab.UI);
-        addConfigRow(uiQuestBookScaleRow, ConfigTab.UI);
         addConfigRow(uiEnableDescriptionColorsRow, ConfigTab.STYLE);
         addConfigRow(uiQuestWidgetTextColorRow, ConfigTab.STYLE);
         addConfigRow(uiDescriptionTextColorRow, ConfigTab.STYLE);
+        initDetailColorControls();
         addConfigRow(uiEnableDescriptionReadMoreRow, ConfigTab.STYLE);
         addConfigRow(uiEnableDescriptionWrappingRow, ConfigTab.STYLE);
         addConfigRow(uiDescriptionAlignmentRow, ConfigTab.STYLE);
@@ -475,7 +466,22 @@ public final class QuestSettingsScreen extends Screen {
         addConfigTabButton(ConfigTab.UI, CONFIG_TAB_UI_TEX, trs("tab.ui"));
         addConfigTabButton(ConfigTab.FEATURES, CONFIG_TAB_FEATURES_TEX, trs("tab.features"));
         initColorFields();
+        initConfigSearch();
         applyConfigScrollLayout();
+    }
+
+    private void initConfigSearch() {
+        configSearchField = new EditBox(font, px + 2, configViewportTop() + 2, pw - 4, 16,
+                Component.literal("Search settings"));
+        configSearchField.setHint(Component.literal("Search settings"));
+        configSearchField.setMaxLength(64);
+        configSearchField.setValue(configSearchQuery);
+        configSearchField.setResponder(value -> {
+            configSearchQuery = value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
+            configScrollY = 0f;
+            applyConfigScrollLayout();
+        });
+        addRenderableWidget(configSearchField);
     }
 
     private void initColorFields() {
@@ -495,6 +501,7 @@ public final class QuestSettingsScreen extends Screen {
         field.setResponder(value -> {
             if (widgetColor) questWidgetTextColor = value;
             else descriptionTextColor = value;
+            updateColorFieldText(field, value, widgetColor ? "FFFFFF" : "CFCFCF");
         });
     }
 
@@ -515,7 +522,7 @@ public final class QuestSettingsScreen extends Screen {
         int btnY = py + ph - 20;
         backButton = new BackButton(leftX - TAB_W + BACK_TAB_X_OFFSET, topY + PANEL_H - BACK_TAB_H - BACK_TAB_BOTTOM_MARGIN, this::goBack);
         resetConfigButton = new HoldResetButton(px + 2, btnY, pw - 4, 20, () -> tr(configTab == ConfigTab.ALL ? "reset.all" : "reset.current"), this::resetCurrentConfigTab);
-        debugButton = new DebugButton(leftX + PANEL_W - 14, topY + PANEL_H - 16);
+        debugButton = new DebugButton(leftX + PANEL_W - 24, topY + PANEL_H - 36);
 
         addRenderableWidget(backButton);
         addRenderableWidget(resetConfigButton);
@@ -526,6 +533,7 @@ public final class QuestSettingsScreen extends Screen {
         if (page == Page.MENU) {
             Minecraft.getInstance().setScreen(parent);
         } else {
+            saveConfig(false);
             setPage(Page.MENU);
         }
     }
@@ -566,6 +574,15 @@ public final class QuestSettingsScreen extends Screen {
             descriptionTextColorField.visible = false;
             descriptionTextColorField.active = false;
         }
+        if (configSearchField != null) {
+            configSearchField.visible = false;
+            configSearchField.active = false;
+        }
+        for (ColorConfigControl control : detailColorControls) {
+            if (control.field == null) continue;
+            control.field.visible = false;
+            control.field.active = false;
+        }
         for (ConfigRow row : configRows) {
             boolean show = config && (!row.serverOnly || canManageServerSettings());
             row.visible = show;
@@ -577,6 +594,8 @@ public final class QuestSettingsScreen extends Screen {
         }
         resetConfigButton.visible = config;
         resetConfigButton.active = config;
+        debugButton.visible = menu;
+        debugButton.active = menu;
 
         backButton.visible = true;
         backButton.active = true;
@@ -604,8 +623,6 @@ public final class QuestSettingsScreen extends Screen {
         hideQuestWidgetIcons = Config.hideQuestWidgetIcons();
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
-        editorScale = Config.editorScale();
-        questBookScale = Config.questBookScale();
         enableQuestSearchBox = Config.enableQuestSearchBox();
         customBackgrounds = Config.customBackgrounds();
         stickySubCategoryHeaders = Config.stickySubCategoryHeaders();
@@ -615,6 +632,10 @@ public final class QuestSettingsScreen extends Screen {
         descriptionTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.descriptionTextColor());
         if (questWidgetTextColorField != null) questWidgetTextColorField.setValue(questWidgetTextColor);
         if (descriptionTextColorField != null) descriptionTextColorField.setValue(descriptionTextColor);
+        for (ColorConfigControl control : detailColorControls) {
+            control.value = normalizeThemeColor(control.config.get(), control.fallback);
+            if (control.field != null) control.field.setValue(control.value);
+        }
         enableDescriptionReadMore = Config.enableDescriptionReadMore();
         enableDescriptionTextWrapping = Config.enableDescriptionTextWrapping();
         descriptionTextAlignment = normalizeDescriptionTextAlignment(Config.descriptionTextAlignment());
@@ -680,17 +701,39 @@ public final class QuestSettingsScreen extends Screen {
         return String.format(java.util.Locale.ROOT, "%.1fx", Math.max(0.5D, Math.min(1.0D, questIconScale)));
     }
 
-    private double nextUiScale(double scale) {
-        if (scale < 1.25D) return 1.25D;
-        if (scale < 1.5D) return 1.5D;
-        if (scale < 2.0D) return 2.0D;
-        return 1.0D;
+    private void initDetailColorControls() {
+        detailColorControls.clear();
+        addDetailColorControl("Description title color", "Quest title color in the details panel.", Config.DESCRIPTION_TITLE_COLOR, "FFFFFF");
+        addDetailColorControl("Requires text color", "Requires heading color.", Config.REQUIRES_TEXT_COLOR, "FF9F0F");
+        addDetailColorControl("Submit text color", "Submit and input heading color.", Config.SUBMIT_TEXT_COLOR, "1D9633");
+        addDetailColorControl("Collect text color", "Collect heading color.", Config.COLLECT_TEXT_COLOR, "1D9633");
+        addDetailColorControl("Kill text color", "Kill heading color.", Config.KILL_TEXT_COLOR, "FF5555");
+        addDetailColorControl("Effect text color", "Effect heading color.", Config.EFFECT_TEXT_COLOR, "55FFFF");
+        addDetailColorControl("Achieve text color", "Advancement heading color.", Config.ACHIEVE_TEXT_COLOR, "55FFFF");
+        addDetailColorControl("Observe text color", "Observation heading color.", Config.OBSERVE_TEXT_COLOR, "B46CFF");
+        addDetailColorControl("Biome text color", "Biome heading color.", Config.BIOME_TEXT_COLOR, "55CC55");
+        addDetailColorControl("Dimension text color", "Dimension heading color.", Config.DIMENSION_TEXT_COLOR, "FF5555");
+        addDetailColorControl("Reward text color", "Reward heading and entry color.", Config.REWARD_TEXT_COLOR, "A8FFA8");
+        addDetailColorControl("Completed text color", "Completed objective progress color.", Config.COMPLETED_TEXT_COLOR, "55FF55");
+        addDetailColorControl("Incomplete text color", "Incomplete and invalid objective color.", Config.INCOMPLETE_TEXT_COLOR, "FF5555");
+        addDetailColorControl("Unlock text color", "Category unlock message color.", Config.UNLOCK_TEXT_COLOR, "FFD700");
     }
 
-    private String formatUiScale(double scale) {
-        double normalized = scale == 1.25D || scale == 1.5D || scale == 2.0D ? scale : 1.0D;
-        if (normalized == 1.25D) return "1.25x";
-        return String.format(java.util.Locale.ROOT, normalized == 1.0D || normalized == 2.0D ? "%.0fx" : "%.1fx", normalized);
+    private void addDetailColorControl(String label, String subtitle,
+                                       ModConfigSpec.ConfigValue<String> config, String fallback) {
+        ColorConfigControl control = new ColorConfigControl(config, fallback);
+        control.row = new ConfigRow(px, uiDescriptionTextColorBaseY, pw, label, subtitle, () -> "", null);
+        addConfigRow(control.row, ConfigTab.STYLE);
+        control.field = new EditBox(font, px + pw - 45, uiDescriptionTextColorBaseY + 3, 39, 14, Component.empty());
+        control.field.setMaxLength(7);
+        control.field.setEditable(true);
+        control.field.setFilter(value -> value.matches("#?[0-9a-fA-F]{0,6}"));
+        control.field.setResponder(value -> {
+            control.value = value;
+            updateColorFieldText(control.field, value, control.fallback);
+        });
+        detailColorControls.add(control);
+        addRenderableWidget(control.field);
     }
 
     private void cycleQuestWidgetTextColor() {
@@ -747,8 +790,6 @@ public final class QuestSettingsScreen extends Screen {
         Config.HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
-        Config.EDITOR_SCALE.set(editorScale);
-        Config.QUEST_BOOK_SCALE.set(questBookScale);
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         Config.CUSTOM_BACKGROUNDS.set(customBackgrounds);
         Config.STICKY_SUBCATEGORY_HEADERS.set(stickySubCategoryHeaders);
@@ -756,6 +797,9 @@ public final class QuestSettingsScreen extends Screen {
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
         Config.QUEST_WIDGET_TEXT_COLOR.set(normalizeThemeColor(questWidgetTextColor, "FFFFFF"));
         Config.DESCRIPTION_TEXT_COLOR.set(normalizeThemeColor(descriptionTextColor, "CFCFCF"));
+        for (ColorConfigControl control : detailColorControls) {
+            control.config.set(normalizeThemeColor(control.value, control.fallback));
+        }
         Config.ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
         Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
         Config.DESCRIPTION_TEXT_ALIGNMENT.set(normalizeDescriptionTextAlignment(descriptionTextAlignment));
@@ -830,8 +874,6 @@ public final class QuestSettingsScreen extends Screen {
             if (canManageServerSettings()) disableCategories = false;
             showIdField = false;
             enableQuestSearchBox = false;
-            editorScale = 1.0D;
-            questBookScale = 1.0D;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.STYLE) {
             hideQuestWidgetIcons = false;
@@ -840,6 +882,7 @@ public final class QuestSettingsScreen extends Screen {
             enableDescriptionColors = true;
             questWidgetTextColor = "FFFFFF";
             descriptionTextColor = "CFCFCF";
+            for (ColorConfigControl control : detailColorControls) control.value = control.fallback;
             enableDescriptionReadMore = true;
             enableDescriptionTextWrapping = true;
             descriptionTextAlignment = "left";
@@ -926,6 +969,11 @@ public final class QuestSettingsScreen extends Screen {
         return value.matches("[0-9A-F]{6}") ? value : fallback;
     }
 
+    private void updateColorFieldText(EditBox field, String raw, String fallback) {
+        if (field == null) return;
+        field.setTextColor(Integer.parseInt(normalizeThemeColor(raw, fallback), 16));
+    }
+
     private String nextThemeColor(String current, String fallback) {
         List<String> palette = List.of("FFFFFF", "CFCFCF", "FFD166", "55CCFF", "A8FFA8", "FFAA55");
         String normalized = normalizeThemeColor(current, fallback);
@@ -978,7 +1026,6 @@ public final class QuestSettingsScreen extends Screen {
             if (debugButton != null && debugButton.visible) debugButton.render(gg, mouseX, mouseY, partialTick);
 
             renderConfigScrollbar(gg);
-            renderVersionFooter(gg);
             renderPendingTooltipOnTop(gg);
             return;
         }
@@ -992,8 +1039,10 @@ public final class QuestSettingsScreen extends Screen {
         String label = versionLabel();
         int availableWidth = PANEL_W - 22;
         float scale = Math.min(1f, availableWidth / (float) Math.max(1, font.width(label)));
+        int scaledWidth = Math.round(font.width(label) * scale);
         graphics.pose().pushPose();
-        graphics.pose().translate(leftX + 5, topY + PANEL_H - font.lineHeight * scale - 3, 0);
+        graphics.pose().translate(leftX + (PANEL_W - scaledWidth) / 2f,
+                topY + PANEL_H - font.lineHeight * scale - 13, 0);
         graphics.pose().scale(scale, scale, 1f);
         graphics.drawString(font, label, 0, 0, 0xFFAAAAAA, false);
         graphics.pose().popPose();
@@ -1070,7 +1119,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private int configContentHeight() {
         // Leave room for the reset button after the last row.
-        return Math.max(0, visibleConfigRows().size() * 21 + 27);
+        return Math.max(0, visibleConfigRows().size() * 21 + 27 + (configTab == ConfigTab.ALL ? 20 : 0));
     }
 
     private int maxConfigScroll() {
@@ -1090,7 +1139,7 @@ public final class QuestSettingsScreen extends Screen {
 
         int top = configViewportTop();
         int bottom = configViewportBottom();
-        int baseY = top + 2;
+        int baseY = top + 2 + (configTab == ConfigTab.ALL ? 20 : 0);
         int rowGap = 21;
         List<ConfigRow> visibleRows = visibleConfigRows();
         for (ConfigRow row : configRows) {
@@ -1102,6 +1151,15 @@ public final class QuestSettingsScreen extends Screen {
         }
         layoutColorField(questWidgetTextColorField, uiQuestWidgetTextColorRow, top, bottom);
         layoutColorField(descriptionTextColorField, uiDescriptionTextColorRow, top, bottom);
+        for (ColorConfigControl control : detailColorControls) {
+            layoutColorField(control.field, control.row, top, bottom);
+        }
+        if (configSearchField != null) {
+            configSearchField.setPosition(px + 2, top + 2);
+            configSearchField.setWidth(pw - 4);
+            configSearchField.visible = page == Page.CONFIG && configTab == ConfigTab.ALL;
+            configSearchField.active = configSearchField.visible;
+        }
         if (resetConfigButton != null) {
             resetConfigButton.setX(px + 2);
             resetConfigButton.setWidth(pw - 4);
@@ -1117,7 +1175,9 @@ public final class QuestSettingsScreen extends Screen {
         List<ConfigRow> out = new ArrayList<>();
         for (ConfigRow row : configRows) {
             if (row.serverOnly && !canManageServerSettings()) continue;
-            if (configTab == ConfigTab.ALL || row.group == configTab) out.add(row);
+            if (configTab != ConfigTab.ALL && row.group != configTab) continue;
+            if (configTab == ConfigTab.ALL && !configSearchQuery.isBlank() && !row.matches(configSearchQuery)) continue;
+            out.add(row);
         }
         return out;
     }
@@ -1206,6 +1266,13 @@ public final class QuestSettingsScreen extends Screen {
                 setFocused(descriptionTextColorField);
                 return true;
             }
+            for (ColorConfigControl control : detailColorControls) {
+                if (control.field != null && control.field.visible && control.field.isMouseOver(mouseX, mouseY)) {
+                    control.field.setFocused(true);
+                    setFocused(control.field);
+                    return true;
+                }
+            }
             if (backButton != null && backButton.visible && backButton.active && backButton.isMouseOver(mouseX, mouseY)) {
                 backButton.onPress();
                 return true;
@@ -1260,6 +1327,7 @@ public final class QuestSettingsScreen extends Screen {
 
     @Override
     public void onClose() {
+        if (page == Page.CONFIG) saveConfig(false);
         Minecraft.getInstance().setScreen(parent);
     }
 
@@ -1329,6 +1397,12 @@ public final class QuestSettingsScreen extends Screen {
         private final Runnable onPress;
         private ConfigTab group = ConfigTab.ALL;
         private boolean serverOnly;
+
+        private boolean matches(String query) {
+            if (query == null || query.isBlank()) return true;
+            String searchable = (label + " " + subtitle).toLowerCase(java.util.Locale.ROOT);
+            return searchable.contains(query);
+        }
 
         public ConfigRow(int x, int y, int w, String label, String subtitle,
                          java.util.function.Supplier<String> value,
@@ -1505,6 +1579,20 @@ public final class QuestSettingsScreen extends Screen {
 
         @Override
         protected void updateWidgetNarration(NarrationElementOutput narration) {
+        }
+    }
+
+    private static final class ColorConfigControl {
+        private final ModConfigSpec.ConfigValue<String> config;
+        private final String fallback;
+        private String value;
+        private ConfigRow row;
+        private EditBox field;
+
+        private ColorConfigControl(ModConfigSpec.ConfigValue<String> config, String fallback) {
+            this.config = config;
+            this.fallback = fallback;
+            this.value = fallback;
         }
     }
 

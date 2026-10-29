@@ -58,6 +58,7 @@ public final class QuestListWidget extends AbstractWidget {
     // cached visible rows
     private String category = "all";
     private String background = "";
+    private float backgroundTileScale = 0.5f;
     private boolean backgroundDarkening;
     private float backgroundDarkeningOpacity = 0.45f;
     private boolean bypassFilters = false;
@@ -69,6 +70,8 @@ public final class QuestListWidget extends AbstractWidget {
     private boolean cachedAllowCompleted = false;
     private boolean cachedAllowRejected = false;
     private boolean cachedAllowLocked = true;
+    private final Map<String, QuestRenderState> cachedQuestStates = new HashMap<>();
+    private long cachedQuestStateTick = Long.MIN_VALUE;
     private String searchQuery = "";
     private int topInset = 0;
     private boolean useConfigScaling = true;
@@ -92,6 +95,7 @@ public final class QuestListWidget extends AbstractWidget {
         category = cat == null ? "all" : cat;
         QuestData.Category categoryData = QuestData.categoryById(category).orElse(null);
         background = categoryData == null ? "" : categoryData.background;
+        backgroundTileScale = categoryData == null ? 0.5f : categoryData.backgroundTileScale;
         backgroundDarkening = categoryData != null && categoryData.backgroundDarkening;
         backgroundDarkeningOpacity = categoryData == null ? 0.45f : categoryData.backgroundDarkeningOpacity;
         scrollY = 0;
@@ -160,6 +164,17 @@ public final class QuestListWidget extends AbstractWidget {
 
         boolean isHeader() {
             return subCategory != null;
+        }
+    }
+
+    private static final class QuestRenderState {
+        final QuestTracker.Status status;
+        final boolean dependenciesMet;
+        Boolean ready;
+
+        QuestRenderState(QuestTracker.Status status, boolean dependenciesMet) {
+            this.status = status;
+            this.dependenciesMet = dependenciesMet;
         }
     }
 
@@ -237,10 +252,9 @@ public final class QuestListWidget extends AbstractWidget {
     private boolean isActuallyVisible(QuestData.Quest q) {
         if (bypassFilters) return true;
         if (mc.player == null) return true;
-        QuestTracker.Status st = QuestTracker.getStatus(q, mc.player);
-        if (st == QuestTracker.Status.INCOMPLETE) {
-            return QuestTracker.isVisible(q, mc.player);
-        }
+        QuestRenderState state = questState(q);
+        if (state.status != QuestTracker.Status.INCOMPLETE) return true;
+        if (q.hiddenUnderDependency && !q.dependencies.isEmpty() && !state.dependenciesMet) return false;
         return true;
     }
 
@@ -249,18 +263,17 @@ public final class QuestListWidget extends AbstractWidget {
         if (bypassFilters) return true;
         if (mc.player == null) return true;
 
-        QuestTracker.Status st = QuestTracker.getStatus(q, mc.player);
-        boolean deps = QuestTracker.dependenciesMet(q, mc.player);
+        QuestRenderState state = questState(q);
 
-        if (!QuestFilterBar.allowCompleted() && st == QuestTracker.Status.REDEEMED) {
+        if (!QuestFilterBar.allowCompleted() && state.status == QuestTracker.Status.REDEEMED) {
             return false;
         }
 
-        if (!QuestFilterBar.allowRejected() && st == QuestTracker.Status.REJECTED) {
+        if (!QuestFilterBar.allowRejected() && state.status == QuestTracker.Status.REJECTED) {
             return false;
         }
 
-        if (!QuestFilterBar.allowLocked() && !deps) {
+        if (!QuestFilterBar.allowLocked() && !state.dependenciesMet) {
             return false;
         }
 
@@ -348,6 +361,26 @@ public final class QuestListWidget extends AbstractWidget {
         cachedRows = List.of();
         cachedContentHeight = 0;
         cachedTick = Long.MIN_VALUE;
+        cachedQuestStates.clear();
+        cachedQuestStateTick = Long.MIN_VALUE;
+    }
+
+    private QuestRenderState questState(QuestData.Quest quest) {
+        long tick = mc.level == null ? Long.MIN_VALUE : mc.level.getGameTime();
+        if (cachedQuestStateTick != tick) {
+            cachedQuestStates.clear();
+            cachedQuestStateTick = tick;
+        }
+        return cachedQuestStates.computeIfAbsent(quest.id, ignored -> new QuestRenderState(
+                QuestTracker.getStatus(quest, mc.player),
+                QuestTracker.dependenciesMet(quest, mc.player)
+        ));
+    }
+
+    private boolean isReady(QuestData.Quest quest, QuestRenderState state) {
+        if (!state.dependenciesMet) return false;
+        if (state.ready == null) state.ready = QuestTracker.isReady(quest, mc.player);
+        return state.ready;
     }
 
     // rebuild rows only when list state changes
@@ -407,6 +440,7 @@ public final class QuestListWidget extends AbstractWidget {
 
         RenderSystem.enableBlend();
         QuestCategoryBackgroundRenderer.render(gg, background, backgroundDarkening, backgroundDarkeningOpacity,
+                backgroundTileScale,
                 getX(), getY(), width, height);
         int contentTop = getY() + topInset;
         int viewportHeight = Math.max(0, height - topInset);
@@ -416,6 +450,7 @@ public final class QuestListWidget extends AbstractWidget {
         int yCursor = yOff;
 
         List<RowEntry> rows = rowsForCurrentState();
+        List<HeaderRender> visibleHeaders = new ArrayList<>();
         boolean hideIcons = Config.hideQuestWidgetIcons();
         int widgetTextColor = configuredWidgetTextColor();
         for (RowEntry row : rows) {
@@ -429,51 +464,17 @@ public final class QuestListWidget extends AbstractWidget {
             }
 
             if (row.isHeader()) {
-                QuestData.SubCategory sc = row.subCategory;
-                boolean open = isSubOpen(sc);
-
-                float iconScale = 0.45f * configuredIconScale();
-                int iconSize = (int) (16 * iconScale);
-                int iconX = getX() + 2;
-                int iconY = top + (h - iconSize) / 2 + 2;
-                int textIconSize = hideIcons ? 0 : iconSize;
-
-                if (!hideIcons) {
-                    sc.iconItem().ifPresent(item -> {
-                        gg.pose().pushPose();
-                        gg.pose().translate(iconX, iconY, 0);
-                        gg.pose().scale(iconScale, iconScale, 1f);
-                        gg.renderItem(new ItemStack(item), 0, 0);
-                        gg.pose().popPose();
-                    });
-                }
-
-                float textScale = 0.66f * configuredTextScale();
-                String name = sc.name;
-                int textX = iconX + textIconSize + 2;
-                int textH = (int) (mc.font.lineHeight * textScale);
-                int textY = top + (h - textH) / 2 + 1;
-
-                String sym = open ? "-" : "+";
-                int symW = (int) (mc.font.width(sym) * textScale);
-                int symX = getX() + width - symW - 2;
-                int maxW = symX - textX - 2;
-                int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
-                if (mc.font.width(name) > maxWUnscaled) {
-                    name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - mc.font.width("..."))) + "...";
-                }
-
-                drawScaledString(gg, name, textScale, textX, textY, widgetTextColor);
-                drawScaledString(gg, sym, textScale, symX, textY, widgetTextColor);
+                visibleHeaders.add(new HeaderRender(row.subCategory, top));
             } else {
                 QuestData.Quest q = row.quest;
                 if (q != null && q.id != null && q.id.startsWith("settings_spacer_")) {
                     yCursor += rowHeight(row);
                     continue;
                 }
-                QuestTracker.Status st = QuestTracker.getStatus(q, mc.player);
-                boolean deps = QuestTracker.dependenciesMet(q, mc.player);
-                boolean ready = deps && QuestTracker.isReady(q, mc.player);
+                QuestRenderState state = questState(q);
+                QuestTracker.Status st = state.status;
+                boolean deps = state.dependenciesMet;
+                boolean ready = isReady(q, state);
 
                 ResourceLocation tex;
                 if (!deps) {
@@ -495,7 +496,7 @@ public final class QuestListWidget extends AbstractWidget {
 
                 int textX = getX() + 23;
                 if (!hideIcons) {
-                    renderQuestIcon(gg, q, getX() + 6, top + 5);
+                    renderQuestIcon(gg, q, getX() + 6, top + 7);
                 } else {
                     textX = getX() + 6;
                 }
@@ -516,8 +517,18 @@ public final class QuestListWidget extends AbstractWidget {
             yCursor += rowHeight(row);
         }
 
+        gg.pose().pushPose();
+        gg.pose().translate(0, 0, 400);
+        for (HeaderRender header : visibleHeaders) {
+            renderSubCategoryHeader(gg, header.subCategory, header.y, hideIcons, widgetTextColor, true);
+        }
+        gg.pose().popPose();
+
         if (Config.stickySubCategoryHeaders() && scrollY > 0f) {
+            gg.pose().pushPose();
+            gg.pose().translate(0, 0, 500);
             renderStickySubCategoryHeader(gg, rows, contentTop, hideIcons, widgetTextColor);
+            gg.pose().popPose();
         }
 
         gg.disableScissor();
@@ -544,12 +555,17 @@ public final class QuestListWidget extends AbstractWidget {
         }
         if (activeHeader == null) return;
 
+        renderSubCategoryHeader(gg, activeHeader, contentTop, hideIcons, widgetTextColor, true);
+    }
+
+    private void renderSubCategoryHeader(GuiGraphics gg, QuestData.SubCategory activeHeader, int contentTop,
+                                         boolean hideIcons, int widgetTextColor, boolean background) {
         int h = subHeaderH;
-        gg.fill(getX(), contentTop, getX() + width, contentTop + h, 0xFF373737);
+        if (background) QuestSubCategoryHeaderRenderer.renderBackground(gg, getX(), contentTop, width, h);
         float iconScale = 0.45f * configuredIconScale();
         int iconSize = (int) (16 * iconScale);
         int iconX = getX() + 2;
-        int iconY = contentTop + (h - iconSize) / 2 + 2;
+        int iconY = contentTop + (h - iconSize) / 2;
         if (!hideIcons) {
             activeHeader.iconItem().ifPresent(item -> {
                 gg.pose().pushPose();
@@ -562,12 +578,19 @@ public final class QuestListWidget extends AbstractWidget {
         float textScale = 0.66f * configuredTextScale();
         int textX = iconX + (hideIcons ? 0 : iconSize) + 2;
         String name = activeHeader.name == null ? "" : activeHeader.name;
-        int maxWidth = (int) ((getX() + width - textX - 4) / textScale);
+        String symbol = isSubOpen(activeHeader) ? "-" : "+";
+        int symbolWidth = (int) (mc.font.width(symbol) * textScale);
+        int symbolX = getX() + width - symbolWidth - 2;
+        int maxWidth = (int) ((symbolX - textX - 2) / textScale);
         if (mc.font.width(name) > maxWidth) {
             name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWidth - mc.font.width("..."))) + "...";
         }
         int textY = contentTop + (h - (int) (mc.font.lineHeight * textScale)) / 2 + 1;
-        drawScaledString(gg, name, textScale, textX, textY, widgetTextColor);
+        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, mc.font, name, textScale, textX, textY, widgetTextColor);
+        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, mc.font, symbol, textScale, symbolX, textY, widgetTextColor);
+    }
+
+    private record HeaderRender(QuestData.SubCategory subCategory, int y) {
     }
 
     // draw one quest row texture with hover brightening

@@ -63,7 +63,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     // build the standalone quest book
     @Override
     protected void init() {
-        uiScale = Config.questBookScale();
+        uiScale = 1.0f;
         width = Math.max(1, Math.round(width / uiScale));
         height = Math.max(1, Math.round(height / uiScale));
         if (Config.disableQuestBook()) {
@@ -234,6 +234,7 @@ public final class StandaloneQuestBookScreen extends Screen {
 
         if (filter != null) {
             boolean showFilters = !Config.hideFilters();
+            filter.setTreeMode(treeView);
             filter.visible = showFilters;
             filter.active = showFilters;
         }
@@ -366,6 +367,7 @@ public final class StandaloneQuestBookScreen extends Screen {
 
     private void refreshTree() {
         if (tree == null) return;
+        tree.setViewKey(selectedCategory);
         java.util.List<QuestData.Quest> quests = new java.util.ArrayList<>();
         for (QuestData.Quest quest : QuestData.all()) {
             if ("all".equalsIgnoreCase(selectedCategory) || selectedCategory.equalsIgnoreCase(quest.category)) {
@@ -376,7 +378,8 @@ public final class StandaloneQuestBookScreen extends Screen {
         QuestData.Category category = QuestData.categoryById(selectedCategory).orElse(null);
         tree.setBackground(category == null ? "" : category.background,
                 category != null && category.backgroundDarkening,
-                category == null ? 0.45f : category.backgroundDarkeningOpacity);
+                category == null ? 0.45f : category.backgroundDarkeningOpacity,
+                category == null ? 0.5f : category.backgroundTileScale);
         tree.setStickers(category == null ? java.util.List.of() : category.stickers);
     }
 

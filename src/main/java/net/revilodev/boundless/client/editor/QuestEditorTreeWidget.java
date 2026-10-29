@@ -1,5 +1,6 @@
 package net.revilodev.boundless.client.editor;
 
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -18,7 +19,6 @@ import net.revilodev.boundless.quest.QuestData;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -31,6 +31,7 @@ import java.util.function.Consumer;
 // Editable quest tree canvas used by the quest-pack editor.
 @OnlyIn(Dist.CLIENT)
 public final class QuestEditorTreeWidget extends AbstractWidget {
+    private static final int MAX_CONNECTOR_RASTER_STEPS = 4096;
     private static final int NODE_SIZE = 32;
     private static final int GRID_SIZE = 16;
     private static final int CONNECTOR_OUTER_WIDTH = 5;
@@ -62,6 +63,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private Map<QuestEntryData, ItemStack> questIcons = Map.of();
     private List<RenderedConnector> renderedConnectors = List.of();
     private String background = "";
+    private float backgroundTileScale = 0.5f;
     private boolean backgroundDarkening;
     private float backgroundDarkeningOpacity = 0.45f;
     private float zoom = 1f;
@@ -127,7 +129,12 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     public void setBackground(String background, boolean darkening, float darkeningOpacity) {
+        setBackground(background, darkening, darkeningOpacity, 0.5f);
+    }
+
+    public void setBackground(String background, boolean darkening, float darkeningOpacity, float tileScale) {
         this.background = background == null ? "" : background;
+        this.backgroundTileScale = Math.max(0.1f, Math.min(2f, tileScale));
         this.backgroundDarkening = darkening;
         this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, darkeningOpacity));
     }
@@ -185,6 +192,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         QuestEntryData hovered = tooltipSuppressed || isOverZoomControls(mouseX, mouseY) ? null : questAt(mouseX, mouseY);
         QuestCategoryBackgroundRenderer.render(gg, background, backgroundDarkening, backgroundDarkeningOpacity,
+                backgroundTileScale,
                 getX(), getY(), width, height);
         gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
         gg.pose().pushPose();
@@ -853,6 +861,16 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private void rasterRouteLine(int x1, int y1, int x2, int y2, Set<Long> pixels) {
+        int distance = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+        if (distance > MAX_CONNECTOR_RASTER_STEPS) {
+            for (int step = 0; step <= MAX_CONNECTOR_RASTER_STEPS; step++) {
+                double progress = step / (double) MAX_CONNECTOR_RASTER_STEPS;
+                int x = (int) Math.round(x1 + (x2 - x1) * progress);
+                int y = (int) Math.round(y1 + (y2 - y1) * progress);
+                pixels.add(packPoint(x, y));
+            }
+            return;
+        }
         int dx = Math.abs(x2 - x1);
         int sx = x1 < x2 ? 1 : -1;
         int dy = -Math.abs(y2 - y1);
@@ -872,48 +890,32 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private void drawConnector(GuiGraphics gg, RenderedConnector connector) {
-        for (PixelSpan span : connector.outerSpans) {
-            gg.fill(span.x, span.y, span.x + span.width, span.y + 1, 0xFF000000);
-        }
         int color = connector.incompatible ? 0xFFFF3030 : 0xFFFFFFFF;
-        for (PixelSpan span : connector.innerSpans) {
-            gg.fill(span.x, span.y, span.x + span.width, span.y + 1, color);
+        for (int index = 1; index < connector.connector.points.size(); index++) {
+            Point start = connector.connector.points.get(index - 1);
+            Point end = connector.connector.points.get(index);
+            drawConnectorSegment(gg, start, end, CONNECTOR_OUTER_WIDTH, 0xFF000000);
+            drawConnectorSegment(gg, start, end, CONNECTOR_INNER_WIDTH, color);
         }
+    }
+
+    private static void drawConnectorSegment(GuiGraphics gg, Point start, Point end, int thickness, int color) {
+        int dx = end.x - start.x;
+        int dy = end.y - start.y;
+        int length = Math.max(1, (int) Math.ceil(Math.hypot(dx, dy)));
+        float angle = (float) Math.toDegrees(Math.atan2(dy, dx));
+        int half = thickness / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(start.x, start.y, 0);
+        gg.pose().mulPose(Axis.ZP.rotationDegrees(angle));
+        gg.fill(0, -half, length + 1, thickness - half, color);
+        gg.pose().popPose();
     }
 
     private RenderedConnector renderedConnector(QuestEntryData dependency, QuestEntryData quest, boolean incompatible,
                                                 List<Connector> routed) {
         Connector connector = connector(dependency, quest, routed);
-        Set<Long> outer = new HashSet<>();
-        Set<Long> inner = new HashSet<>();
-        for (int index = 1; index < connector.points.size(); index++) {
-            Point start = connector.points.get(index - 1);
-            Point end = connector.points.get(index);
-            rasterLine(start.x, start.y, end.x, end.y, outer, inner);
-        }
-        outer.removeAll(inner);
-        return new RenderedConnector(dependency, quest, connector, incompatible,
-                horizontalSpans(outer), horizontalSpans(inner));
-    }
-
-    private static List<PixelSpan> horizontalSpans(Set<Long> pixels) {
-        List<Point> points = new ArrayList<>(pixels.size());
-        for (long packed : pixels) points.add(new Point((int) (packed >> 32), (int) packed));
-        points.sort(Comparator.comparingInt(Point::y).thenComparingInt(Point::x));
-        List<PixelSpan> spans = new ArrayList<>();
-        int index = 0;
-        while (index < points.size()) {
-            Point first = points.get(index++);
-            int endX = first.x;
-            while (index < points.size()) {
-                Point next = points.get(index);
-                if (next.y != first.y || next.x != endX + 1) break;
-                endX = next.x;
-                index++;
-            }
-            spans.add(new PixelSpan(first.x, first.y, endX - first.x + 1));
-        }
-        return List.copyOf(spans);
+        return new RenderedConnector(dependency, quest, connector, incompatible);
     }
 
     private void rebuildCaches() {
@@ -948,30 +950,6 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             }
         }
         renderedConnectors = List.copyOf(connectors);
-    }
-
-    private static void rasterLine(int x1, int y1, int x2, int y2, Set<Long> outer, Set<Long> inner) {
-        int dx = Math.abs(x2 - x1);
-        int sx = x1 < x2 ? 1 : -1;
-        int dy = -Math.abs(y2 - y1);
-        int sy = y1 < y2 ? 1 : -1;
-        int error = dx + dy;
-        while (true) {
-            addBrush(outer, x1, y1, CONNECTOR_OUTER_WIDTH / 2);
-            addBrush(inner, x1, y1, CONNECTOR_INNER_WIDTH / 2);
-            if (x1 == x2 && y1 == y2) return;
-            int twice = error * 2;
-            if (twice >= dy) { error += dy; x1 += sx; }
-            if (twice <= dx) { error += dx; y1 += sy; }
-        }
-    }
-
-    private static void addBrush(Set<Long> pixels, int centerX, int centerY, int radius) {
-        for (int y = centerY - radius; y <= centerY + radius; y++) {
-            for (int x = centerX - radius; x <= centerX + radius; x++) {
-                pixels.add(((long) x << 32) | (y & 0xFFFFFFFFL));
-            }
-        }
     }
 
     private int canvasNodeX(double mouseX) {
@@ -1072,10 +1050,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private record RenderedConnector(QuestEntryData dependency, QuestEntryData quest, Connector connector,
-                                     boolean incompatible, List<PixelSpan> outerSpans, List<PixelSpan> innerSpans) {
-    }
-
-    private record PixelSpan(int x, int y, int width) {
+                                     boolean incompatible) {
     }
 
     @FunctionalInterface
