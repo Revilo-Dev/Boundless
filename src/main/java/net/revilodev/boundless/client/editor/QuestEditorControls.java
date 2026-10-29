@@ -65,6 +65,8 @@ public final class QuestEditorControls {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_up_highlighted.png");
     private static final ResourceLocation MOVE_DOWN_HIGHLIGHTED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_down_highlighted.png");
+    private static final ResourceLocation EDITOR_SUBHEADER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/3-slice-header.png");
     private static final int ROW_H = 27;
     private static final int ROW_PAD = 1;
     private static final int LIST_CREATE_BUTTON_W = 127;
@@ -75,6 +77,9 @@ public final class QuestEditorControls {
     private static final int MOVE_ICON_BOTTOM_OFFSET = 13;
     private static final int EDITOR_SUBHEADER_H = 12;
     private static final int EDITOR_SUBHEADER_GAP = 3;
+    private static final int EDITOR_SUBHEADER_TEX_W = 72;
+    private static final int EDITOR_SUBHEADER_TEX_H = 10;
+    private static final int EDITOR_SUBHEADER_SLICE = 3;
     private static final String ENTRY_NEW = "__new__";
 
     private QuestEditorControls() {
@@ -472,7 +477,7 @@ public final class QuestEditorControls {
         public void renderHoverTooltipOnTop(GuiGraphics gg) {
             if (pendingTooltip == null || pendingTooltip.isEmpty()) return;
             gg.pose().pushPose();
-            gg.pose().translate(0.0F, 0.0F, 500.0F);
+            gg.pose().translate(0.0F, 0.0F, 2000.0F);
             QuestEditorTooltips.renderComponents(gg, Minecraft.getInstance().font, pendingTooltip, pendingTooltipX, pendingTooltipY);
             gg.pose().popPose();
             pendingTooltip = List.of();
@@ -523,6 +528,9 @@ public final class QuestEditorControls {
                             gg.fill(getX() + 1, top + 1, getX() + width - 1, top + ROW_H - 1, 0x20FFFFFF);
                         }
                     } else {
+                        gg.pose().pushPose();
+                        gg.pose().translate(0, 0, 200);
+                        renderSubheaderBackground(gg, getX(), top, width, rowH);
                         float iconScale = 0.45f;
                         int iconSize = (int) (16 * iconScale);
                         int iconX = getX() + 2;
@@ -556,6 +564,7 @@ public final class QuestEditorControls {
                             drawScaledString(gg, name, textScale, textX, textY, 0xD0D0D0);
                         }
                         drawScaledString(gg, marker, textScale, markerX, textY, 0xD0D0D0);
+                        gg.pose().popPose();
                         yCursor += rowH + rowGap;
                         continue;
                     }
@@ -628,6 +637,19 @@ public final class QuestEditorControls {
                 int barY = getY() + (int) ((height - barH) * scrollRatio);
                 gg.fill(getX() + width + 4, barY, getX() + width + 6, barY + barH, 0xFF808080);
             }
+        }
+
+        private void renderSubheaderBackground(GuiGraphics graphics, int x, int y, int width, int height) {
+            int textureY = y + (height - EDITOR_SUBHEADER_TEX_H) / 2;
+            graphics.blit(EDITOR_SUBHEADER_TEX, x, textureY, 0, 0, EDITOR_SUBHEADER_SLICE,
+                    EDITOR_SUBHEADER_TEX_H, EDITOR_SUBHEADER_TEX_W, EDITOR_SUBHEADER_TEX_H);
+            for (int offset = EDITOR_SUBHEADER_SLICE; offset < width - EDITOR_SUBHEADER_SLICE; offset++) {
+                graphics.blit(EDITOR_SUBHEADER_TEX, x + offset, textureY, EDITOR_SUBHEADER_SLICE, 0, 1,
+                        EDITOR_SUBHEADER_TEX_H, EDITOR_SUBHEADER_TEX_W, EDITOR_SUBHEADER_TEX_H);
+            }
+            graphics.blit(EDITOR_SUBHEADER_TEX, x + width - EDITOR_SUBHEADER_SLICE, textureY,
+                    EDITOR_SUBHEADER_TEX_W - EDITOR_SUBHEADER_SLICE, 0, EDITOR_SUBHEADER_SLICE,
+                    EDITOR_SUBHEADER_TEX_H, EDITOR_SUBHEADER_TEX_W, EDITOR_SUBHEADER_TEX_H);
         }
 
         private void blitQuestWidget(GuiGraphics gg, ResourceLocation texture, int x, int y, int w, int h, boolean hovered) {

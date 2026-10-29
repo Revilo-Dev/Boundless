@@ -656,6 +656,7 @@ public final class QuestData {
     private static boolean isInstancePackEnabled(Path packRoot) {
         if (packRoot == null) return false;
         String id = packRoot.getFileName() == null ? "" : packRoot.getFileName().toString();
+        if ("boundless".equalsIgnoreCase(id)) return Config.enableBuiltinQuestPack();
         Boolean enabledFromPackJson = readEnabledFlag(packRoot.resolve("boundless").resolve("pack.json"));
         boolean defaultEnabled;
         if (enabledFromPackJson != null) {
@@ -785,10 +786,15 @@ public final class QuestData {
         }
     }
 
-    public record Sticker(String type, String value, int x, int y) {
+    public record Sticker(String type, String value, int x, int y, float scale) {
+        public Sticker(String type, String value, int x, int y) {
+            this(type, value, x, y, 1f);
+        }
+
         public Sticker {
             type = "icon".equalsIgnoreCase(type) ? "icon" : "text";
             value = value == null ? "" : value;
+            scale = Math.max(0.25f, Math.min(4f, scale));
         }
     }
 
@@ -2045,7 +2051,8 @@ public final class QuestData {
             String value = optString(sticker, "value");
             if (value == null || value.isBlank()) continue;
             stickers.add(new Sticker(type, value,
-                    parseIntFlexible(sticker, "x", 0), parseIntFlexible(sticker, "y", 0)));
+                    parseIntFlexible(sticker, "x", 0), parseIntFlexible(sticker, "y", 0),
+                    parseFloatFlexible(sticker, "scale", 1f)));
         }
         return List.copyOf(stickers);
     }

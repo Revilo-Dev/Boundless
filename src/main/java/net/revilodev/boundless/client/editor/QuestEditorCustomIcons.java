@@ -20,6 +20,7 @@ import java.util.Map;
 public final class QuestEditorCustomIcons {
     public static final String PREFIX = "boundless:custom_assets/";
     private static final Map<String, ResourceLocation> TEXTURES = new LinkedHashMap<>();
+    private static boolean loaded;
 
     private QuestEditorCustomIcons() {}
 
@@ -28,13 +29,13 @@ public final class QuestEditorCustomIcons {
     }
 
     public static List<String> ids() {
-        reload();
+        ensureLoaded();
         return List.copyOf(TEXTURES.keySet());
     }
 
     public static ResourceLocation texture(String iconId) {
         if (iconId == null || !iconId.startsWith(PREFIX)) return null;
-        reload();
+        ensureLoaded();
         return TEXTURES.get(iconId);
     }
 
@@ -42,9 +43,15 @@ public final class QuestEditorCustomIcons {
         Minecraft minecraft = Minecraft.getInstance();
         for (ResourceLocation texture : TEXTURES.values()) minecraft.getTextureManager().release(texture);
         TEXTURES.clear();
+        loaded = false;
+    }
+
+    private static void ensureLoaded() {
+        if (!loaded) reload();
     }
 
     public static void reload() {
+        loaded = true;
         try {
             Files.createDirectories(directory());
             Map<String, ResourceLocation> found = new LinkedHashMap<>();

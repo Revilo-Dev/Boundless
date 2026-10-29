@@ -472,6 +472,10 @@ public final class QuestEditorModels {
 
         public String questSearchQuery = "";
 
+        public String categorySearchQuery = "";
+
+        public String subCategorySearchQuery = "";
+
         public String packName = "";
 
         public String packNamespace = "";

@@ -202,46 +202,49 @@ public final class QuestEditorItemPickerRenderer {
     private static void renderHoveredTooltip(RenderRequest request, Font font, ItemStack hovered, String hoveredId) {
         if (hovered.isEmpty()) return;
         if (request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM) {
-            request.gg.renderTooltip(font, Component.literal(hoveredId.substring(QuestEditorCustomIcons.PREFIX.length())), request.mouseX, request.mouseY);
+            QuestEditorTooltips.render(request.gg, font, Component.literal(hoveredId.substring(QuestEditorCustomIcons.PREFIX.length())), request.mouseX, request.mouseY);
         } else if (QuestEditorEmojis.nameFromIconId(hoveredId) != null) {
             return;
         } else if (request.pickerMode == PickerMode.ITEMS && request.itemPickerTab == ItemPickerTab.TAGS && request.allowsTags) {
-            request.gg.renderTooltip(font, Component.literal(hoveredId), request.mouseX, request.mouseY);
+            QuestEditorTooltips.render(request.gg, font, Component.literal(hoveredId), request.mouseX, request.mouseY);
         } else if (request.pickerMode == PickerMode.MOBS) {
-            request.gg.renderTooltip(font, QuestEditorItemIcons.mobDisplayNameForMobId(hoveredId), request.mouseX, request.mouseY);
+            QuestEditorTooltips.render(request.gg, font, QuestEditorItemIcons.mobDisplayNameForMobId(hoveredId), request.mouseX, request.mouseY);
         } else if (request.pickerMode == PickerMode.EFFECTS) {
-            request.gg.renderTooltip(font, QuestEditorItemIcons.effectDisplayNameForPickerItem(hovered, request.effectIds), request.mouseX, request.mouseY);
+            QuestEditorTooltips.render(request.gg, font, QuestEditorItemIcons.effectDisplayNameForPickerItem(hovered, request.effectIds), request.mouseX, request.mouseY);
         } else {
+            request.gg.pose().pushPose();
+            request.gg.pose().translate(0f, 0f, 2000f);
             request.gg.renderTooltip(font, hovered, request.mouseX, request.mouseY);
+            request.gg.pose().popPose();
         }
     }
 
     private static void renderSideTabTooltip(RenderRequest request, int pickerX, int pickerY) {
         if (request.blockTexturePicker) {
             if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) {
-                request.gg.renderTooltip(request.font, Component.literal("Full block textures"), request.mouseX, request.mouseY);
+                QuestEditorTooltips.render(request.gg, request.font, Component.literal("Full block textures"), request.mouseX, request.mouseY);
             }
             return;
         }
         if (request.backgroundAssetPicker) {
             if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM, false)) {
-                request.gg.renderTooltip(request.font, Component.literal("Custom background assets"), request.mouseX, request.mouseY);
+                QuestEditorTooltips.render(request.gg, request.font, Component.literal("Custom background assets"), request.mouseX, request.mouseY);
             }
             return;
         }
         if (request.iconPicker) {
-            if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) request.gg.renderTooltip(request.font, Component.literal("Items"), request.mouseX, request.mouseY);
-            else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS, false)) request.gg.renderTooltip(request.font, Component.literal("Icons"), request.mouseX, request.mouseY);
-            else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM, false)) request.gg.renderTooltip(request.font, Component.literal("Custom Assets"), request.mouseX, request.mouseY);
+            if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) QuestEditorTooltips.render(request.gg, request.font, Component.literal("Items"), request.mouseX, request.mouseY);
+            else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS, false)) QuestEditorTooltips.render(request.gg, request.font, Component.literal("Icons"), request.mouseX, request.mouseY);
+            else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM, false)) QuestEditorTooltips.render(request.gg, request.font, Component.literal("Custom Assets"), request.mouseX, request.mouseY);
             return;
         }
         if (request.pickerMode != PickerMode.ITEMS) return;
         if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, request.allowsTags)) {
-            request.gg.renderTooltip(request.font, Component.literal("All Items"), request.mouseX, request.mouseY);
+            QuestEditorTooltips.render(request.gg, request.font, Component.literal("All Items"), request.mouseX, request.mouseY);
         } else if (request.allowsTags && isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.TAGS, true)) {
-            request.gg.renderTooltip(request.font, Component.literal("Item Tags"), request.mouseX, request.mouseY);
+            QuestEditorTooltips.render(request.gg, request.font, Component.literal("Item Tags"), request.mouseX, request.mouseY);
         } else if (isMouseOverSideTab(request.mouseX, request.mouseY, pickerX, pickerY, ItemPickerTab.INVENTORY, request.allowsTags)) {
-            request.gg.renderTooltip(request.font, Component.literal("Inventory"), request.mouseX, request.mouseY);
+            QuestEditorTooltips.render(request.gg, request.font, Component.literal("Inventory"), request.mouseX, request.mouseY);
         }
     }
 

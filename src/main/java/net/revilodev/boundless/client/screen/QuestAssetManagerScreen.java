@@ -14,7 +14,9 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.QuestMediaRenderer;
+import net.revilodev.boundless.client.QuestPanelBackgroundRenderer;
 import net.revilodev.boundless.client.editor.QuestEditorCustomIcons;
+import net.revilodev.boundless.client.editor.QuestEditorControls;
 import net.revilodev.boundless.client.editor.QuestEditorEmojis;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -32,15 +34,18 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 
 @OnlyIn(Dist.CLIENT)
 public final class QuestAssetManagerScreen extends Screen {
     private static final int PANEL_WIDTH = 270;
     private static final int PANEL_HEIGHT = 206;
     private static final int ROW_HEIGHT = 28;
-    private static final int LIST_HEIGHT = 140;
+    private static final int LIST_HEIGHT = 116;
     private static final ResourceLocation MEDIA_ICON = ResourceLocation.fromNamespaceAndPath(
             "boundless", "textures/gui/sprites/editor/inventory.png");
+    private static final ResourceLocation PANEL_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            "boundless", "textures/gui/quest_panel.png");
 
     private final Screen parent;
     private AssetType type = AssetType.ASSET;
@@ -51,8 +56,11 @@ public final class QuestAssetManagerScreen extends Screen {
     private int panelY;
     private HoldDeleteButton deleteButton;
     private Button uploadButton;
+    private Button renameButton;
     private String status = "";
     private int statusColor = 0xFFA0FFA0;
+    private boolean loading;
+    private int loadGeneration;
 
     public QuestAssetManagerScreen(Screen parent) {
         super(Component.literal("Asset Manager"));
@@ -75,7 +83,9 @@ public final class QuestAssetManagerScreen extends Screen {
                 .bounds(panelX + 95, tabY, 80, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Emojis"), button -> setType(AssetType.EMOJI))
                 .bounds(panelX + 182, tabY, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Back"), button -> minecraft.setScreen(parent))
+        addRenderableWidget(new QuestEditorControls.BackButton(
+                panelX - 23, panelY + PANEL_HEIGHT - 23, () -> minecraft.setScreen(parent)));
+        renameButton = addRenderableWidget(Button.builder(Component.literal("Rename"), button -> renameSelected())
                 .bounds(panelX + 8, panelY + PANEL_HEIGHT - 25, 52, 20).build());
         uploadButton = addRenderableWidget(Button.builder(uploadLabel(), button -> upload())
                 .bounds(panelX + 66, panelY + PANEL_HEIGHT - 25, 92, 20).build());
@@ -98,39 +108,61 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void reloadEntries() {
+        reloadEntries(null);
+    }
+
+    private void reloadEntries(Runnable afterLoad) {
+        int generation = ++loadGeneration;
+        loading = true;
+        status = "Loading " + type.label.toLowerCase(Locale.ROOT) + "...";
+        statusColor = 0xFFAAAAAA;
+        AssetType requestedType = type;
+        CompletableFuture.supplyAsync(() -> scanEntries(requestedType), Util.backgroundExecutor())
+                .thenAccept(found -> {
+                    if (minecraft == null) return;
+                    minecraft.execute(() -> {
+                        if (generation != loadGeneration || minecraft.screen != this) return;
+                        entries = found;
+                        loading = false;
+                        status = "";
+                        scroll = Math.max(0, Math.min(scroll, maxScroll()));
+                        if (selected != null) {
+                            selected = entries.stream().filter(entry -> entry.path.equals(selected.path)).findFirst().orElse(null);
+                        }
+                        if (afterLoad != null) afterLoad.run();
+                    });
+                });
+    }
+
+    private List<AssetEntry> scanEntries(AssetType requestedType) {
         String usage = usageCorpus();
         List<AssetEntry> found = new ArrayList<>();
-        Path root = type.root();
+        Path root = requestedType.root();
         try {
             Files.createDirectories(root);
             try (var paths = Files.walk(root)) {
                 paths.filter(Files::isRegularFile)
-                        .filter(path -> type.accepts(path.getFileName().toString()))
+                        .filter(path -> requestedType.accepts(path.getFileName().toString()))
                         .sorted(Comparator.comparing(Path::toString))
-                        .forEach(path -> found.add(assetEntry(root, path, usage)));
+                        .forEach(path -> found.add(assetEntry(requestedType, root, path, usage)));
             }
         } catch (IOException exception) {
-            status = "Could not read asset folder";
-            statusColor = 0xFFFF7070;
+            return List.of();
         }
-        entries = List.copyOf(found);
-        scroll = Math.max(0, Math.min(scroll, maxScroll()));
-        if (selected != null) {
-            selected = entries.stream().filter(entry -> entry.path.equals(selected.path)).findFirst().orElse(null);
-        }
+        return List.copyOf(found);
     }
 
-    private AssetEntry assetEntry(Path root, Path path, String usage) {
+    private AssetEntry assetEntry(AssetType assetType, Path root, Path path, String usage) {
         String relative = root.relativize(path).toString().replace('\\', '/');
         String withoutExtension = relative.substring(0, relative.lastIndexOf('.')).toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9_./-]", "_");
-        String reference = switch (type) {
+        String reference = switch (assetType) {
             case ASSET -> QuestEditorCustomIcons.PREFIX + withoutExtension;
             case MEDIA -> relative;
             case EMOJI -> withoutExtension;
         };
         int[] dimensions = dimensions(path);
-        boolean used = switch (type) {
+        boolean used = switch (assetType) {
             case ASSET -> usage.contains(reference) || usage.contains(relative);
             case MEDIA -> usage.contains(relative) || usage.contains(path.getFileName().toString());
             case EMOJI -> usage.contains(":" + reference + ":")
@@ -206,14 +238,17 @@ public final class QuestAssetManagerScreen extends Screen {
                 return;
             }
             String fileName = source.getFileName().toString().replaceAll("[^A-Za-z0-9_.-]", "_");
-            Path target = root.resolve(fileName).normalize();
+            if (type == AssetType.EMOJI) fileName = fileName.toLowerCase(Locale.ROOT);
+            final String uploadedFileName = fileName;
+            Path target = root.resolve(uploadedFileName).normalize();
             if (!target.startsWith(root)) throw new IOException("Invalid asset path");
             if (!source.equals(target)) Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             clearAssetCaches();
-            reloadEntries();
-            selected = entries.stream().filter(entry -> entry.path.equals(target)).findFirst().orElse(null);
-            status = fileName + " uploaded";
-            statusColor = 0xFFA0FFA0;
+            reloadEntries(() -> {
+                selected = entries.stream().filter(entry -> entry.path.equals(target)).findFirst().orElse(null);
+                status = uploadedFileName + " uploaded";
+                statusColor = 0xFFA0FFA0;
+            });
         } catch (Exception exception) {
             status = "Could not upload " + type.label.toLowerCase(Locale.ROOT);
             statusColor = 0xFFFF7070;
@@ -239,6 +274,59 @@ public final class QuestAssetManagerScreen extends Screen {
         }
     }
 
+    private void renameSelected() {
+        if (selected == null) return;
+        AssetEntry entry = selected;
+        String requested = TinyFileDialogs.tinyfd_inputBox(
+                "Rename " + type.label.toLowerCase(Locale.ROOT), "New file name", entry.path.getFileName().toString());
+        if (requested == null) return;
+        requested = requested.trim();
+        if (requested.isBlank() || requested.contains("/") || requested.contains("\\")) {
+            status = "Enter a valid file name";
+            statusColor = 0xFFFF7070;
+            return;
+        }
+        String oldName = entry.path.getFileName().toString();
+        int extensionIndex = oldName.lastIndexOf('.');
+        String extension = extensionIndex >= 0 ? oldName.substring(extensionIndex).toLowerCase(Locale.ROOT) : "";
+        if (requested.lastIndexOf('.') < 1) requested += extension;
+        if (!type.accepts(requested)) {
+            status = "Unsupported file extension";
+            statusColor = 0xFFFF7070;
+            return;
+        }
+        String sanitizedFileName = requested.replaceAll("[^A-Za-z0-9_.-]", "_");
+        if (type == AssetType.EMOJI) sanitizedFileName = sanitizedFileName.toLowerCase(Locale.ROOT);
+        final String fileName = sanitizedFileName;
+        try {
+            Path root = type.root().toAbsolutePath().normalize();
+            Path source = entry.path.toAbsolutePath().normalize();
+            Path target = source.resolveSibling(fileName).normalize();
+            if (!source.startsWith(root) || !target.startsWith(root)) throw new IOException("Invalid asset path");
+            if (Files.exists(target) && !source.equals(target)) {
+                status = fileName + " already exists";
+                statusColor = 0xFFFF7070;
+                return;
+            }
+            if (!oldName.equals(fileName) && source.equals(target)) {
+                Path temporary = source.resolveSibling(".boundless-rename-" + Long.toUnsignedString(System.nanoTime()) + extension);
+                Files.move(source, temporary);
+                Files.move(temporary, target);
+            } else if (!source.equals(target)) {
+                Files.move(source, target);
+            }
+            clearAssetCaches();
+            reloadEntries(() -> {
+                selected = entries.stream().filter(found -> found.path.equals(target)).findFirst().orElse(null);
+                status = oldName + " renamed to " + fileName;
+                statusColor = 0xFFA0FFA0;
+            });
+        } catch (IOException exception) {
+            status = "Could not rename " + oldName;
+            statusColor = 0xFFFF7070;
+        }
+    }
+
     private void clearAssetCaches() {
         QuestEditorCustomIcons.clear();
         QuestEditorEmojis.clearCache();
@@ -246,10 +334,15 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    }
+
+    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 100);
         graphics.fill(0, 0, width, height, 0xA0000000);
-        graphics.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xFF171717);
-        graphics.fill(panelX + 1, panelY + 1, panelX + PANEL_WIDTH - 1, panelY + PANEL_HEIGHT - 1, 0xFF2B2B2B);
+        QuestPanelBackgroundRenderer.render(graphics, PANEL_TEXTURE, panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT);
         graphics.drawCenteredString(font, title, width / 2, panelY + 7, 0xFFFFFFFF);
         int listX = panelX + 8;
         int listY = panelY + 47;
@@ -272,9 +365,10 @@ public final class QuestAssetManagerScreen extends Screen {
             graphics.drawString(font, details, listX + 31, y + 16, entry.used ? 0xFF80FF80 : 0xFFAAAAAA, false);
             if (over) hovered = entry;
         }
-        if (entries.isEmpty()) graphics.drawCenteredString(font, "No " + type.label.toLowerCase(Locale.ROOT) + " found",
+        if (!loading && entries.isEmpty()) graphics.drawCenteredString(font, "No " + type.label.toLowerCase(Locale.ROOT) + " found",
                 width / 2, listY + 62, 0xFFAAAAAA);
-        if (!status.isBlank()) graphics.drawCenteredString(font, status, width / 2, panelY + PANEL_HEIGHT + 5, statusColor);
+        if (!status.isBlank()) graphics.drawCenteredString(font, status, width / 2, panelY + PANEL_HEIGHT - 38, statusColor);
+        renameButton.active = selected != null;
         deleteButton.active = selected != null;
         deleteButton.setMessage(Component.literal(selected == null ? "Select an asset" : "Hold to delete"));
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -287,6 +381,7 @@ public final class QuestAssetManagerScreen extends Screen {
                             .withStyle(hovered.used ? ChatFormatting.GREEN : ChatFormatting.GRAY));
             graphics.renderComponentTooltip(font, tooltip, mouseX, mouseY);
         }
+        graphics.pose().popPose();
     }
 
     private void renderPreview(GuiGraphics graphics, AssetEntry entry, int x, int y) {
