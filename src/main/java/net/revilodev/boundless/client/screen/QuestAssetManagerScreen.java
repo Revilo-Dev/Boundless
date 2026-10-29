@@ -39,9 +39,11 @@ import java.util.concurrent.CompletableFuture;
 @OnlyIn(Dist.CLIENT)
 public final class QuestAssetManagerScreen extends Screen {
     private static final int PANEL_WIDTH = 270;
-    private static final int PANEL_HEIGHT = 206;
+    private static final int PANEL_HEIGHT = 166;
     private static final int ROW_HEIGHT = 28;
-    private static final int LIST_HEIGHT = 116;
+    private static final int LIST_HEIGHT = 76;
+    private static final int LIST_COLUMNS = 2;
+    private static final int COLUMN_GAP = 2;
     private static final ResourceLocation MEDIA_ICON = ResourceLocation.fromNamespaceAndPath(
             "boundless", "textures/gui/sprites/editor/inventory.png");
     private static final ResourceLocation PANEL_TEXTURE = ResourceLocation.fromNamespaceAndPath(
@@ -54,7 +56,7 @@ public final class QuestAssetManagerScreen extends Screen {
     private int scroll;
     private int panelX;
     private int panelY;
-    private HoldDeleteButton deleteButton;
+    private Button deleteButton;
     private Button uploadButton;
     private Button renameButton;
     private String status = "";
@@ -77,20 +79,19 @@ public final class QuestAssetManagerScreen extends Screen {
         panelX = (width - PANEL_WIDTH) / 2;
         panelY = (height - PANEL_HEIGHT) / 2;
         int tabY = panelY + 22;
-        addRenderableWidget(Button.builder(Component.literal("Assets"), button -> setType(AssetType.ASSET))
-                .bounds(panelX + 8, tabY, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Media"), button -> setType(AssetType.MEDIA))
-                .bounds(panelX + 95, tabY, 80, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Emojis"), button -> setType(AssetType.EMOJI))
-                .bounds(panelX + 182, tabY, 80, 20).build());
+        addRenderableWidget(new AssetTabButton(panelX + 8, tabY, 80, AssetType.ASSET));
+        addRenderableWidget(new AssetTabButton(panelX + 95, tabY, 80, AssetType.MEDIA));
+        addRenderableWidget(new AssetTabButton(panelX + 182, tabY, 80, AssetType.EMOJI));
         addRenderableWidget(new QuestEditorControls.BackButton(
-                panelX - 23, panelY + PANEL_HEIGHT - 23, () -> minecraft.setScreen(parent)));
+                panelX - 24, panelY + PANEL_HEIGHT - 23, () -> minecraft.setScreen(parent)));
         renameButton = addRenderableWidget(Button.builder(Component.literal("Rename"), button -> renameSelected())
-                .bounds(panelX + 8, panelY + PANEL_HEIGHT - 25, 52, 20).build());
+                .bounds(panelX + 8, panelY + PANEL_HEIGHT - 35, 52, 20).build());
         uploadButton = addRenderableWidget(Button.builder(uploadLabel(), button -> upload())
-                .bounds(panelX + 66, panelY + PANEL_HEIGHT - 25, 92, 20).build());
-        deleteButton = addRenderableWidget(new HoldDeleteButton(panelX + 164, panelY + PANEL_HEIGHT - 25, 98, 20,
-                this::deleteSelected));
+                .bounds(panelX + 66, panelY + PANEL_HEIGHT - 35, 92, 20).build());
+        deleteButton = addRenderableWidget(Button.builder(Component.literal("Delete"), button -> deleteSelected())
+                .bounds(panelX + 164, panelY + PANEL_HEIGHT - 35, 98, 20).build());
+        renameButton.active = false;
+        deleteButton.active = false;
         reloadEntries();
     }
 
@@ -104,7 +105,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private Component uploadLabel() {
-        return Component.literal("Upload " + type.label.toLowerCase(Locale.ROOT));
+        return Component.literal("Upload");
     }
 
     private void reloadEntries() {
@@ -163,12 +164,31 @@ public final class QuestAssetManagerScreen extends Screen {
         };
         int[] dimensions = dimensions(path);
         boolean used = switch (assetType) {
-            case ASSET -> usage.contains(reference) || usage.contains(relative);
-            case MEDIA -> usage.contains(relative) || usage.contains(path.getFileName().toString());
-            case EMOJI -> usage.contains(":" + reference + ":")
-                    || usage.contains(QuestEditorEmojis.iconId(reference));
+            case ASSET -> containsReference(usage, reference) || containsReference(usage, relative);
+            case MEDIA -> containsReference(usage, relative);
+            case EMOJI -> containsReference(usage, ":" + reference + ":")
+                    || containsReference(usage, QuestEditorEmojis.iconId(reference));
         };
         return new AssetEntry(path, relative, reference, dimensions[0], dimensions[1], used);
+    }
+
+    private boolean containsReference(String content, String reference) {
+        if (content == null || content.isEmpty() || reference == null || reference.isEmpty()) return false;
+        int from = 0;
+        while (from < content.length()) {
+            int index = content.indexOf(reference, from);
+            if (index < 0) return false;
+            int end = index + reference.length();
+            boolean leftBoundary = index == 0 || !isReferenceCharacter(content.charAt(index - 1));
+            boolean rightBoundary = end == content.length() || !isReferenceCharacter(content.charAt(end));
+            if (leftBoundary && rightBoundary) return true;
+            from = index + 1;
+        }
+        return false;
+    }
+
+    private boolean isReferenceCharacter(char value) {
+        return Character.isLetterOrDigit(value) || value == '_' || value == '-' || value == '.' || value == '/';
     }
 
     private String usageCorpus() {
@@ -343,34 +363,42 @@ public final class QuestAssetManagerScreen extends Screen {
         graphics.pose().translate(0, 0, 100);
         graphics.fill(0, 0, width, height, 0xA0000000);
         QuestPanelBackgroundRenderer.render(graphics, PANEL_TEXTURE, panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT);
-        graphics.drawCenteredString(font, title, width / 2, panelY + 7, 0xFFFFFFFF);
+        graphics.drawCenteredString(font, title, width / 2, panelY + 11, 0xFFFFFFFF);
         int listX = panelX + 8;
         int listY = panelY + 47;
-        graphics.fill(listX, listY, listX + PANEL_WIDTH - 16, listY + LIST_HEIGHT, 0xFF111111);
+        int listWidth = PANEL_WIDTH - 16;
+        int columnWidth = (listWidth - COLUMN_GAP) / LIST_COLUMNS;
+        graphics.fill(listX, listY, listX + listWidth, listY + LIST_HEIGHT, 0xFF111111);
         AssetEntry hovered = null;
         int visibleRows = LIST_HEIGHT / ROW_HEIGHT;
-        for (int row = 0; row < visibleRows && scroll + row < entries.size(); row++) {
-            AssetEntry entry = entries.get(scroll + row);
-            int y = listY + row * ROW_HEIGHT;
-            boolean over = mouseX >= listX && mouseX < listX + PANEL_WIDTH - 16 && mouseY >= y && mouseY < y + ROW_HEIGHT;
-            boolean chosen = entry.equals(selected);
-            int border = chosen ? 0xFFFFFFFF : 0xFF555555;
-            graphics.fill(listX + 1, y + 1, listX + PANEL_WIDTH - 17, y + ROW_HEIGHT - 1, border);
-            graphics.fill(listX + 2, y + 2, listX + PANEL_WIDTH - 18, y + ROW_HEIGHT - 2,
-                    over ? 0xFF3A3A3A : 0xFF242424);
-            renderPreview(graphics, entry, listX + 5, y + 4);
-            graphics.drawString(font, font.plainSubstrByWidth(entry.relative, PANEL_WIDTH - 58), listX + 31, y + 5,
-                    0xFFFFFFFF, false);
-            String details = entry.width + "×" + entry.height + "  " + (entry.used ? "Used" : "Unused");
-            graphics.drawString(font, details, listX + 31, y + 16, entry.used ? 0xFF80FF80 : 0xFFAAAAAA, false);
-            if (over) hovered = entry;
+        for (int row = 0; row < visibleRows; row++) {
+            for (int column = 0; column < LIST_COLUMNS; column++) {
+                int index = (scroll + row) * LIST_COLUMNS + column;
+                if (index >= entries.size()) break;
+                AssetEntry entry = entries.get(index);
+                int x = listX + column * (columnWidth + COLUMN_GAP);
+                int y = listY + row * ROW_HEIGHT;
+                boolean over = mouseX >= x && mouseX < x + columnWidth && mouseY >= y && mouseY < y + ROW_HEIGHT;
+                boolean chosen = entry.equals(selected);
+                int border = chosen ? 0xFFFFFFFF : 0xFF555555;
+                graphics.fill(x + 1, y + 1, x + columnWidth - 1, y + ROW_HEIGHT - 1, border);
+                graphics.fill(x + 2, y + 2, x + columnWidth - 2, y + ROW_HEIGHT - 2,
+                        over ? 0xFF3A3A3A : 0xFF242424);
+                renderPreview(graphics, entry, x + 5, y + 4);
+                graphics.drawString(font, font.plainSubstrByWidth(entry.relative, columnWidth - 36), x + 31, y + 5,
+                        0xFFFFFFFF, false);
+                String details = entry.width + "×" + entry.height + "  " + (entry.used ? "Used" : "Unused");
+                graphics.drawString(font, font.plainSubstrByWidth(details, columnWidth - 36), x + 31, y + 16,
+                        entry.used ? 0xFF80FF80 : 0xFFAAAAAA, false);
+                if (over) hovered = entry;
+            }
         }
         if (!loading && entries.isEmpty()) graphics.drawCenteredString(font, "No " + type.label.toLowerCase(Locale.ROOT) + " found",
                 width / 2, listY + 62, 0xFFAAAAAA);
-        if (!status.isBlank()) graphics.drawCenteredString(font, status, width / 2, panelY + PANEL_HEIGHT - 38, statusColor);
+        if (!status.isBlank()) graphics.drawCenteredString(font, status, width / 2, panelY + PANEL_HEIGHT - 48, statusColor);
         renameButton.active = selected != null;
         deleteButton.active = selected != null;
-        deleteButton.setMessage(Component.literal(selected == null ? "Select an asset" : "Hold to delete"));
+        deleteButton.setMessage(Component.literal("Delete"));
         super.render(graphics, mouseX, mouseY, partialTick);
         if (hovered != null) {
             List<Component> tooltip = List.of(
@@ -402,9 +430,14 @@ public final class QuestAssetManagerScreen extends Screen {
         if (button != 0) return false;
         int listX = panelX + 8;
         int listY = panelY + 47;
-        if (mouseX < listX || mouseX >= listX + PANEL_WIDTH - 16 || mouseY < listY || mouseY >= listY + LIST_HEIGHT) return false;
+        int listWidth = PANEL_WIDTH - 16;
+        int columnWidth = (listWidth - COLUMN_GAP) / LIST_COLUMNS;
+        if (mouseX < listX || mouseX >= listX + listWidth || mouseY < listY || mouseY >= listY + LIST_HEIGHT) return false;
         int row = (int) ((mouseY - listY) / ROW_HEIGHT);
-        int index = scroll + row;
+        int column = Math.min(LIST_COLUMNS - 1, (int) ((mouseX - listX) / (columnWidth + COLUMN_GAP)));
+        int columnX = listX + column * (columnWidth + COLUMN_GAP);
+        if (mouseX >= columnX + columnWidth) return false;
+        int index = (scroll + row) * LIST_COLUMNS + column;
         if (index >= 0 && index < entries.size()) selected = entries.get(index);
         return true;
     }
@@ -417,7 +450,8 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private int maxScroll() {
-        return Math.max(0, entries.size() - LIST_HEIGHT / ROW_HEIGHT);
+        int rows = (entries.size() + LIST_COLUMNS - 1) / LIST_COLUMNS;
+        return Math.max(0, rows - LIST_HEIGHT / ROW_HEIGHT);
     }
 
     @Override
@@ -466,51 +500,30 @@ public final class QuestAssetManagerScreen extends Screen {
     private record AssetEntry(Path path, String relative, String reference, int width, int height, boolean used) {
     }
 
-    private static final class HoldDeleteButton extends AbstractButton {
-        private static final long HOLD_TIME_MS = 3000L;
-        private final Runnable onDelete;
-        private boolean holding;
-        private long startedAt;
+    private final class AssetTabButton extends AbstractButton {
+        private final AssetType assetType;
 
-        private HoldDeleteButton(int x, int y, int width, int height, Runnable onDelete) {
-            super(x, y, width, height, Component.literal("Select an asset"));
-            this.onDelete = onDelete;
-        }
-
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            if (!active || !visible || button != 0 || !isMouseOver(mouseX, mouseY)) return false;
-            holding = true;
-            startedAt = Util.getMillis();
-            return true;
-        }
-
-        @Override
-        public boolean mouseReleased(double mouseX, double mouseY, int button) {
-            if (button == 0) holding = false;
-            return true;
+        private AssetTabButton(int x, int y, int width, AssetType assetType) {
+            super(x, y, width, 20, Component.literal(assetType.label));
+            this.assetType = assetType;
         }
 
         @Override
         public void onPress() {
+            if (type != assetType) setType(assetType);
         }
 
         @Override
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-            if (holding && (!active || !visible || !isMouseOver(mouseX, mouseY))) holding = false;
-            float progress = holding ? Math.min(1f, (Util.getMillis() - startedAt) / (float) HOLD_TIME_MS) : 0f;
-            super.renderWidget(graphics, mouseX, mouseY, partialTick);
-            if (progress > 0f) {
-                graphics.fill(getX() + 2, getY() + height - 3,
-                        getX() + 2 + Math.round((width - 4) * progress), getY() + height - 1, 0xFFFF3030);
-            }
-            if (progress >= 1f) {
-                holding = false;
-                if (onDelete != null) onDelete.run();
-            }
-            if (active && isMouseOver(mouseX, mouseY)) {
-                graphics.renderTooltip(Minecraft.getInstance().font, Component.literal("Hold for 3 seconds to delete"), mouseX, mouseY);
-            }
+            boolean selected = type == assetType;
+            ResourceLocation sprite = !selected
+                    ? ResourceLocation.withDefaultNamespace("widget/button_disabled")
+                    : ResourceLocation.withDefaultNamespace(isMouseOver(mouseX, mouseY)
+                    ? "widget/button_highlighted" : "widget/button");
+            graphics.blitSprite(sprite, getX(), getY(), width, height);
+            int textWidth = font.width(getMessage());
+            graphics.drawString(font, getMessage(), getX() + (width - textWidth) / 2, getY() + 6,
+                    selected ? 0xFFFFFFFF : 0xFF808080, false);
         }
 
         @Override

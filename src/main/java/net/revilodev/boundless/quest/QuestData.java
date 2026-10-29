@@ -373,6 +373,7 @@ public final class QuestData {
         public final boolean autoComplete;
         public final boolean treeLayout;
         public final String background;
+        public final float backgroundTileScale;
         public final boolean backgroundDarkening;
         public final float backgroundDarkeningOpacity;
         public final List<Sticker> stickers;
@@ -398,13 +399,21 @@ public final class QuestData {
                         boolean treeLayout, String background, boolean backgroundDarkening,
                         float backgroundDarkeningOpacity) {
             this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, background,
-                    backgroundDarkening, backgroundDarkeningOpacity, List.of());
+                    0.5f, backgroundDarkening, backgroundDarkeningOpacity, List.of());
         }
 
         public Category(String id, String icon, String name, int order,
                         boolean excludeFromAll, String dependency, boolean autoComplete,
                         boolean treeLayout, String background, boolean backgroundDarkening,
                         float backgroundDarkeningOpacity, List<Sticker> stickers) {
+            this(id, icon, name, order, excludeFromAll, dependency, autoComplete, treeLayout, background,
+                    0.5f, backgroundDarkening, backgroundDarkeningOpacity, stickers);
+        }
+
+        public Category(String id, String icon, String name, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, float backgroundTileScale,
+                        boolean backgroundDarkening, float backgroundDarkeningOpacity, List<Sticker> stickers) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
             this.name = name == null || name.isBlank() ? id : name;
@@ -414,6 +423,7 @@ public final class QuestData {
             this.autoComplete = autoComplete;
             this.treeLayout = treeLayout;
             this.background = background == null ? "" : background;
+            this.backgroundTileScale = Math.max(0.1f, Math.min(2f, backgroundTileScale));
             this.backgroundDarkening = backgroundDarkening;
             this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, backgroundDarkeningOpacity));
             this.stickers = stickers == null ? List.of() : List.copyOf(stickers);
@@ -580,12 +590,14 @@ public final class QuestData {
                         parseBoolFlexible(obj, "autoComplete", false));
                 boolean treeLayout = "tree".equalsIgnoreCase(optString(obj, "layout"));
                 String background = optString(obj, "background");
+                float backgroundTileScale = parseFloatFlexible(obj, "background_tile_scale", 0.5f);
                 boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
                 float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
                 List<Sticker> stickers = parseStickers(obj);
 
                 data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
-                        autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity, stickers));
+                        autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
+                        backgroundDarkeningOpacity, stickers));
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("category-parse:" + entry.getKey(), 5_000L,
                         "could not parse category {}", entry.getKey(), e);
@@ -772,11 +784,13 @@ public final class QuestData {
                             parseBoolFlexible(obj, "autoComplete", false));
                     boolean treeLayout = packTreeLayout || "tree".equalsIgnoreCase(optString(obj, "layout"));
                     String background = optString(obj, "background");
+                    float backgroundTileScale = parseFloatFlexible(obj, "background_tile_scale", 0.5f);
                     boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
                     float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
                     List<Sticker> stickers = parseStickers(obj);
                     data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
-                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity, stickers));
+                            autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
+                            backgroundDarkeningOpacity, stickers));
                 } catch (Exception e) {
                     BoundlessDebug.warnRateLimited("category-file:" + file, 5_000L,
                             "could not parse category file {}", file, e);
@@ -1746,12 +1760,14 @@ public final class QuestData {
                             parseBoolFlexible(o, "autoComplete", false));
                     boolean treeLayout = parseBoolFlexible(o, "treeLayout", false);
                     String background = optString(o, "background");
+                    float backgroundTileScale = parseFloatFlexible(o, "backgroundTileScale", 0.5f);
                     boolean backgroundDarkening = parseBoolFlexible(o, "backgroundDarkening", false);
                     float backgroundDarkeningOpacity = parseFloatFlexible(o, "backgroundDarkeningOpacity", 0.45f);
                     List<Sticker> stickers = parseStickers(o);
 
                     parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency,
-                            autoComplete, treeLayout, background, backgroundDarkening, backgroundDarkeningOpacity, stickers));
+                            autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
+                            backgroundDarkeningOpacity, stickers));
                 }
             }
 
