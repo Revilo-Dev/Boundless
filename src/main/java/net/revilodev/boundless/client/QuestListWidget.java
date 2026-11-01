@@ -483,7 +483,7 @@ public final class QuestListWidget extends AbstractWidget {
                     tex = ROW_TEX_DISCARDED;
                 } else if (st == QuestTracker.Status.REDEEMED) {
                     tex = ROW_TEX_COMPLETED;
-                } else if (st == QuestTracker.Status.COMPLETED || ready) {
+                } else if (ready) {
                     tex = ROW_TEX_REDEEMABLE;
                 } else {
                     tex = ROW_TEX;

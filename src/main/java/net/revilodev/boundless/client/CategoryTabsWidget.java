@@ -471,7 +471,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
             QuestTracker.Status status = QuestTracker.getStatus(quest, mc.player);
             if (status == QuestTracker.Status.REDEEMED || status == QuestTracker.Status.REJECTED) continue;
             if (!QuestTracker.dependenciesMet(quest, mc.player)) continue;
-            if (status == QuestTracker.Status.COMPLETED || QuestTracker.isReady(quest, mc.player)
+            if (QuestTracker.isReady(quest, mc.player)
                     || QuestTracker.canAcknowledge(quest, mc.player)) return true;
         }
         return false;

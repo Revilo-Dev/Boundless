@@ -16,6 +16,16 @@
 # gradle
 /build/
 /.gradle/
+/gradlew
+/gradlew.bat
+/settings.gradle
+
+# non-Boundless assets
+/src/main/resources/assets/*/
+!/src/main/resources/assets/boundless/
+
+# wiki
+/wiki/
 
 # runtime
 /run/
@@ -27,7 +37,7 @@
 hs_err_pid*
 replay_pid*
 
-# local extracted sources
+# local sources
 /.tmpneoforge/
 /.tmpneoforge2/
 /.tmpneoforge3/

@@ -2,6 +2,7 @@ package net.revilodev.boundless.client.editor;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.network.chat.Component;
 
 import java.util.List;
 import java.util.LinkedHashSet;
@@ -21,7 +22,7 @@ public final class QuestEditorJsonBuilder {
                                            float backgroundDarkeningOpacity, Consumer<String> onError) {
         String categoryId = safe(id).trim();
         if (categoryId.isBlank()) {
-            setError(onError, "Category id required");
+            setError(onError, "category_id_required");
             return null;
         }
         JsonObject obj = new JsonObject();
@@ -42,7 +43,7 @@ public final class QuestEditorJsonBuilder {
     public static JsonObject buildSubCategory(String id, String category, String name, String icon, int order, boolean defaultOpen, Consumer<String> onError) {
         String subId = safe(id).trim();
         if (subId.isBlank()) {
-            setError(onError, "Sub-category id required");
+            setError(onError, "subcategory_id_required");
             return null;
         }
         JsonObject obj = new JsonObject();
@@ -60,21 +61,21 @@ public final class QuestEditorJsonBuilder {
         if (fields == null) return null;
         String questId = safe(fields.id).trim();
         if (questId.isBlank()) {
-            setError(onError, "Quest id required");
+            setError(onError, "quest_id_required");
             return null;
         }
         if (fields.duplicateQuestId) {
-            setError(onError, "Quest id already exists");
+            setError(onError, "quest_id_exists");
             return null;
         }
         String nameRaw = safe(fields.name).trim();
         if (nameRaw.isBlank()) {
-            setError(onError, "Quest name required");
+            setError(onError, "quest_name_required");
             return null;
         }
         String categoryRaw = safe(fields.category).trim();
         if (categoryRaw.isBlank()) {
-            setError(onError, "Quest category required");
+            setError(onError, "quest_category_required");
             return null;
         }
 
@@ -160,8 +161,8 @@ public final class QuestEditorJsonBuilder {
         if (!v.isBlank()) obj.addProperty(key, v);
     }
 
-    private static void setError(Consumer<String> onError, String message) {
-        if (onError != null) onError.accept(message);
+    private static void setError(Consumer<String> onError, String key) {
+        if (onError != null) onError.accept(Component.translatable("ui.boundless.editor.error." + key).getString());
     }
 
     private static String safe(String value) {

@@ -728,6 +728,11 @@ public final class QuestEditorPackFiles {
         } catch (IOException ignored) {
         }
 
+        try {
+            QuestPackStorage.deleteQuestPackBackups(normalizedName);
+        } catch (IOException ignored) {
+        }
+
         return changed;
     }
 

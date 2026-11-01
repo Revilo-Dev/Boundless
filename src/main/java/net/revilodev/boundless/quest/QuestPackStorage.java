@@ -96,6 +96,15 @@ public final class QuestPackStorage {
         return List.copyOf(snapshots);
     }
 
+    public static void deleteQuestPackBackups(String packName) throws IOException {
+        String normalized = sanitizeSegment(packName);
+        if (normalized.isBlank()) return;
+        Path backupsRoot = Config.questPackBackupsRoot().toAbsolutePath().normalize();
+        Path packRoot = backupsRoot.resolve(normalized).normalize();
+        if (!packRoot.startsWith(backupsRoot)) throw new IOException("Invalid questpack backup path");
+        deleteDirectory(packRoot);
+    }
+
     public static void restoreSnapshot(Path liveRoot, String packName, Path snapshotRoot) throws IOException {
         if (liveRoot == null || packName == null || packName.isBlank() || snapshotRoot == null || !Files.isDirectory(snapshotRoot)) {
             throw new IOException("Questpack backup is missing");

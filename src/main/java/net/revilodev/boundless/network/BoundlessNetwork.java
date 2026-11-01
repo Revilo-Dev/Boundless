@@ -1398,6 +1398,7 @@ public final class BoundlessNetwork {
             CompletableFuture.runAsync(() -> {
                 try {
                     deleteDirectoryIfExists(INSTANCE_QUEST_PACKS_ROOT.resolve(id).normalize());
+                    QuestPackStorage.deleteQuestPackBackups(id);
                 } catch (IOException e) {
                     throw new CompletionException(e);
                 }

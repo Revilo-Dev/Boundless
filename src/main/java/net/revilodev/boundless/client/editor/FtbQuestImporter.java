@@ -21,6 +21,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -200,7 +201,9 @@ public final class FtbQuestImporter {
                 if (ftbId.isBlank()) ftbId = String.format(Locale.ROOT, "SYNTHETIC_CHAPTER_%04d", sourceIndex);
                 String title = localized("chapter." + ftbId + ".title", stringValue(chapterTag, "title"));
                 if (title.isBlank()) title = humanize(stem);
-                String categoryId = uniqueId(slug(title), stem, ftbId, usedCategoryIds);
+                String categoryIdTitle = localizedIdTitle(List.of("chapter." + ftbId + ".title",
+                        stringValue(chapterTag, "title")), title);
+                String categoryId = uniqueId(slug(categoryIdTitle), stem, ftbId, usedCategoryIds);
                 int order = chapterTag.contains("order_index") ? chapterTag.getInt("order_index") : sourceIndex;
                 String icon = extractFirstItemId(chapterTag.get("icon"));
                 String groupId = normalizedFtbId(stringValue(chapterTag, "group"));
@@ -319,7 +322,9 @@ public final class FtbQuestImporter {
                 if (ftbId.isBlank()) ftbId = chapter.ftbId + "_QUEST_" + index;
                 String title = localized("quest." + ftbId + ".title", stringValue(questTag, "title"));
                 if (title.isBlank()) title = taskDerivedTitle(questTag, index + 1);
-                String questId = uniqueId(slug(title), chapter.categoryId + "_quest", ftbId, usedQuestIds);
+                String questIdTitle = localizedIdTitle(List.of("quest." + ftbId + ".title",
+                        stringValue(questTag, "title")), title);
+                String questId = uniqueId(slug(questIdTitle), chapter.categoryId + "_quest", ftbId, usedQuestIds);
                 String icon = extractFirstItemId(questTag.get("icon"));
                 if (icon.isBlank()) icon = firstTaskIcon(questTag);
                 if (icon.isBlank()) icon = chapter.icon.isBlank() ? "minecraft:paper" : chapter.icon;
@@ -857,6 +862,21 @@ public final class FtbQuestImporter {
             return localized("en_us", List.of(key), fallbacks);
         }
 
+        private String localizedIdTitle(List<String> keys, String fallback) {
+            LinkedHashSet<String> locales = new LinkedHashSet<>();
+            locales.add("en_us");
+            locales.add("en");
+            languages.keySet().stream().sorted().forEach(locales::add);
+            for (String locale : locales) {
+                for (String key : keys) {
+                    if (key == null || key.isBlank()) continue;
+                    List<String> translated = localizedLinesForLocale(locale, key);
+                    if (!translated.isEmpty()) return formatText(String.join(" ", translated));
+                }
+            }
+            return fallback == null ? "" : fallback;
+        }
+
         private List<String> localizedLines(String... keys) {
             return localizedLinesForLocale("en_us", keys);
         }
@@ -1250,6 +1270,7 @@ public final class FtbQuestImporter {
     private static String slug(String value) {
         if (value == null) return "";
         String stripped = value.replaceAll("§[0-9a-fk-or]", "").replaceAll("&[0-9a-fk-or]", "");
+        stripped = Normalizer.normalize(stripped, Normalizer.Form.NFKD).replaceAll("\\p{M}+", "");
         return stripped.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_")
                 .replaceAll("^_+|_+$", "");
     }

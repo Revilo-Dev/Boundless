@@ -88,6 +88,68 @@ public final class QuestEditorQuestOrdering {
         return items;
     }
 
+    public static void upsertQuestListIndex(QuestListIndex index, JsonObject obj, Path target, Path original) {
+        if (index == null || obj == null || target == null) return;
+        String fallbackId = QuestEditorJsonFiles.fileId(target);
+        QuestEntryData loaded = QuestEditorJsonFiles.loadQuest(target, fallbackId, obj);
+        if (loaded == null) return;
+        QuestEntryData data = loaded;
+        for (QuestListItem item : index.items) {
+            if (item == null || item.entry == null || item.data == null) continue;
+            if (target.equals(item.entry.path) || original != null && original.equals(item.entry.path)
+                    || loaded.id.equals(item.entry.id)) {
+                copyQuestData(item.data, loaded);
+                data = item.data;
+                break;
+            }
+        }
+        int order = QuestEditorEntryCodec.parseIntFlexible(obj, "order", 0);
+        String sortKey = String.format(Locale.ROOT, "%06d_%s", order, fallbackId);
+        QuestEntryData indexedData = data;
+        NamedEntry entry = new NamedEntry(indexedData.id, indexedData.name, indexedData.icon, target, sortKey);
+        index.items.removeIf(item -> item != null && item.entry != null
+                && (target.equals(item.entry.path) || original != null && original.equals(item.entry.path)
+                || indexedData.id.equals(item.entry.id)));
+        index.items.add(new QuestListItem(entry, indexedData));
+        index.items.sort(Comparator.comparing(item -> safe(item.entry.sortKey).toLowerCase(Locale.ROOT)));
+        index.questIds.clear();
+        index.duplicateQuestIds.clear();
+        index.questDataByEntryId.clear();
+        for (QuestListItem item : index.items) {
+            String id = safe(item.data == null ? item.entry.id : item.data.id).trim();
+            if (!id.isBlank() && !index.questIds.add(id)) index.duplicateQuestIds.add(id);
+            index.questDataByEntryId.put(safe(item.entry.id), item.data);
+        }
+    }
+
+    private static void copyQuestData(QuestEntryData target, QuestEntryData source) {
+        target.path = source.path;
+        target.id = source.id;
+        target.name = source.name;
+        target.nameTranslations = source.nameTranslations;
+        target.icon = source.icon;
+        target.description = source.description;
+        target.descriptionTranslations = source.descriptionTranslations;
+        target.media = source.media;
+        target.category = source.category;
+        target.subCategory = source.subCategory;
+        target.dependencies = source.dependencies;
+        target.incompatibleDependencies = source.incompatibleDependencies;
+        target.lockAfterDependency = source.lockAfterDependency;
+        target.optional = source.optional;
+        target.repeatable = source.repeatable;
+        target.autoComplete = source.autoComplete;
+        target.hiddenUnderDependency = source.hiddenUnderDependency;
+        target.type = source.type;
+        target.completionJson = source.completionJson;
+        target.rewardJson = source.rewardJson;
+        target.treeX = source.treeX;
+        target.treeY = source.treeY;
+        target.treeBackground = source.treeBackground;
+        target.treeOrigin = source.treeOrigin;
+        target.importWarnings = source.importWarnings;
+    }
+
     // move quest within group
     public static QuestOrderResult moveQuestWithinGroup(QuestPack pack, String questId, MoveDirection direction, Path editingPath) throws IOException {
         if (pack == null || questId == null || questId.isBlank()) return new QuestOrderResult(editingPath, "");

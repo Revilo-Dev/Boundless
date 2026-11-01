@@ -34,8 +34,10 @@ public final class QuestEditorStateSignatures {
             case QUEST -> "quest|" + safe(fields.questId)
                     + "|" + safe(fields.questOrderToken)
                     + "|" + safe(fields.questName)
+                    + "|" + safe(fields.questNameTranslations)
                     + "|" + safe(fields.questIcon)
                     + "|" + safe(fields.questDescription)
+                    + "|" + safe(fields.questDescriptionTranslations)
                     + "|" + safe(fields.questMedia)
                     + "|" + safe(fields.questCategory)
                     + "|" + safe(fields.questSubCategory)
@@ -80,8 +82,10 @@ public final class QuestEditorStateSignatures {
         public String questId = "";
         public String questOrderToken = "";
         public String questName = "";
+        public String questNameTranslations = "";
         public String questIcon = "";
         public String questDescription = "";
+        public String questDescriptionTranslations = "";
         public String questMedia = "";
         public String questCategory = "";
         public String questSubCategory = "";

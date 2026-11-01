@@ -2,6 +2,7 @@ package net.revilodev.boundless.client.editor;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.util.Mth;
 import net.revilodev.boundless.client.editor.QuestEditorModels.DropdownMenuTarget;
@@ -93,7 +94,7 @@ public final class QuestEditorPopupMenus {
         return true;
     }
 
-    public void openDropdownMenu(DropdownMenuTarget target, EditBox box, int panelY, int panelHeight, Function<DropdownMenuTarget, List<String>> optionsProvider) {
+    public void openDropdownMenu(DropdownMenuTarget target, AbstractWidget box, int panelY, int panelHeight, Function<DropdownMenuTarget, List<String>> optionsProvider) {
         if (target == null || box == null || optionsProvider == null) return;
         List<String> options = optionsProvider.apply(target);
         if (options.isEmpty()) return;
@@ -151,6 +152,7 @@ public final class QuestEditorPopupMenus {
             case SUBCATEGORY_PARENT -> box == subCategoryBox;
             case QUEST_CATEGORY -> box == questCategoryBox;
             case QUEST_SUBCATEGORY -> box == questSubCategoryBox;
+            case QUEST_NAME_LANGUAGE, QUEST_DESCRIPTION_LANGUAGE -> false;
         };
     }
 

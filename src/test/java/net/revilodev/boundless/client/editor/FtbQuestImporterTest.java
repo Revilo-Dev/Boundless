@@ -240,6 +240,40 @@ final class FtbQuestImporterTest {
     }
 
     @Test
+    void usesAvailableTranslatedTitlesForImportedIds() throws Exception {
+        Path source = temporaryDirectory.resolve("alternate-language-instance/config/ftbquests/quests");
+        Files.createDirectories(source.resolve("chapters"));
+        Files.createDirectories(source.resolve("lang/pl_pl/chapters"));
+        Files.writeString(source.resolve("chapters/translated_ids.snbt"), """
+                {
+                    id: "4000000000000001"
+                    title: "custom.chapter.title"
+                    quests: [{
+                        id: "4100000000000001"
+                        title: "custom.quest.title"
+                        x: 0
+                        y: 0
+                    }]
+                }
+                """);
+        Files.writeString(source.resolve("lang/pl_pl/chapters/translated_ids.snbt"), """
+                {
+                    "custom.chapter.title": "Kategoria Testowa"
+                    "custom.quest.title": "Misja Testowa"
+                }
+                """);
+
+        Path packs = temporaryDirectory.resolve("alternate-language-packs");
+        FtbQuestImporter.importPack(source, packs, "Alternate Language Import");
+
+        Path packRoot = packs.resolve("alternate-language-import");
+        assertTrue(Files.exists(packRoot.resolve(
+                "data/alternate-language-import/quests/categories/kategoria_testowa.json")));
+        JsonObject quest = json(findQuest(packRoot, "misja_testowa", "alternate-language-import"));
+        assertEquals("kategoria_testowa", quest.get("category").getAsString());
+    }
+
+    @Test
     void importsAndIndexesVeryLargeQuestline() throws Exception {
         int questCount = 1_500;
         Path source = temporaryDirectory.resolve("large-instance/config/ftbquests/quests");

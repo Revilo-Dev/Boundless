@@ -669,9 +669,8 @@ public final class QuestTracker {
 
     public static boolean isReady(QuestData.Quest q, Player player) {
         if (player == null || q == null || q.completion == null) return false;
-        if (getStatus(q, player) == Status.COMPLETED) return true;
-
         if (!dependenciesMet(q, player)) return false;
+        if (getStatus(q, player) == Status.COMPLETED) return true;
 
         for (QuestData.Target t : q.completion.targets) {
             if (t == null) continue;
@@ -684,9 +683,8 @@ public final class QuestTracker {
     public static boolean updateProgressAndCheckReady(QuestData.Quest q, Player player) {
         // Tracking is only done when a player action may change a quest.
         if (player == null || q == null || q.completion == null) return false;
-        if (getStatus(q, player) == Status.COMPLETED) return true;
-
         if (!dependenciesMet(q, player)) return false;
+        if (getStatus(q, player) == Status.COMPLETED) return true;
 
         for (QuestData.Target t : q.completion.targets) {
             if (t == null) continue;
@@ -1487,7 +1485,7 @@ public final class QuestTracker {
                 continue;
             }
 
-            if (hasItemTargets && cur == Status.COMPLETED) continue;
+            if (hasItemTargets && cur == Status.COMPLETED && dependenciesMet(q, player)) continue;
 
             if (!ready && cur == Status.COMPLETED) clientSetStatus(q.id, Status.INCOMPLETE);
         }
@@ -1558,7 +1556,7 @@ public final class QuestTracker {
                     continue;
                 }
 
-                if (hasItemTargets && cur == Status.COMPLETED) continue;
+                if (hasItemTargets && cur == Status.COMPLETED && dependenciesMet(q, sp)) continue;
 
                 if (!ready && cur == Status.COMPLETED) {
                     setServerStatus(sp, q.id, Status.INCOMPLETE);
