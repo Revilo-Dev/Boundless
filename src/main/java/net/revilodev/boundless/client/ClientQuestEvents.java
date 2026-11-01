@@ -23,6 +23,7 @@ public final class ClientQuestEvents {
             @Override
             protected void apply(Void ignored, ResourceManager resourceManager, ProfilerFiller profiler) {
                 QuestData.loadClient(true);
+                QuestData.relocalizeClientTranslations();
                 QuestPanelClient.applyConfigChanges();
             }
         });

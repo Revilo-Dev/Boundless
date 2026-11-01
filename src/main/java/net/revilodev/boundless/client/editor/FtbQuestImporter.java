@@ -12,6 +12,7 @@ import net.minecraft.nbt.NumericTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.revilodev.boundless.client.editor.QuestEditorModels.QuestPack;
+import net.revilodev.boundless.client.editor.QuestEditorModels.QuestListIndex;
 import net.revilodev.boundless.quest.QuestPackStorage;
 
 import java.io.IOException;
@@ -47,7 +48,8 @@ public final class FtbQuestImporter {
     }
 
     public record ImportResult(QuestPack pack, int chapters, int quests, int tasks, int rewards,
-                               int unsupportedEntries, Path reportPath, List<String> warnings) {
+                               int unsupportedEntries, Path reportPath, List<String> warnings,
+                               QuestListIndex questIndex) {
     }
 
     public static ImportResult importPack(Path selectedPath, Path packsRoot, String requestedName) throws IOException {
@@ -81,8 +83,9 @@ public final class FtbQuestImporter {
 
         QuestPack pack = new QuestPack(packName, namespace, target, false, true);
         Path report = target.resolve("ftb-import-report.txt");
+        QuestListIndex questIndex = QuestEditorQuestOrdering.buildQuestListIndex(pack);
         return new ImportResult(pack, context.chapters.size(), context.questCount, context.taskCount,
-                context.rewardCount, context.unsupportedEntries, report, List.copyOf(context.warnings));
+                context.rewardCount, context.unsupportedEntries, report, List.copyOf(context.warnings), questIndex);
     }
 
     static Path resolveQuestRoot(Path selectedPath) throws IOException {
@@ -102,9 +105,12 @@ public final class FtbQuestImporter {
         for (Path candidate : candidates) {
             if (hasChapterFiles(candidate)) return candidate.toAbsolutePath().normalize();
         }
-        try (Stream<Path> paths = Files.find(selected, 5,
-                (path, attributes) -> attributes.isDirectory() && hasChapterFiles(path))) {
-            return paths.findFirst().orElseThrow(() -> new IOException(
+        try (Stream<Path> paths = Files.find(selected, 6,
+                (path, attributes) -> attributes.isDirectory()
+                        && path.getFileName() != null
+                        && path.getFileName().toString().equalsIgnoreCase("chapters")
+                        && hasChapterFiles(path.getParent()))) {
+            return paths.map(Path::getParent).findFirst().orElseThrow(() -> new IOException(
                     "No FTB Quests chapters were found. Select config/ftbquests/quests."));
         }
     }
@@ -150,7 +156,8 @@ public final class FtbQuestImporter {
         private final Path stagingRoot;
         private final List<ChapterDraft> chapters = new ArrayList<>();
         private final Map<String, QuestDraft> questsByFtbId = new LinkedHashMap<>();
-        private final Map<String, List<String>> language = new LinkedHashMap<>();
+        private final Map<String, Map<String, List<String>>> languages = new LinkedHashMap<>();
+        private final Map<String, Map<String, List<String>>> lowercaseLanguages = new HashMap<>();
         private final Map<String, CompoundTag> rewardTables = new HashMap<>();
         private final Map<String, Integer> chapterGroupOrder = new HashMap<>();
         private final LinkedHashSet<String> warnings = new LinkedHashSet<>();
@@ -220,20 +227,23 @@ public final class FtbQuestImporter {
             List<Path> files;
             try (Stream<Path> walk = Files.walk(languageRoot, 8)) {
                 files = walk.filter(FtbQuestImporter::isQuestDataFile)
-                        .filter(path -> path.toString().toLowerCase(Locale.ROOT).contains("en_us"))
                         .sorted()
                         .toList();
             }
             for (Path file : files) {
                 try {
-                    flattenLanguage(readCompound(file), "");
+                    String locale = languageLocale(languageRoot, file);
+                    Map<String, List<String>> language = languages.computeIfAbsent(locale, ignored -> new LinkedHashMap<>());
+                    Map<String, List<String>> lowercaseLanguage = lowercaseLanguages.computeIfAbsent(locale, ignored -> new HashMap<>());
+                    flattenLanguage(readCompound(file), "", language, lowercaseLanguage);
                 } catch (IOException exception) {
                     warn("Language file " + sourceRoot.relativize(file) + " could not be read: " + exception.getMessage());
                 }
             }
         }
 
-        private void flattenLanguage(CompoundTag tag, String prefix) {
+        private void flattenLanguage(CompoundTag tag, String prefix, Map<String, List<String>> language,
+                                     Map<String, List<String>> lowercaseLanguage) {
             for (String key : tag.getAllKeys()) {
                 Tag value = tag.get(key);
                 String path = prefix.isBlank() ? key : prefix + "." + key;
@@ -241,10 +251,20 @@ public final class FtbQuestImporter {
                 if (!lines.isEmpty()) {
                     language.put(path, lines);
                     language.putIfAbsent(key, lines);
+                    lowercaseLanguage.put(path.toLowerCase(Locale.ROOT), lines);
+                    lowercaseLanguage.putIfAbsent(key.toLowerCase(Locale.ROOT), lines);
                 } else if (value instanceof CompoundTag compound) {
-                    flattenLanguage(compound, path);
+                    flattenLanguage(compound, path, language, lowercaseLanguage);
                 }
             }
+        }
+
+        private String languageLocale(Path languageRoot, Path file) {
+            Path relative = languageRoot.relativize(file);
+            String locale = relative.getNameCount() > 1
+                    ? relative.getName(0).toString()
+                    : stripExtension(relative.getFileName().toString());
+            return locale.trim().toLowerCase(Locale.ROOT).replace('-', '_');
         }
 
         private void readRewardTables() throws IOException {
@@ -328,11 +348,16 @@ public final class FtbQuestImporter {
         }
 
         private void resolveExclusiveDependencies() {
+            Map<String, List<QuestDraft>> dependentsByFtbId = new HashMap<>();
+            for (QuestDraft quest : questsByFtbId.values()) {
+                for (String dependency : stringList(quest.tag, "dependencies")) {
+                    dependentsByFtbId.computeIfAbsent(normalizedFtbId(dependency), ignored -> new ArrayList<>())
+                            .add(quest);
+                }
+            }
             for (QuestDraft parent : questsByFtbId.values()) {
                 if (parent.tag.getInt("max_completable_dependents") != 1) continue;
-                List<QuestDraft> dependents = questsByFtbId.values().stream()
-                        .filter(quest -> stringList(quest.tag, "dependencies").contains(parent.ftbId))
-                        .toList();
+                List<QuestDraft> dependents = dependentsByFtbId.getOrDefault(parent.ftbId, List.of());
                 for (int left = 0; left < dependents.size(); left++) {
                     for (int right = left + 1; right < dependents.size(); right++) {
                         dependents.get(left).incompatible.add(dependents.get(right).id);
@@ -384,10 +409,16 @@ public final class FtbQuestImporter {
 
         private void centerChapter(ChapterDraft chapter) {
             if (chapter.quests.isEmpty()) return;
-            double minX = chapter.quests.stream().mapToDouble(quest -> quest.x).min().orElse(0d);
-            double maxX = chapter.quests.stream().mapToDouble(quest -> quest.x).max().orElse(0d);
-            double minY = chapter.quests.stream().mapToDouble(quest -> quest.y).min().orElse(0d);
-            double maxY = chapter.quests.stream().mapToDouble(quest -> quest.y).max().orElse(0d);
+            double minX = Double.POSITIVE_INFINITY;
+            double maxX = Double.NEGATIVE_INFINITY;
+            double minY = Double.POSITIVE_INFINITY;
+            double maxY = Double.NEGATIVE_INFINITY;
+            for (QuestDraft quest : chapter.quests) {
+                minX = Math.min(minX, quest.x);
+                maxX = Math.max(maxX, quest.x);
+                minY = Math.min(minY, quest.y);
+                maxY = Math.max(maxY, quest.y);
+            }
             double centerX = (minX + maxX) / 2d;
             double centerY = (minY + maxY) / 2d;
             for (QuestDraft quest : chapter.quests) {
@@ -403,6 +434,8 @@ public final class FtbQuestImporter {
             json.addProperty("icon", quest.icon);
             String description = questDescription(quest);
             if (!description.isBlank()) json.addProperty("description", description);
+            JsonObject translations = questTranslations(quest);
+            if (!translations.isEmpty()) json.add("translations", translations);
             json.addProperty("category", quest.chapter.categoryId);
             json.addProperty("optional", quest.tag.getBoolean("optional"));
             json.addProperty("repeatable", booleanValue(quest.tag, "can_repeat", false)
@@ -433,6 +466,11 @@ public final class FtbQuestImporter {
 
             JsonObject completion = convertTasks(quest);
             if (completion != null) json.add("completion", completion);
+            if (!quest.importWarnings.isEmpty()) {
+                JsonArray warnings = new JsonArray();
+                quest.importWarnings.forEach(warnings::add);
+                json.add("import_warnings", warnings);
+            }
             JsonObject reward = convertRewards(quest);
             if (reward != null) json.add("reward", reward);
             Path target = pack.questsDir.resolve(String.format(Locale.ROOT, "%04d-%s.json", order, quest.id));
@@ -440,12 +478,13 @@ public final class FtbQuestImporter {
         }
 
         private List<String> resolvedDependencies(QuestDraft quest) {
+            if (quest.resolvedDependencies != null) return quest.resolvedDependencies;
             List<String> out = new ArrayList<>();
             List<String> raw = stringList(quest.tag, "dependencies");
             for (String ftbDependency : raw) {
                 QuestDraft dependency = questsByFtbId.get(normalizedFtbId(ftbDependency));
                 if (dependency == null) {
-                    warn("Quest " + quest.title + " references missing dependency " + ftbDependency + ".");
+                    warnQuest(quest, "Quest " + quest.title + " references missing dependency " + ftbDependency + ".");
                 } else if (!out.contains(dependency.id)) {
                     out.add(dependency.id);
                 }
@@ -454,24 +493,25 @@ public final class FtbQuestImporter {
             int minimum = quest.tag.getInt("min_required_dependencies");
             if ((!requirement.isBlank() && !requirement.equals("all_completed") && !requirement.equals("default"))
                     || minimum > 0 && minimum < out.size()) {
-                warn("Quest " + quest.title + " uses partial/OR dependencies; Boundless imports all dependencies as required.");
+                warnQuest(quest, "Quest " + quest.title + " uses partial/OR dependencies; Boundless imports all dependencies as required.");
             }
-            return out;
+            quest.resolvedDependencies = List.copyOf(out);
+            return quest.resolvedDependencies;
         }
 
         private JsonObject convertTasks(QuestDraft quest) {
             List<CompoundTag> tasks = compoundList(quest.tag, "tasks");
             List<CompoundTag> required = tasks.stream().filter(task -> !task.getBoolean("optional_task")).toList();
             if (!required.isEmpty() && required.size() < tasks.size()) {
-                warn("Quest " + quest.title + " has optional tasks; optional tasks were omitted.");
+                warnQuest(quest, "Quest " + quest.title + " has optional tasks; optional tasks were omitted.");
                 tasks = required;
             } else if (!tasks.isEmpty() && required.isEmpty()) {
-                warn("Every task in " + quest.title + " is optional; all were imported as required.");
+                warnQuest(quest, "Every task in " + quest.title + " is optional; all were imported as required.");
             }
             String requirement = stringValue(quest.tag, "task_requirement").toLowerCase(Locale.ROOT);
             int minimum = quest.tag.getInt("min_required_tasks");
             if ((requirement.contains("one") || minimum > 0 && minimum < tasks.size()) && tasks.size() > 1) {
-                warn("Quest " + quest.title + " uses partial/OR task completion; only the first required task was imported.");
+                warnQuest(quest, "Quest " + quest.title + " uses partial/OR task completion; only the first required task was imported.");
                 tasks = List.of(tasks.getFirst());
             }
 
@@ -484,7 +524,7 @@ public final class FtbQuestImporter {
                 JsonObject check = new JsonObject();
                 check.addProperty("check", "Complete quest");
                 converted.add(check);
-                if (tasks.isEmpty()) warn("Quest " + quest.title + " had no tasks and was imported as a checkmark quest.");
+                if (tasks.isEmpty()) warnQuest(quest, "Quest " + quest.title + " had no tasks and was imported as a checkmark quest.");
             }
             JsonObject completion = new JsonObject();
             completion.add("complete", converted);
@@ -499,10 +539,10 @@ public final class FtbQuestImporter {
             switch (type) {
                 case "item" -> {
                     if (hasMeaningfulComponents(task.get("item"))) {
-                        warn("Component/NBT matching in item task for " + quest.title + " was simplified to an item ID.");
+                        warnQuest(quest, "Component/NBT matching in item task for " + quest.title + " was simplified to an item ID.");
                     }
                     if (task.getBoolean("only_from_crafting")) {
-                        warn("Crafting-only detection in item task for " + quest.title + " is not available in Boundless.");
+                        warnQuest(quest, "Crafting-only detection in item task for " + quest.title + " is not available in Boundless.");
                     }
                     List<String> items = extractItemIds(task.get("item"));
                     if (!items.isEmpty()) {
@@ -523,7 +563,7 @@ public final class FtbQuestImporter {
                         target.addProperty("kill", entity);
                         target.addProperty("count", count);
                         if (!stringValue(task, "entityTypeTag").isBlank()) {
-                            warn("Kill task in " + quest.title + " used an entity tag; its displayed entity was imported.");
+                            warnQuest(quest, "Kill task in " + quest.title + " used an entity tag; its displayed entity was imported.");
                         }
                         return target;
                     }
@@ -570,29 +610,29 @@ public final class FtbQuestImporter {
                     String fluidId = resourceId(stringValue(fluid, "id"));
                     int amount = positiveInt(fluid, "amount", count);
                     target.addProperty("check", "Obtain " + amount + " mB of " + (fluidId.isBlank() ? "fluid" : fluidId));
-                    unsupported("Fluid task in " + quest.title + " requires manual confirmation after import.");
+                    unsupportedQuest(quest, "Fluid task in " + quest.title + " requires manual confirmation after import.");
                     return target;
                 }
                 case "structure" -> {
                     target.addProperty("check", "Visit " + stringValue(task, "structure"));
-                    unsupported("Structure task in " + quest.title + " requires manual confirmation after import.");
+                    unsupportedQuest(quest, "Structure task in " + quest.title + " requires manual confirmation after import.");
                     return target;
                 }
                 case "location" -> {
                     target.addProperty("check", "Visit the requested location");
-                    unsupported("Location task in " + quest.title + " requires manual confirmation after import.");
+                    unsupportedQuest(quest, "Location task in " + quest.title + " requires manual confirmation after import.");
                     return target;
                 }
                 case "stat" -> {
                     target.addProperty("check", "Reach " + count + " " + stringValue(task, "stat"));
-                    unsupported("Statistic task in " + quest.title + " requires manual confirmation after import.");
+                    unsupportedQuest(quest, "Statistic task in " + quest.title + " requires manual confirmation after import.");
                     return target;
                 }
                 default -> {
                 }
             }
             target.addProperty("check", taskTitle(task, type.isBlank() ? "Complete task" : humanize(type)));
-            unsupported("Unsupported " + (type.isBlank() ? "unknown" : type) + " task in " + quest.title
+            unsupportedQuest(quest, "Unsupported " + (type.isBlank() ? "unknown" : type) + " task in " + quest.title
                     + " was replaced with a checkmark.");
             return target;
         }
@@ -739,34 +779,96 @@ public final class FtbQuestImporter {
         }
 
         private String questDescription(QuestDraft quest) {
+            return questDescription(quest, "en_us");
+        }
+
+        private String questDescription(QuestDraft quest, String locale) {
             List<String> lines = new ArrayList<>();
-            String subtitle = localized("quest." + quest.ftbId + ".quest_subtitle",
-                    stringValue(quest.tag, "subtitle"));
+            String subtitle = localized(locale, List.of(
+                            "quest." + quest.ftbId + ".quest_subtitle",
+                            "quest." + quest.ftbId + ".subtitle"),
+                    stringValue(quest.tag, "quest_subtitle"), stringValue(quest.tag, "subtitle"));
             if (!subtitle.isBlank()) lines.add(subtitle);
-            List<String> description = localizedLines("quest." + quest.ftbId + ".quest_desc");
-            if (description.isEmpty()) description = textLines(quest.tag.get("description"));
+            List<String> description = resolveLocalizedDescriptionLines(locale, localizedLinesForLocale(locale,
+                    "quest." + quest.ftbId + ".quest_desc",
+                    "quest." + quest.ftbId + ".description",
+                    "quest." + quest.ftbId + ".desc"));
+            if (description.isEmpty()) {
+                description = resolveLocalizedDescriptionLines(locale,
+                        firstTextLines(quest.tag, "quest_desc", "description", "desc"));
+            }
             if (!description.isEmpty() && !lines.isEmpty()) lines.add("");
             lines.addAll(description.stream().map(this::formatText).toList());
             return String.join("\n", lines).trim();
         }
 
-        private String localized(String key, String... fallbacks) {
-            List<String> lines = localizedLines(key);
-            if (!lines.isEmpty()) return formatText(String.join("\n", lines));
+        private List<String> resolveLocalizedDescriptionLines(String locale, List<String> rawLines) {
+            if (rawLines == null || rawLines.isEmpty()) return List.of();
+            List<String> resolved = new ArrayList<>();
+            for (String rawLine : rawLines) {
+                String line = rawLine == null ? "" : rawLine.trim();
+                List<String> translated = line.isBlank() ? List.of() : localizedLinesForLocale(locale, line);
+                if (!translated.isEmpty() && !(translated.size() == 1 && line.equals(translated.getFirst()))) {
+                    resolved.addAll(translated.stream().map(this::formatText).toList());
+                } else {
+                    resolved.add(formatText(rawLine));
+                }
+            }
+            return resolved;
+        }
+
+        private JsonObject questTranslations(QuestDraft quest) {
+            JsonObject translations = new JsonObject();
+            String fallbackDescription = questDescription(quest);
+            String directTitleKey = stringValue(quest.tag, "title");
+            for (String locale : languages.keySet()) {
+                String translatedName = localized(locale,
+                        List.of("quest." + quest.ftbId + ".title", directTitleKey));
+                String translatedDescription = questDescription(quest, locale);
+                JsonObject translation = new JsonObject();
+                if (!translatedName.isBlank() && !translatedName.equals(quest.title)) translation.addProperty("name", translatedName);
+                if (!translatedDescription.isBlank() && !translatedDescription.equals(fallbackDescription)) {
+                    translation.addProperty("description", translatedDescription);
+                }
+                if (!translation.isEmpty()) translations.add(locale, translation);
+            }
+            return translations;
+        }
+
+        private String localized(List<String> keys, String... fallbacks) {
+            return localized("en_us", keys, fallbacks);
+        }
+
+        private String localized(String locale, List<String> keys, String... fallbacks) {
+            for (String key : keys) {
+                List<String> lines = localizedLinesForLocale(locale, key);
+                if (!lines.isEmpty()) return formatText(String.join("\n", lines));
+            }
             for (String fallback : fallbacks) {
+                List<String> translatedFallback = localizedLinesForLocale(locale, fallback);
+                if (!translatedFallback.isEmpty()) return formatText(String.join("\n", translatedFallback));
                 String formatted = formatText(fallback);
                 if (!formatted.isBlank()) return formatted;
             }
             return "";
         }
 
-        private List<String> localizedLines(String key) {
-            List<String> direct = language.get(key);
-            if (direct != null) return direct;
-            String lower = key.toLowerCase(Locale.ROOT);
-            for (Map.Entry<String, List<String>> entry : language.entrySet()) {
-                String candidate = entry.getKey().toLowerCase(Locale.ROOT);
-                if (candidate.equals(lower) || candidate.endsWith("." + lower)) return entry.getValue();
+        private String localized(String key, String... fallbacks) {
+            return localized("en_us", List.of(key), fallbacks);
+        }
+
+        private List<String> localizedLines(String... keys) {
+            return localizedLinesForLocale("en_us", keys);
+        }
+
+        private List<String> localizedLinesForLocale(String locale, String... keys) {
+            Map<String, List<String>> language = languages.getOrDefault(locale, Map.of());
+            Map<String, List<String>> lowercaseLanguage = lowercaseLanguages.getOrDefault(locale, Map.of());
+            for (String key : keys) {
+                List<String> direct = language.get(key);
+                if (direct != null) return direct;
+                direct = lowercaseLanguage.get(key.toLowerCase(Locale.ROOT));
+                if (direct != null) return direct;
             }
             return List.of();
         }
@@ -812,6 +914,17 @@ public final class FtbQuestImporter {
         private void unsupported(String warning) {
             unsupportedEntries++;
             warn(warning);
+        }
+
+        private void unsupportedQuest(QuestDraft quest, String warning) {
+            unsupportedEntries++;
+            warnQuest(quest, warning);
+        }
+
+        private void warnQuest(QuestDraft quest, String warning) {
+            if (warning == null || warning.isBlank()) return;
+            quest.importWarnings.add(warning);
+            warnings.add(warning);
         }
 
         private void warn(String warning) {
@@ -976,6 +1089,8 @@ public final class FtbQuestImporter {
         private final double y;
         private final int sourceIndex;
         private final LinkedHashSet<String> incompatible = new LinkedHashSet<>();
+        private final LinkedHashSet<String> importWarnings = new LinkedHashSet<>();
+        private List<String> resolvedDependencies;
         private int treeX;
         private int treeY;
 
@@ -1027,10 +1142,43 @@ public final class FtbQuestImporter {
         if (tag instanceof StringTag stringTag) return List.of(stringTag.getAsString());
         if (tag instanceof ListTag list) {
             List<String> lines = new ArrayList<>();
-            for (Tag value : list) if (value instanceof StringTag stringTag) lines.add(stringTag.getAsString());
+            for (Tag value : list) {
+                if (value instanceof StringTag stringTag) {
+                    lines.add(stringTag.getAsString());
+                } else {
+                    String component = flattenTextTag(value);
+                    if (!component.isBlank()) lines.add(component);
+                }
+            }
             return lines;
         }
+        String component = flattenTextTag(tag);
+        if (!component.isBlank()) return List.of(component);
         return List.of();
+    }
+
+    private static List<String> firstTextLines(CompoundTag tag, String... keys) {
+        for (String key : keys) {
+            List<String> lines = textLines(tag.get(key));
+            if (!lines.isEmpty()) return lines;
+        }
+        return List.of();
+    }
+
+    private static String flattenTextTag(Tag tag) {
+        if (tag instanceof StringTag stringTag) return stringTag.getAsString();
+        if (tag instanceof ListTag list) {
+            StringBuilder out = new StringBuilder();
+            for (Tag child : list) out.append(flattenTextTag(child));
+            return out.toString();
+        }
+        if (!(tag instanceof CompoundTag compound)) return "";
+        StringBuilder out = new StringBuilder();
+        if (compound.contains("text")) out.append(tagValue(compound.get("text")));
+        else if (compound.contains("translate")) out.append(tagValue(compound.get("translate")));
+        if (compound.contains("with")) out.append(flattenTextTag(compound.get("with")));
+        if (compound.contains("extra")) out.append(flattenTextTag(compound.get("extra")));
+        return out.toString();
     }
 
     private static String stringValue(CompoundTag tag, String key) {

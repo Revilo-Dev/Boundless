@@ -32,6 +32,8 @@ public final class QuestEditorModels {
         public final String icon;
         public final ResourceLocation typeIcon;
         public final ResourceLocation actionIcon;
+        public final int actionIconWidth;
+        public final int actionIconHeight;
         public final ResourceLocation rowTexture;
         public final String actionTooltip;
         public final String rowTooltip;
@@ -64,12 +66,22 @@ public final class QuestEditorModels {
         }
 
         public EditorEntry(String id, String label, String subtitle, String icon, ResourceLocation typeIcon, ResourceLocation actionIcon, String actionTooltip, String rowTooltip, ResourceLocation rowTexture, EditorEntryKind kind, int indent, boolean showMoveArrows) {
+            this(id, label, subtitle, icon, typeIcon, actionIcon, 13, 13, actionTooltip, rowTooltip,
+                    rowTexture, kind, indent, showMoveArrows);
+        }
+
+        public EditorEntry(String id, String label, String subtitle, String icon, ResourceLocation typeIcon,
+                           ResourceLocation actionIcon, int actionIconWidth, int actionIconHeight,
+                           String actionTooltip, String rowTooltip, ResourceLocation rowTexture,
+                           EditorEntryKind kind, int indent, boolean showMoveArrows) {
             this.id = id;
             this.label = label;
             this.subtitle = subtitle;
             this.icon = icon == null ? "" : icon;
             this.typeIcon = typeIcon;
             this.actionIcon = actionIcon;
+            this.actionIconWidth = Math.max(1, actionIconWidth);
+            this.actionIconHeight = Math.max(1, actionIconHeight);
             this.rowTexture = rowTexture == null ? ROW_TEX : rowTexture;
             this.actionTooltip = actionTooltip == null ? "" : actionTooltip;
             this.rowTooltip = rowTooltip == null ? "" : rowTooltip;
@@ -102,6 +114,13 @@ public final class QuestEditorModels {
         // quest
         public static EditorEntry quest(String id, String label, String subtitle, String icon, ResourceLocation rowTexture, String rowTooltip) {
             return new EditorEntry(id, label, subtitle, icon, null, "", rowTooltip, rowTexture, EditorEntryKind.QUEST, 0, true);
+        }
+
+        public static EditorEntry questWarning(String id, String label, String subtitle, String icon,
+                                               ResourceLocation warningIcon, String warningTooltip,
+                                               ResourceLocation rowTexture, String rowTooltip) {
+            return new EditorEntry(id, label, subtitle, icon, null, warningIcon, 4, 11,
+                    warningTooltip, rowTooltip, rowTexture, EditorEntryKind.QUEST, 0, true);
         }
 
         // category header
@@ -265,8 +284,10 @@ public final class QuestEditorModels {
         public Path path;
         public String id = "";
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String description = "";
+        public Map<String, String> descriptionTranslations = Map.of();
         public String media = "";
         public String category = "";
         public String subCategory = "";
@@ -284,6 +305,7 @@ public final class QuestEditorModels {
         public String treeY = "";
         public String treeBackground = "square";
         public String treeOrigin = "";
+        public List<String> importWarnings = List.of();
     }
 
     // index name
@@ -518,10 +540,12 @@ public final class QuestEditorModels {
         public String questId = "";
 
         public String questName = "";
+        public Map<String, String> questNameTranslations = Map.of();
 
         public String questIcon = "";
 
         public String questDescription = "";
+        public Map<String, String> questDescriptionTranslations = Map.of();
         public String questMedia = "";
 
         public String questCategory = "";
@@ -546,6 +570,8 @@ public final class QuestEditorModels {
 
         public String questReward = "";
 
+        public List<String> questImportWarnings = List.of();
+
     }
 
     // entry row kind
@@ -566,7 +592,11 @@ public final class QuestEditorModels {
 
         QUEST_CATEGORY,
 
-        QUEST_SUBCATEGORY
+        QUEST_SUBCATEGORY,
+
+        QUEST_NAME_LANGUAGE,
+
+        QUEST_DESCRIPTION_LANGUAGE
 
     }
 

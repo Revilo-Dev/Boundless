@@ -187,6 +187,9 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> QUICK_EDIT =
             BUILDER.comment("If true, operators can open a quest directly in the editor from its quest-book page.")
                     .define("quickEdit", false);
+    public static final ModConfigSpec.ConfigValue<Boolean> MULTI_LANGUAGE_QUESTS =
+            BUILDER.comment("If true, quest titles and descriptions use the translation matching the client's language when available.")
+                    .define("multiLanguageQuests", true);
     // questPackBackupInterval controls automatic full pack backups
     public static final ModConfigSpec.ConfigValue<String> QUEST_PACK_BACKUP_INTERVAL =
             BUILDER.comment("Automatic questpack backup interval: 1m, 5m, 10m, 30m, off.")
@@ -274,6 +277,14 @@ public final class Config {
 
     public static boolean debugNetworkTransfers() {
         return DEBUG_NETWORK_TRANSFERS.get();
+    }
+
+    public static boolean multiLanguageQuests() {
+        try {
+            return Boolean.TRUE.equals(MULTI_LANGUAGE_QUESTS.get());
+        } catch (RuntimeException ignored) {
+            return true;
+        }
     }
 
     public static List<? extends String> disabledCategories() {

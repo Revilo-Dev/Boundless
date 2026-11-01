@@ -417,6 +417,8 @@ public final class QuestEditorControls {
         private final BiConsumer<EditorEntry, MoveDirection> onMoveClick;
             private final Function<String, ItemStack> iconResolver;
         private float scrollY = 0f;
+        private int[] entryOffsets = new int[0];
+        private int contentHeight;
         private String selectedId = "";
         private List<Component> pendingTooltip = List.of();
         private int pendingTooltipX;
@@ -441,6 +443,16 @@ public final class QuestEditorControls {
         public void setEntries(List<EditorEntry> list) {
             entries.clear();
             entries.addAll(list);
+            entryOffsets = new int[entries.size()];
+            contentHeight = 0;
+            for (int index = 0; index < entries.size(); index++) {
+                entryOffsets[index] = contentHeight;
+                EditorEntry entry = entries.get(index);
+                boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER
+                        || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
+                contentHeight += (headerEntry ? EDITOR_SUBHEADER_H : ROW_H)
+                        + (headerEntry ? EDITOR_SUBHEADER_GAP : ROW_PAD);
+            }
             scrollY = 0f;
         }
 
@@ -461,7 +473,6 @@ public final class QuestEditorControls {
         }
 
         public void setScrollY(float value) {
-            int contentHeight = entries.size() * (ROW_H + ROW_PAD);
             float max = Math.max(0f, contentHeight - height);
             scrollY = Math.max(0f, Math.min(value, max));
         }
@@ -485,8 +496,10 @@ public final class QuestEditorControls {
             pendingTooltip = List.of();
             gg.enableScissor(getX(), getY(), getX() + width, getY() + height);
 
-            int yCursor = getY() - (int) scrollY;
-            for (EditorEntry entry : entries) {
+            int startIndex = firstVisibleEntryIndex();
+            int yCursor = getY() + (startIndex < entryOffsets.length ? entryOffsets[startIndex] : 0) - (int) scrollY;
+            for (int entryIndex = startIndex; entryIndex < entries.size(); entryIndex++) {
+                EditorEntry entry = entries.get(entryIndex);
                 boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
                 int top = yCursor;
                 int rowH = headerEntry ? EDITOR_SUBHEADER_H : ROW_H;
@@ -597,11 +610,15 @@ public final class QuestEditorControls {
                     }
 
                     if (entry.actionIcon != null) {
-                        int iconX = getX() + width - 17;
-                        int iconY = top + 7;
-                        gg.blit(entry.actionIcon, iconX, iconY, 0, 0, 13, 13, 13, 13);
-                        boolean hoverAction = mouseX >= iconX && mouseX <= iconX + 13
-                                && mouseY >= iconY && mouseY <= iconY + 13;
+                        int actionRightInset = entry.showMoveArrows
+                                ? MOVE_ICON_SIZE + MOVE_ICON_INSET_RIGHT + 4 : 8;
+                        int iconX = getX() + width - entry.actionIconWidth - actionRightInset;
+                        int iconY = top + (ROW_H - entry.actionIconHeight) / 2;
+                        gg.blit(entry.actionIcon, iconX, iconY, 0, 0,
+                                entry.actionIconWidth, entry.actionIconHeight,
+                                entry.actionIconWidth, entry.actionIconHeight);
+                        boolean hoverAction = mouseX >= iconX && mouseX <= iconX + entry.actionIconWidth
+                                && mouseY >= iconY && mouseY <= iconY + entry.actionIconHeight;
                         if (hoverAction && entry.actionTooltip != null && !entry.actionTooltip.isBlank()) {
                             pendingTooltip = List.of(Component.literal(entry.actionTooltip));
                             pendingTooltipX = mouseX;
@@ -620,11 +637,6 @@ public final class QuestEditorControls {
 
             gg.disableScissor();
 
-            int contentHeight = 0;
-            for (EditorEntry entry : entries) {
-                boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
-                contentHeight += (headerEntry ? EDITOR_SUBHEADER_H : ROW_H) + (headerEntry ? EDITOR_SUBHEADER_GAP : ROW_PAD);
-            }
             if (contentHeight > height) {
                 float ratio = (float) height / (float) contentHeight;
                 int barH = Math.max(12, (int) (height * ratio));
@@ -673,9 +685,12 @@ public final class QuestEditorControls {
                     }
                 }
                 if (entry.actionIcon != null) {
-                    int iconX = getX() + width - 17;
-                    int iconY = top + 7;
-                    if (button == 0 && mouseX >= iconX && mouseX <= iconX + 13 && mouseY >= iconY && mouseY <= iconY + 13) {
+                    int actionRightInset = entry.showMoveArrows
+                            ? MOVE_ICON_SIZE + MOVE_ICON_INSET_RIGHT + 4 : 8;
+                    int iconX = getX() + width - entry.actionIconWidth - actionRightInset;
+                    int iconY = top + (ROW_H - entry.actionIconHeight) / 2;
+                    if (button == 0 && mouseX >= iconX && mouseX <= iconX + entry.actionIconWidth
+                            && mouseY >= iconY && mouseY <= iconY + entry.actionIconHeight) {
                         if (onActionClick != null) onActionClick.accept(entry);
                         return true;
                     }
@@ -692,14 +707,22 @@ public final class QuestEditorControls {
 
         public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
             if (!visible || !active) return false;
-            int contentHeight = 0;
-            for (EditorEntry entry : entries) {
-                boolean headerEntry = entry.kind == EditorEntryKind.CATEGORY_HEADER || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER;
-                contentHeight += (headerEntry ? EDITOR_SUBHEADER_H : ROW_H) + (headerEntry ? EDITOR_SUBHEADER_GAP : ROW_PAD);
-            }
             if (contentHeight <= height) return false;
             scrollY = Math.max(0f, Math.min(scrollY - (float) (delta * 12), contentHeight - height));
             return true;
+        }
+
+        private int firstVisibleEntryIndex() {
+            if (entryOffsets.length == 0 || scrollY <= 0f) return 0;
+            int target = (int) scrollY;
+            int low = 0;
+            int high = entryOffsets.length - 1;
+            while (low <= high) {
+                int middle = (low + high) >>> 1;
+                if (entryOffsets[middle] <= target) low = middle + 1;
+                else high = middle - 1;
+            }
+            return Math.max(0, high);
         }
 
         @Override

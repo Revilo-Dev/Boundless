@@ -140,6 +140,7 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow functionalityQuestRejectingRow;
     private ConfigRow functionalityQuestScrollsRow;
     private ConfigRow functionalityQuickEditRow;
+    private ConfigRow functionalityMultiLanguageRow;
     private ConfigRow gameplayDisableQuestBookRow;
     private ConfigRow gameplaySpawnWithBookRow;
 
@@ -211,6 +212,7 @@ public final class QuestSettingsScreen extends Screen {
     private boolean enableQuestRejecting;
     private boolean enableQuestScrolls;
     private boolean quickEdit;
+    private boolean multiLanguageQuests;
     private boolean disableQuestBook;
     private boolean spawnWithQuestBook;
     private ConfigTab configTab = ConfigTab.ALL;
@@ -406,6 +408,10 @@ public final class QuestSettingsScreen extends Screen {
                 "Show an operator-only edit button on quest pages.",
                 () -> trs(quickEdit ? "state.on" : "state.off"),
                 () -> quickEdit = !quickEdit);
+        functionalityMultiLanguageRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, "Multi-language quests",
+                "Use quest title and description translations matching the game language.",
+                () -> trs(multiLanguageQuests ? "state.on" : "state.off"),
+                () -> multiLanguageQuests = !multiLanguageQuests);
 
         gameplayDisableQuestBookRow = new ConfigRow(px, gameplayDisableQuestBookBaseY, pw, trs("row.quest_book"),
                 trs("row.quest_book.subtitle"),
@@ -458,6 +464,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(functionalityQuestRejectingRow, ConfigTab.FEATURES);
         addConfigRow(functionalityQuestScrollsRow, ConfigTab.FEATURES);
         addConfigRow(functionalityQuickEditRow, ConfigTab.FEATURES);
+        addConfigRow(functionalityMultiLanguageRow, ConfigTab.FEATURES);
         addConfigRow(gameplayDisableQuestBookRow, ConfigTab.FEATURES);
         addConfigRow(gameplaySpawnWithBookRow, ConfigTab.FEATURES);
 
@@ -645,6 +652,7 @@ public final class QuestSettingsScreen extends Screen {
         enableQuestRejecting = Config.enableQuestRejecting();
         enableQuestScrolls = Config.enableQuestScrolls();
         quickEdit = Config.quickEdit();
+        multiLanguageQuests = Config.multiLanguageQuests();
         disableQuestBook = Config.disableQuestBook();
         spawnWithQuestBook = Config.spawnWithQuestBook();
     }
@@ -804,6 +812,7 @@ public final class QuestSettingsScreen extends Screen {
         Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
         Config.DESCRIPTION_TEXT_ALIGNMENT.set(normalizeDescriptionTextAlignment(descriptionTextAlignment));
         Config.ENABLE_QUEST_TOASTS.set(enableQuestToasts);
+        Config.MULTI_LANGUAGE_QUESTS.set(multiLanguageQuests);
         if (canManageServerSettings()) {
             Config.DISABLE_CATEGORIES.set(disableCategories);
             Config.DISABLE_QUEST_PINNING.set(disableQuestPinning);
@@ -816,6 +825,7 @@ public final class QuestSettingsScreen extends Screen {
         }
         Config.SPEC.save();
         if (canManageServerSettings()) sendConfigToServer();
+        QuestData.relocalizeClientTranslations();
         QuestPanelClient.applyConfigChanges();
         if (close) {
             Minecraft.getInstance().setScreen(parent);
@@ -893,6 +903,7 @@ public final class QuestSettingsScreen extends Screen {
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
             enableQuestToasts = true;
+            multiLanguageQuests = true;
             if (canManageServerSettings()) {
                 disableQuestPinning = false;
                 autoClaimQuestRewards = false;
@@ -996,6 +1007,7 @@ public final class QuestSettingsScreen extends Screen {
             boolean backVisible = backButton != null && backButton.visible;
             boolean resetVisible = resetConfigButton != null && resetConfigButton.visible;
             boolean debugVisible = debugButton != null && debugButton.visible;
+            boolean searchVisible = configSearchField != null && configSearchField.visible;
             List<Boolean> tabVisible = new ArrayList<>();
             for (ConfigTabButton button : configTabButtons) {
                 tabVisible.add(button.visible);
@@ -1004,10 +1016,11 @@ public final class QuestSettingsScreen extends Screen {
             if (backButton != null) backButton.visible = false;
             if (resetConfigButton != null) resetConfigButton.visible = false;
             if (debugButton != null) debugButton.visible = false;
+            if (configSearchField != null) configSearchField.visible = false;
 
             renderConfigPageHeader(gg);
 
-            int top = configViewportTop();
+            int top = configScrollViewportTop();
             int bottom = configViewportBottom();
             gg.enableScissor(px, top, px + pw, bottom);
             super.render(gg, mouseX, mouseY, partialTick);
@@ -1021,6 +1034,10 @@ public final class QuestSettingsScreen extends Screen {
             if (backButton != null) backButton.visible = backVisible;
             if (resetConfigButton != null) resetConfigButton.visible = resetVisible;
             if (debugButton != null) debugButton.visible = debugVisible;
+            if (configSearchField != null) configSearchField.visible = searchVisible;
+            if (configSearchField != null && configSearchField.visible) {
+                configSearchField.render(gg, mouseX, mouseY, partialTick);
+            }
             if (backButton != null && backButton.visible) backButton.render(gg, mouseX, mouseY, partialTick);
             if (resetConfigButton != null && resetConfigButton.visible) resetConfigButton.render(gg, mouseX, mouseY, partialTick);
             if (debugButton != null && debugButton.visible) debugButton.render(gg, mouseX, mouseY, partialTick);
@@ -1075,7 +1092,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void renderSectionHeader(GuiGraphics gg, String text, int x, int y, int color) {
         if (text == null || text.isBlank()) return;
-        int top = configViewportTop();
+        int top = configScrollViewportTop();
         int bottom = configViewportBottom();
         if (y < top || y > bottom - 8) return;
         float scale = 0.72f;
@@ -1113,17 +1130,21 @@ public final class QuestSettingsScreen extends Screen {
         return topY + 157;
     }
 
-    private int configViewportHeight() {
-        return Math.max(0, configViewportBottom() - configViewportTop());
+    private int configScrollViewportTop() {
+        return configViewportTop() + (configTab == ConfigTab.ALL ? 20 : 0);
+    }
+
+    private int configScrollViewportHeight() {
+        return Math.max(0, configViewportBottom() - configScrollViewportTop());
     }
 
     private int configContentHeight() {
         // Leave room for the reset button after the last row.
-        return Math.max(0, visibleConfigRows().size() * 21 + 27 + (configTab == ConfigTab.ALL ? 20 : 0));
+        return Math.max(0, visibleConfigRows().size() * 21 + 27);
     }
 
     private int maxConfigScroll() {
-        return Math.max(0, configContentHeight() - configViewportHeight());
+        return Math.max(0, configContentHeight() - configScrollViewportHeight());
     }
 
     private int scrolledY(int baseY) {
@@ -1137,9 +1158,9 @@ public final class QuestSettingsScreen extends Screen {
         if (configScrollY > max) configScrollY = max;
         layoutBackButton();
 
-        int top = configViewportTop();
+        int top = configScrollViewportTop();
         int bottom = configViewportBottom();
-        int baseY = top + 2 + (configTab == ConfigTab.ALL ? 20 : 0);
+        int baseY = top + 2;
         int rowGap = 21;
         List<ConfigRow> visibleRows = visibleConfigRows();
         for (ConfigRow row : configRows) {
@@ -1155,7 +1176,7 @@ public final class QuestSettingsScreen extends Screen {
             layoutColorField(control.field, control.row, top, bottom);
         }
         if (configSearchField != null) {
-            configSearchField.setPosition(px + 2, top + 2);
+            configSearchField.setPosition(px + 2, configViewportTop() + 2);
             configSearchField.setWidth(pw - 4);
             configSearchField.visible = page == Page.CONFIG && configTab == ConfigTab.ALL;
             configSearchField.active = configSearchField.visible;
@@ -1222,8 +1243,8 @@ public final class QuestSettingsScreen extends Screen {
         if (max <= 0) return;
         int trackX1 = px + pw + 4;
         int trackX2 = px + pw + 6;
-        int top = configViewportTop();
-        int vh = configViewportHeight();
+        int top = configScrollViewportTop();
+        int vh = configScrollViewportHeight();
         int content = configContentHeight();
         if (vh <= 0 || content <= 0) return;
         int thumbH = Math.max(12, (int) ((vh * (float) vh) / (float) content));
@@ -1308,7 +1329,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private boolean isOverConfigScrollbar(double mouseX, double mouseY) {
-        int top = configViewportTop();
+        int top = configScrollViewportTop();
         int bottom = configViewportBottom();
         return mouseX >= px + pw + 2 && mouseX <= px + pw + 8 && mouseY >= top && mouseY <= bottom;
     }
@@ -1316,11 +1337,11 @@ public final class QuestSettingsScreen extends Screen {
     private void setConfigScrollFromMouse(double mouseY) {
         // Centre the thumb under the pointer while dragging.
         int max = maxConfigScroll();
-        int vh = configViewportHeight();
+        int vh = configScrollViewportHeight();
         int content = configContentHeight();
         if (max <= 0 || vh <= 0 || content <= 0) return;
         int thumbH = Math.max(12, (int) ((vh * (float) vh) / (float) content));
-        float t = (float) ((mouseY - configViewportTop() - thumbH / 2.0D) / Math.max(1.0D, vh - thumbH));
+        float t = (float) ((mouseY - configScrollViewportTop() - thumbH / 2.0D) / Math.max(1.0D, vh - thumbH));
         configScrollY = Math.max(0f, Math.min(max, t * max));
         applyConfigScrollLayout();
     }

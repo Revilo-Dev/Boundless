@@ -47,7 +47,9 @@ public final class QuestEditorValidation {
                 request.dependencyRaw,
                 request.completionRaw,
                 request.rewardRaw,
-                computeInvalidQuestId(request.editorType, request.questId, request.hasCurrentPack, request.questEntries, request.editingPath),
+                request.invalidQuestIdOverride != null
+                        ? request.invalidQuestIdOverride
+                        : computeInvalidQuestId(request.editorType, request.questId, request.hasCurrentPack, request.questEntries, request.editingPath),
                 computeInvalidQuestName(request.editorType, request.questName),
                 isMissingQuestId(request.categoryDependency, request.hasCurrentPack, request.questIdCache),
                 isMissingCategoryId(request.parentCategory, request.hasCurrentPack, request.categoryIdCache),
@@ -167,6 +169,7 @@ public final class QuestEditorValidation {
         public Set<String> questIdCache = Set.of();
         public Collection<String> questPackDependencySuggestionCache = Set.of();
         public Iterable<NamedEntry> questEntries = Set.of();
+        public Boolean invalidQuestIdOverride;
         public Consumer<String> errorHandler;
     }
 }

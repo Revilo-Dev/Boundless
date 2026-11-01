@@ -20,8 +20,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 // quest json file loading
@@ -100,6 +102,10 @@ public final class QuestEditorJsonFiles {
                 }
             }
         }
+        return loadCategory(path, id);
+    }
+
+    public static CategoryData loadCategory(Path path, String id) {
         JsonObject obj = readJson(path);
         if (obj == null) return null;
 
@@ -177,8 +183,10 @@ public final class QuestEditorJsonFiles {
         data.path = path;
         data.id = optString(obj, "id", id);
         data.name = optString(obj, "name", "");
+        data.nameTranslations = translationValues(obj, "name");
         data.icon = optString(obj, "icon", "");
         data.description = optString(obj, "description", "");
+        data.descriptionTranslations = translationValues(obj, "description");
         data.media = optString(obj, "media", "");
         data.category = optString(obj, "category", "");
         data.subCategory = optString(obj, "sub-category", optString(obj, "subCategory", ""));
@@ -199,7 +207,37 @@ public final class QuestEditorJsonFiles {
         data.treeY = optStringFlexible(obj, "tree_y", "");
         data.treeBackground = optString(obj, "tree_background", "square");
         data.treeOrigin = optStringFlexible(obj, "tree_origin", "");
+        data.importWarnings = stringList(obj.get("import_warnings"));
         return data;
+    }
+
+    private static Map<String, String> translationValues(JsonObject obj, String field) {
+        if (obj == null || !obj.has("translations") || !obj.get("translations").isJsonObject()) return Map.of();
+        Map<String, String> values = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : obj.getAsJsonObject("translations").entrySet()) {
+            if (!entry.getValue().isJsonObject()) continue;
+            JsonElement value = entry.getValue().getAsJsonObject().get(field);
+            if (value == null || !value.isJsonPrimitive()) continue;
+            String text = value.getAsString();
+            if (!text.isBlank()) values.put(entry.getKey(), text);
+        }
+        return values.isEmpty() ? Map.of() : Map.copyOf(values);
+    }
+
+    private static List<String> stringList(JsonElement element) {
+        if (element == null || element.isJsonNull()) return List.of();
+        List<String> values = new ArrayList<>();
+        if (element.isJsonPrimitive()) {
+            String value = element.getAsString().trim();
+            if (!value.isBlank()) values.add(value);
+        } else if (element.isJsonArray()) {
+            for (JsonElement entry : element.getAsJsonArray()) {
+                if (entry == null || !entry.isJsonPrimitive()) continue;
+                String value = entry.getAsString().trim();
+                if (!value.isBlank() && !values.contains(value)) values.add(value);
+            }
+        }
+        return List.copyOf(values);
     }
 
     // format dependencies

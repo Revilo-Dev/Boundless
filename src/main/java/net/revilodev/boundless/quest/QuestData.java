@@ -66,9 +66,13 @@ public final class QuestData {
     // immutable quest definition
     public static final class Quest {
         public final String id;
-        public final String name;
+        public String name;
+        private final String fallbackName;
+        public final Map<String, String> nameTranslations;
         public final String icon;
-        public final String description;
+        public String description;
+        private final String fallbackDescription;
+        public final Map<String, String> descriptionTranslations;
         public final String media;
         public final List<String> dependencies;
         public final List<String> incompatibleDependencies;
@@ -126,11 +130,27 @@ public final class QuestData {
                      boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
                      String type, Completion completion, String category, String subCategory, String sourcePath,
                      int treeX, int treeY, String treeBackground, boolean treeOrigin, String media) {
+            this(id, name, icon, description, Map.of(), Map.of(), dependencies, incompatibleDependencies,
+                    lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency, rewards, type,
+                    completion, category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
+        }
+
+        public Quest(String id, String name, String icon, String description,
+                     Map<String, String> nameTranslations, Map<String, String> descriptionTranslations,
+                     List<String> dependencies, List<String> incompatibleDependencies,
+                     boolean lockAfterDependency, boolean optional, boolean repeatable,
+                     boolean autoComplete, boolean hiddenUnderDependency, Rewards rewards,
+                     String type, Completion completion, String category, String subCategory, String sourcePath,
+                     int treeX, int treeY, String treeBackground, boolean treeOrigin, String media) {
 
             this.id = Objects.requireNonNull(id);
-            this.name = name == null ? id : name;
+            this.nameTranslations = immutableTranslations(nameTranslations);
+            this.descriptionTranslations = immutableTranslations(descriptionTranslations);
+            this.fallbackName = name == null || name.isBlank() ? id : name;
+            this.fallbackDescription = description == null ? "" : description;
+            this.name = localizedQuestText(this.fallbackName, this.nameTranslations, id);
             this.icon = icon == null || icon.isBlank() ? "boundless:quest_book" : icon;
-            this.description = description == null ? "" : description;
+            this.description = localizedQuestText(this.fallbackDescription, this.descriptionTranslations, "");
             this.media = media == null ? "" : media;
             this.dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
             this.incompatibleDependencies = lockAfterDependency
@@ -152,6 +172,39 @@ public final class QuestData {
             this.treeY = treeY;
             this.treeBackground = normalizeTreeBackground(treeBackground);
             this.treeOrigin = treeOrigin;
+        }
+
+        private static Map<String, String> immutableTranslations(Map<String, String> translations) {
+            if (translations == null || translations.isEmpty()) return Map.of();
+            Map<String, String> normalized = new LinkedHashMap<>();
+            translations.forEach((locale, text) -> {
+                String key = normalizeLocale(locale);
+                if (!key.isBlank() && text != null && !text.isBlank()) normalized.put(key, text);
+            });
+            return normalized.isEmpty() ? Map.of() : Collections.unmodifiableMap(normalized);
+        }
+
+        private static String localizedQuestText(String fallback, Map<String, String> translations, String emptyFallback) {
+            String base = fallback == null || fallback.isBlank() ? emptyFallback : fallback;
+            if (!Config.multiLanguageQuests() || translations == null || translations.isEmpty()
+                    || FMLEnvironment.dist != Dist.CLIENT) return base;
+            String locale = "";
+            try {
+                locale = normalizeLocale(Minecraft.getInstance().getLanguageManager().getSelected());
+            } catch (Throwable ignored) {
+            }
+            String translated = translations.get(locale);
+            if (translated == null && locale.contains("_")) translated = translations.get(locale.substring(0, locale.indexOf('_')));
+            return translated == null || translated.isBlank() ? base : translated;
+        }
+
+        private static String normalizeLocale(String locale) {
+            return locale == null ? "" : locale.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+        }
+
+        private void relocalize() {
+            name = localizedQuestText(fallbackName, nameTranslations, id);
+            description = localizedQuestText(fallbackDescription, descriptionTranslations, "");
         }
 
         private static String normalizeTreeBackground(String raw) {
@@ -1156,6 +1209,8 @@ public final class QuestData {
         String name = optString(obj, "name");
         String icon = optString(obj, "icon");
         String description = optString(obj, "description");
+        Map<String, String> nameTranslations = parseTranslations(obj, "name");
+        Map<String, String> descriptionTranslations = parseTranslations(obj, "description");
         String media = optString(obj, "media");
 
         List<String> deps = parseDependencies(obj);
@@ -1186,9 +1241,29 @@ public final class QuestData {
         String treeBackground = optString(obj, "tree_background");
         boolean treeOrigin = parseBoolFlexible(obj, "tree_origin", false);
 
-        return new Quest(id, name, icon, description, deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
+        return new Quest(id, name, icon, description, nameTranslations, descriptionTranslations,
+                deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                 rewards, type, completion,
                 category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
+    }
+
+    public static synchronized void relocalizeClientTranslations() {
+        for (Quest quest : CLIENT_DATA.quests.values()) quest.relocalize();
+    }
+
+    private static Map<String, String> parseTranslations(JsonObject obj, String field) {
+        if (obj == null || !obj.has("translations") || !obj.get("translations").isJsonObject()) return Map.of();
+        Map<String, String> values = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : obj.getAsJsonObject("translations").entrySet()) {
+            if (!entry.getValue().isJsonObject()) continue;
+            String value = optString(entry.getValue().getAsJsonObject(), field);
+            if (value != null && !value.isBlank()) values.put(normalizeLocale(entry.getKey()), value);
+        }
+        return values;
+    }
+
+    private static String normalizeLocale(String locale) {
+        return locale == null ? "" : locale.trim().toLowerCase(Locale.ROOT).replace('-', '_');
     }
 
     private static List<String> parseStringList(JsonObject obj, String key) {
@@ -1813,6 +1888,8 @@ public final class QuestData {
                     String name = optString(o, "name");
                     String icon = optString(o, "icon");
                     String description = optString(o, "description");
+                    Map<String, String> nameTranslations = parseTranslations(o, "name");
+                    Map<String, String> descriptionTranslations = parseTranslations(o, "description");
                     String media = optString(o, "media");
 
                     List<String> deps = new ArrayList<>();
@@ -1976,7 +2053,8 @@ public final class QuestData {
                     String treeBackground = optString(o, "treeBackground");
                     boolean treeOrigin = parseBoolFlexible(o, "treeOrigin", false);
 
-                    Quest q = new Quest(id, name, icon, description, deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
+                    Quest q = new Quest(id, name, icon, description, nameTranslations, descriptionTranslations,
+                            deps, incompatibleDeps, lockAfterDependency, optional, repeatable, autoComplete, hiddenUnderDependency,
                             rewards, type, completion,
                             category, subCategory, sourcePath, treeX, treeY, treeBackground, treeOrigin, media);
                     if (!isQuestDisabled(q)) parsed.quests.put(q.id, q);

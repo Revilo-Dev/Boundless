@@ -91,7 +91,7 @@ final class FtbQuestImporterTest {
                 """);
 
         Path packs = temporaryDirectory.resolve("boundless-packs");
-        FtbQuestImporter.ImportResult result = FtbQuestImporter.importPack(source, packs, "Imported Pack");
+        FtbQuestImporter.ImportResult result = FtbQuestImporter.importPack(chapterFile, packs, "Imported Pack");
 
         assertEquals(1, result.chapters());
         assertEquals(3, result.quests());
@@ -132,6 +132,8 @@ final class FtbQuestImporterTest {
 
         JsonObject water = json(findQuest(packRoot, "bring_water"));
         assertEquals("fight_back", water.getAsJsonArray("incompatible_dependencies").get(0).getAsString());
+        assertTrue(water.getAsJsonArray("import_warnings").get(0).getAsString()
+                .contains("requires manual confirmation"));
         assertTrue(water.getAsJsonObject("completion").getAsJsonArray("complete")
                 .get(0).getAsJsonObject().get("check").getAsString().contains("1000 mB"));
     }
@@ -189,6 +191,79 @@ final class FtbQuestImporterTest {
         assertEquals("minecraft:iron_sword", quest.getAsJsonObject("reward").getAsJsonArray("items")
                 .get(0).getAsJsonObject().get("item").getAsString());
         assertTrue(result.warnings().stream().anyMatch(warning -> warning.contains("first supported reward")));
+    }
+
+    @Test
+    void importsSplitLanguageDescriptionsAndRawJsonText() throws Exception {
+        Path source = temporaryDirectory.resolve("translated-instance/config/ftbquests/quests");
+        Files.createDirectories(source.resolve("chapters"));
+        Files.createDirectories(source.resolve("lang/en_us/chapters"));
+        Files.createDirectories(source.resolve("lang/pl_pl/chapters"));
+        Files.writeString(source.resolve("chapters/text.json5"), """
+                {
+                    id: "3000000000000001"
+                    title: "Text"
+                    quests: [{
+                        id: "3100000000000001"
+                        title: "custom.quest.title"
+                        description: ["custom.quest.description"]
+                        x: 0
+                        y: 0
+                    }]
+                }
+                """);
+        Files.writeString(source.resolve("lang/pl_pl/chapters/text.json5"), """
+                {
+                    "custom.quest.title": "Przetlumaczone zadanie"
+                    "custom.quest.description": ["Polski opis"]
+                }
+                """);
+        Files.writeString(source.resolve("lang/en_us/chapters/text.json5"), """
+                {
+                    "custom.quest.title": "Translated Quest"
+                    "quest.3100000000000001.subtitle": "Imported subtitle"
+                    "custom.quest.description": [
+                        { text: "First ", extra: [{ text: "line" }] }
+                        { text: "Second &aline" }
+                    ]
+                }
+                """);
+
+        Path packs = temporaryDirectory.resolve("translated-packs");
+        FtbQuestImporter.importPack(source, packs, "Translated Import");
+
+        JsonObject quest = json(findQuest(packs.resolve("translated-import"), "translated_quest", "translated-import"));
+        assertEquals("Imported subtitle\n\nFirst line\nSecond §aline", quest.get("description").getAsString());
+        JsonObject polish = quest.getAsJsonObject("translations").getAsJsonObject("pl_pl");
+        assertEquals("Przetlumaczone zadanie", polish.get("name").getAsString());
+        assertEquals("Polski opis", polish.get("description").getAsString());
+    }
+
+    @Test
+    void importsAndIndexesVeryLargeQuestline() throws Exception {
+        int questCount = 1_500;
+        Path source = temporaryDirectory.resolve("large-instance/config/ftbquests/quests");
+        Files.createDirectories(source.resolve("chapters"));
+        StringBuilder chapter = new StringBuilder("{ id: \"7000000000000001\" title: \"Large Chapter\" quests: [\n");
+        for (int index = 0; index < questCount; index++) {
+            String id = String.format("71%014X", index);
+            chapter.append("{ id: \"").append(id).append("\" title: \"Quest ").append(index).append("\"");
+            if (index > 0) chapter.append(" dependencies: [\"").append(String.format("71%014X", index - 1)).append("\"]");
+            chapter.append(" max_completable_dependents: 1 tasks: [{ type: \"item\" item: { id: \"minecraft:stone\" } count: 1 }] x: ")
+                    .append(index % 50).append(" y: ").append(index / 50).append(" }\n");
+        }
+        chapter.append("] }");
+        Files.writeString(source.resolve("chapters/large.snbt"), chapter);
+
+        Path packs = temporaryDirectory.resolve("large-packs");
+        FtbQuestImporter.ImportResult result = FtbQuestImporter.importPack(source, packs, "Large Import");
+
+        assertEquals(questCount, result.quests());
+        assertEquals(questCount, result.questIndex().items.size());
+        try (var questFiles = Files.list(packs.resolve("large-import/data/large-import/quests"))) {
+            assertEquals(questCount, questFiles
+                    .filter(path -> path.getFileName().toString().endsWith(".json")).count());
+        }
     }
 
     private static Path findQuest(Path packRoot, String questId) throws Exception {

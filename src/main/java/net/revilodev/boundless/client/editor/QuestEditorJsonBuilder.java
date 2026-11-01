@@ -4,6 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 // editor json builders
@@ -80,6 +83,7 @@ public final class QuestEditorJsonBuilder {
         addOptional(obj, "name", nameRaw);
         addOptional(obj, "icon", fields.icon);
         addOptional(obj, "description", fields.description);
+        addTranslations(obj, fields.nameTranslations, fields.descriptionTranslations);
         addOptional(obj, "media", fields.media);
         addOptional(obj, "category", categoryRaw);
         addOptional(obj, "sub-category", fields.subCategory);
@@ -94,6 +98,13 @@ public final class QuestEditorJsonBuilder {
         if (fields.treeOrigin) obj.addProperty("tree_origin", true);
         if (!safe(fields.loadedQuestType).isBlank()) {
             obj.addProperty("type", fields.loadedQuestType);
+        }
+        if (fields.importWarnings != null && !fields.importWarnings.isEmpty()) {
+            JsonArray warnings = new JsonArray();
+            for (String warning : fields.importWarnings) {
+                if (warning != null && !warning.isBlank()) warnings.add(warning);
+            }
+            if (!warnings.isEmpty()) obj.add("import_warnings", warnings);
         }
 
         if (fields.dependencies != null && fields.dependencies.size() == 1) {
@@ -126,6 +137,24 @@ public final class QuestEditorJsonBuilder {
         return obj;
     }
 
+    private static void addTranslations(JsonObject obj, Map<String, String> names, Map<String, String> descriptions) {
+        Set<String> locales = new LinkedHashSet<>();
+        if (names != null) locales.addAll(names.keySet());
+        if (descriptions != null) locales.addAll(descriptions.keySet());
+        JsonObject translations = new JsonObject();
+        for (String rawLocale : locales) {
+            String locale = safe(rawLocale).trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+            if (locale.isBlank()) continue;
+            JsonObject translation = new JsonObject();
+            String name = names == null ? "" : safe(names.get(rawLocale)).trim();
+            String description = descriptions == null ? "" : safe(descriptions.get(rawLocale)).trim();
+            if (!name.isBlank()) translation.addProperty("name", name);
+            if (!description.isBlank()) translation.addProperty("description", description);
+            if (!translation.isEmpty()) translations.add(locale, translation);
+        }
+        if (!translations.isEmpty()) obj.add("translations", translations);
+    }
+
     private static void addOptional(JsonObject obj, String key, String value) {
         String v = safe(value).trim();
         if (!v.isBlank()) obj.addProperty(key, v);
@@ -152,8 +181,10 @@ public final class QuestEditorJsonBuilder {
         public String id = "";
         public boolean duplicateQuestId;
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String description = "";
+        public Map<String, String> descriptionTranslations = Map.of();
         public String media = "";
         public String category = "";
         public String subCategory = "";
@@ -171,5 +202,6 @@ public final class QuestEditorJsonBuilder {
         public int treeY = -1;
         public String treeBackground = "square";
         public boolean treeOrigin;
+        public List<String> importWarnings = List.of();
     }
 }

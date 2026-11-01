@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,6 +58,7 @@ public final class BoundlessNetwork {
     // network channel and shared packet state
     private static final String CHANNEL = "boundless";
     private static final String VERSION = "3";
+    private static final String BUILTIN_QUEST_PACK_ID = "boundless";
     private static boolean REGISTERED = false;
 
     private static final Gson GSON = new GsonBuilder().setLenient().create();
@@ -969,6 +971,18 @@ public final class BoundlessNetwork {
             o.addProperty("name", q.name);
             o.addProperty("icon", q.icon);
             o.addProperty("description", q.description);
+            JsonObject translations = new JsonObject();
+            LinkedHashSet<String> translationLocales = new LinkedHashSet<>(q.nameTranslations.keySet());
+            translationLocales.addAll(q.descriptionTranslations.keySet());
+            for (String locale : translationLocales) {
+                JsonObject translation = new JsonObject();
+                String translatedName = q.nameTranslations.get(locale);
+                String translatedDescription = q.descriptionTranslations.get(locale);
+                if (translatedName != null && !translatedName.isBlank()) translation.addProperty("name", translatedName);
+                if (translatedDescription != null && !translatedDescription.isBlank()) translation.addProperty("description", translatedDescription);
+                if (!translation.isEmpty()) translations.add(locale, translation);
+            }
+            if (!translations.isEmpty()) o.add("translations", translations);
             if (q.media != null && !q.media.isBlank()) o.addProperty("media", q.media);
 
             JsonArray deps = new JsonArray();
@@ -1325,7 +1339,7 @@ public final class BoundlessNetwork {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
             String id = normalizeQuestPackFolderName(p.id());
-            if (id.isBlank() || "boundless".equalsIgnoreCase(id)) return;
+            if (id.isBlank()) return;
             pruneUploadSessions();
             if (p.totalParts() <= 0 || p.totalParts() > QuestPackTransfer.MAX_UPLOAD_PARTS) return;
             if (p.index() < 0 || p.index() >= p.totalParts()) return;
@@ -1379,7 +1393,7 @@ public final class BoundlessNetwork {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
             String id = normalizeQuestPackFolderName(p.id());
-            if (id.isBlank()) return;
+            if (id.isBlank() || BUILTIN_QUEST_PACK_ID.equalsIgnoreCase(id)) return;
             MinecraftServer server = sp.server;
             CompletableFuture.runAsync(() -> {
                 try {

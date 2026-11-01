@@ -35,6 +35,9 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.Enumeration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -46,6 +49,14 @@ public final class QuestEditorPackFiles {
     private static final ResourceLocation GENERATED_PACK_ICON =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/pack.png");
     public static final String BUILTIN_PACK_NAME = "boundless";
+    private static final long BACKUP_DEBOUNCE_MS = 300L;
+    private static final ExecutorService BACKUP_EXECUTOR = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "Boundless questpack backup");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final ConcurrentHashMap<Path, BackupRequest> PENDING_BACKUPS = new ConcurrentHashMap<>();
+    private static final Set<Path> ACTIVE_BACKUPS = ConcurrentHashMap.newKeySet();
     private static int questPackUploadId = 1;
 
     private QuestEditorPackFiles() {
@@ -522,9 +533,46 @@ public final class QuestEditorPackFiles {
         QuestPackStorage.snapshotQuestPack(pack.root, pack.name, reason);
     }
 
+    public static void queueBackupPack(QuestPack pack, String reason) {
+        if (pack == null || pack.root == null || pack.name == null) return;
+        Path key = pack.root.toAbsolutePath().normalize();
+        PENDING_BACKUPS.put(key, new BackupRequest(pack.root, pack.name, reason));
+        startBackupWorker(key);
+    }
+
+    private static void startBackupWorker(Path key) {
+        if (!ACTIVE_BACKUPS.add(key)) return;
+        BACKUP_EXECUTOR.execute(() -> drainBackups(key));
+    }
+
+    private static void drainBackups(Path key) {
+        try {
+            while (true) {
+                try {
+                    Thread.sleep(BACKUP_DEBOUNCE_MS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                BackupRequest request = PENDING_BACKUPS.remove(key);
+                if (request == null) return;
+                try {
+                    QuestPackStorage.snapshotQuestPack(request.root, request.name, request.reason);
+                } catch (IOException ignored) {
+                }
+            }
+        } finally {
+            ACTIVE_BACKUPS.remove(key);
+            if (PENDING_BACKUPS.containsKey(key)) startBackupWorker(key);
+        }
+    }
+
     // pack meta path
     public static Path packMetaPath(Path root) {
         return root.resolve("boundless").resolve("pack.json");
+    }
+
+    private record BackupRequest(Path root, String name, String reason) {
     }
 
     // write pack icon
