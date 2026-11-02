@@ -2,6 +2,7 @@ package net.revilodev.boundless.client;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 
 // draws compact subcategory headers and outlined labels
 public final class QuestSubCategoryHeaderRenderer {
@@ -29,6 +30,24 @@ public final class QuestSubCategoryHeaderRenderer {
         graphics.drawString(font, text, drawX, drawY - outline, OUTLINE_COLOR, false);
         graphics.drawString(font, text, drawX, drawY + outline, OUTLINE_COLOR, false);
         graphics.drawString(font, text, drawX, drawY, color, false);
+        graphics.pose().popPose();
+    }
+
+    public static void drawOutlinedText(GuiGraphics graphics, Font font, Component text, float scale,
+                                        int x, int y, int color) {
+        if (text == null || text.getString().isEmpty() || scale <= 0f) return;
+        float inverseScale = 1f / scale;
+        graphics.pose().pushPose();
+        graphics.pose().scale(scale, scale, 1f);
+        float drawX = x * inverseScale;
+        float drawY = y * inverseScale;
+        float outline = inverseScale;
+        String plain = text.getString();
+        graphics.drawString(font, plain, drawX - outline, drawY, OUTLINE_COLOR, false);
+        graphics.drawString(font, plain, drawX + outline, drawY, OUTLINE_COLOR, false);
+        graphics.drawString(font, plain, drawX, drawY - outline, OUTLINE_COLOR, false);
+        graphics.drawString(font, plain, drawX, drawY + outline, OUTLINE_COLOR, false);
+        graphics.drawString(font, text.getVisualOrderText(), drawX, drawY, color, false);
         graphics.pose().popPose();
     }
 }

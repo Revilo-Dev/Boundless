@@ -104,11 +104,12 @@ final class FtbQuestImporterTest {
 
         Path packRoot = packs.resolve("imported-pack");
         JsonObject metadata = json(packRoot.resolve("boundless/pack.json"));
-        assertEquals("tree", metadata.getAsJsonObject("boundless").get("layout").getAsString());
+        assertFalse(metadata.getAsJsonObject("boundless").has("layout"));
 
         Path categoryPath = packRoot.resolve("data/imported-pack/quests/categories/getting_started.json");
         JsonObject category = json(categoryPath);
         assertEquals("Getting Started", category.get("name").getAsString());
+        assertEquals("tree", category.get("layout").getAsString());
         assertFalse(category.get("background_darkening").getAsBoolean());
 
         JsonObject gather = json(findQuest(packRoot, "gather_logs"));

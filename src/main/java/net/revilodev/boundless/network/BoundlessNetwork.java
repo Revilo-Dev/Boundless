@@ -1298,25 +1298,8 @@ public final class BoundlessNetwork {
             ServerPlayer sp = (ServerPlayer) ctx.player();
             if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
 
-            Config.PINNED_QUEST_HUD_POSITION.set(p.pinnedQuestHudPosition());
-            Config.HIDE_QUEST_BOOK_IN_INVENTORY.set(p.hideQuestBookInInventory());
-            Config.QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(p.questBookInventoryButtonPosition());
-            Config.CENTER_INVENTORY_WITH_QUEST_PANEL.set(p.centerInventoryWithQuestPanel());
-            Config.HIDE_CATEGORY_HEADER.set(p.hideCategoryHeader());
-            Config.FILTER_DISPLAY_MODE.set(p.filterDisplayMode());
             Config.DISABLE_CATEGORIES.set(p.disableCategories());
-            Config.HIDE_QUEST_WIDGET_ICONS.set(p.hideQuestWidgetIcons());
-            Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questTextScale())));
-            Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, p.questIconScale())));
-            Config.ENABLE_QUEST_SEARCH_BOX.set(p.enableQuestSearchBox());
             Config.CUSTOM_BACKGROUNDS.set(p.customBackgrounds());
-            Config.ENABLE_DESCRIPTION_COLORS.set(p.enableDescriptionColors());
-            Config.QUEST_WIDGET_TEXT_COLOR.set(p.questWidgetTextColor());
-            Config.DESCRIPTION_TEXT_COLOR.set(p.descriptionTextColor());
-            Config.ENABLE_DESCRIPTION_READ_MORE.set(p.enableDescriptionReadMore());
-            Config.ENABLE_DESCRIPTION_TEXT_WRAPPING.set(p.enableDescriptionTextWrapping());
-            Config.DESCRIPTION_TEXT_ALIGNMENT.set(p.descriptionTextAlignment());
-            Config.ENABLE_QUEST_TOASTS.set(p.enableQuestToasts());
             Config.DISABLE_QUEST_PINNING.set(p.disableQuestPinning());
             Config.AUTO_CLAIM_QUEST_REWARDS.set(p.autoClaimQuestRewards());
             Config.ENABLE_QUEST_REJECTING.set(p.enableQuestRejecting());

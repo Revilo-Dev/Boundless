@@ -29,7 +29,7 @@ public final class QuestEditorRowControls {
     private static final int TAB_H = 27;
     private static final int ENTRY_ROW_H = 14;
     private static final int ENTRY_REMOVE_BTN_W = 10;
-    private static final int ENTRY_TYPE_BTN_W = 21;
+    private static final int ENTRY_TYPE_BTN_W = 30;
     private static final int ENTRY_ITEM_PICK_BTN_W = 12;
     private static final int ENTRY_COUNT_BTN_W = 12;
     private static final float ENTRY_COUNT_TEXT_SCALE = 0.55f;
@@ -139,7 +139,9 @@ public final class QuestEditorRowControls {
             gg.fill(getX(), getY() + this.height - 1, getX() + this.width, getY() + this.height, 0xFFC0C0C0);
             gg.fill(getX(), getY(), getX() + 1, getY() + this.height, 0xFFC0C0C0);
             gg.fill(getX() + this.width - 1, getY(), getX() + this.width, getY() + this.height, 0xFFC0C0C0);
-            gg.drawString(Minecraft.getInstance().font, "X", getX() + 2, getY() + 2, fg, false);
+            Font font = Minecraft.getInstance().font;
+            gg.drawString(font, "X", getX() + (width - font.width("X")) / 2,
+                    getY() + (height - font.lineHeight) / 2, fg, false);
         }
 
         @Override
@@ -228,7 +230,7 @@ public final class QuestEditorRowControls {
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.isMouseOver(mouseX, mouseY);
             boolean focused = this.isFocused();
-            int bg = hovered || focused ? 0xFF404040 : 0xFF3A3A3A;
+            int bg = hovered || focused ? 0xFF101010 : 0xFF000000;
             int border = hovered || focused ? 0xFFFFFFFF : 0xFF8A8A8A;
             gg.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), bg);
             gg.fill(getX(), getY(), getX() + getWidth(), getY() + 1, border);

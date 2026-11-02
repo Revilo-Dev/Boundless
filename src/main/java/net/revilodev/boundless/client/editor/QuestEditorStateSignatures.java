@@ -12,14 +12,15 @@ public final class QuestEditorStateSignatures {
         if (fields == null) fields = new SignatureFields();
         return switch (editorType) {
             case PACK_CREATE -> "pack|" + safe(fields.packName)
-                    + "|" + safe(fields.packNamespace)
-                    + "|" + fields.packTreeLayout;
+                    + "|" + safe(fields.packNamespace);
             case PACK_OPTIONS -> "pack-options|" + safe(fields.packName)
                     + "|" + safe(fields.packIconPath)
                     + "|" + safe(fields.packDescription);
             case CATEGORY -> "category|" + safe(fields.categoryId)
                     + "|" + safe(fields.categoryName)
+                    + "|" + safe(fields.categoryNameTranslations)
                     + "|" + safe(fields.categoryIcon)
+                    + "|" + fields.categoryTreeLayout
                     + "|" + safe(fields.categoryBackground)
                     + "|" + fields.categoryBackgroundTileScale
                     + "|" + fields.categoryBackgroundDarkening
@@ -29,6 +30,7 @@ public final class QuestEditorStateSignatures {
             case SUBCATEGORY -> "subcategory|" + safe(fields.subCategoryId)
                     + "|" + safe(fields.subCategoryParent)
                     + "|" + safe(fields.subCategoryName)
+                    + "|" + safe(fields.subCategoryNameTranslations)
                     + "|" + safe(fields.subCategoryIcon)
                     + "|" + fields.subCategoryDefaultOpen;
             case QUEST -> "quest|" + safe(fields.questId)
@@ -64,10 +66,11 @@ public final class QuestEditorStateSignatures {
         public String packNamespace = "";
         public String packIconPath = "";
         public String packDescription = "";
-        public boolean packTreeLayout;
         public String categoryId = "";
         public String categoryName = "";
+        public String categoryNameTranslations = "";
         public String categoryIcon = "";
+        public boolean categoryTreeLayout;
         public String categoryBackground = "";
         public float categoryBackgroundTileScale = 0.5f;
         public boolean categoryBackgroundDarkening;
@@ -77,6 +80,7 @@ public final class QuestEditorStateSignatures {
         public String subCategoryId = "";
         public String subCategoryParent = "";
         public String subCategoryName = "";
+        public String subCategoryNameTranslations = "";
         public String subCategoryIcon = "";
         public boolean subCategoryDefaultOpen;
         public String questId = "";

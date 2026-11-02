@@ -78,7 +78,8 @@ public final class CategoryHeaderWidget extends AbstractWidget {
         }
 
         var font = Minecraft.getInstance().font;
-        int textW = font.width(title);
+        Component formattedTitle = QuestTextFormatting.component(title, 0x404040);
+        int textW = font.width(formattedTitle);
 
         // Leaves 5px of  padding around the title
         int headerW = Math.max(22, textW + 10);
@@ -134,7 +135,7 @@ public final class CategoryHeaderWidget extends AbstractWidget {
         int textX = x + (headerW - textW) / 2;
         int textY = y + 4;
 
-        gg.drawString(font, title, textX, textY, 0x404040, false);
+        gg.drawString(font, formattedTitle, textX, textY, 0x404040, false);
     }
 
     @Override

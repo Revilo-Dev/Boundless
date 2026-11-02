@@ -95,6 +95,7 @@ Most options are also available through the settings screen. Below list every en
 | `UI.enableQuestSearchBox` | `false` | Show search above the quest list. |
 | `UI.expandTreeToggle` | `true` | Show the expand panel button on tree quest views. |
 | `UI.customBackgrounds` | `true` | Show custom category backgrounds. |
+| `UI.enableBackgroundThemes` | `true` | Allow category background themes on this client. |
 | `UI.stickySubCategoryHeaders` | `true` | Keep the current sub-category heading visible. |
 | `UI.stickyDescriptionHeaders` | `true` | Keep the quest title visible while reading. |
 | `UI.enableDescriptionColors` | `true` | Allow colour formatting in descriptions. |

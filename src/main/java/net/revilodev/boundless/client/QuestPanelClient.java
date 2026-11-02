@@ -354,14 +354,19 @@ public final class QuestPanelClient {
                     if (st.list != null) st.list.setCategory("all");
                 }
             }
+            boolean collapseExpandedTree = st.expanded && !Config.expandTreeToggle();
+            if (collapseExpandedTree) st.expanded = false;
             if (st.btn != null) {
                 boolean show = shouldShowInventoryQuestButton();
                 st.btn.visible = show;
                 st.btn.active = show;
             }
             refreshTree(st);
-            reposition(st.inv, st);
-            updateVisibility(st);
+            if (collapseExpandedTree) relayoutPanel(st.inv, st);
+            else {
+                reposition(st.inv, st);
+                updateVisibility(st);
+            }
         }
     }
 
@@ -474,6 +479,7 @@ public final class QuestPanelClient {
 
         if (st.list != null) {
             st.list.setBounds(px, py, pw, ph);
+            st.list.setBackgroundBounds(bgx + 8, bgy + 8, st.panelWidth - 17, st.panelHeight - 17);
             st.list.setTopInset(Config.enableQuestSearchBox() ? 18 : 0);
         }
         if (st.tree != null) {
@@ -744,8 +750,9 @@ public final class QuestPanelClient {
             st.settingsButton.active = showSettings;
         }
         if (st.expandButton != null) {
-            st.expandButton.visible = treeVisible;
-            st.expandButton.active = treeVisible;
+            boolean showExpand = treeVisible && Config.expandTreeToggle();
+            st.expandButton.visible = showExpand;
+            st.expandButton.active = showExpand;
         }
     }
 

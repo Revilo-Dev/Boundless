@@ -382,7 +382,7 @@ public final class FtbQuestImporter {
             // write categories before quests so the pack is always ordered
             Files.createDirectories(stagingRoot);
             QuestEditorPackFiles.writePackMeta(stagingRoot, packName,
-                    "Imported from FTB Quests: " + packName, firstPackIcon(), "tree", true);
+                    "Imported from FTB Quests: " + packName, firstPackIcon(), true);
             QuestPack stagingPack = new QuestPack(packName, namespace, stagingRoot, false, true);
             stagingPack.ensureDirs();
             int categoryOrder = 0;

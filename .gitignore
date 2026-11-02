@@ -16,9 +16,6 @@
 # gradle
 /build/
 /.gradle/
-/gradlew
-/gradlew.bat
-/settings.gradle
 
 # non-Boundless assets
 /src/main/resources/assets/*/

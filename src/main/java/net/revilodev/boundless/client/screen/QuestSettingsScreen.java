@@ -60,6 +60,16 @@ public final class QuestSettingsScreen extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/ui-icon.png");
     private static final ResourceLocation CONFIG_TAB_FEATURES_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/features-icon.png");
+    private static final ResourceLocation SCOPE_TAB_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab.png");
+    private static final ResourceLocation SCOPE_TAB_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-pulled.png");
+    private static final ResourceLocation SCOPE_TAB_SELECTED_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-select.png");
+    private static final ResourceLocation CLIENT_SCOPE_ICON =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/client.png");
+    private static final ResourceLocation SERVER_SCOPE_ICON =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/server.png");
     private static final ResourceLocation MENU_CONFIG_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png");
     private static final ResourceLocation MENU_EDITOR_TEX =
@@ -120,7 +130,9 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiQuestTextScaleRow;
     private ConfigRow uiQuestIconScaleRow;
     private ConfigRow uiEnableSearchBoxRow;
+    private ConfigRow uiExpandTreeToggleRow;
     private ConfigRow uiCustomBackgroundsRow;
+    private ConfigRow uiBackgroundThemesRow;
     private ConfigRow uiStickySubCategoryHeadersRow;
     private ConfigRow uiStickyDescriptionHeadersRow;
     private ConfigRow uiEnableDescriptionColorsRow;
@@ -148,6 +160,7 @@ public final class QuestSettingsScreen extends Screen {
     private HoldResetButton resetConfigButton;
     private DebugButton debugButton;
     private final List<ConfigTabButton> configTabButtons = new ArrayList<>();
+    private final List<ConfigScopeButton> configScopeButtons = new ArrayList<>();
     private final List<ConfigRow> configRows = new ArrayList<>();
     private List<Component> pendingTooltip = List.of();
     private int pendingTooltipX;
@@ -197,7 +210,9 @@ public final class QuestSettingsScreen extends Screen {
     private double questTextScale;
     private double questIconScale;
     private boolean enableQuestSearchBox;
+    private boolean expandTreeToggle;
     private boolean customBackgrounds;
+    private boolean enableBackgroundThemes;
     private boolean stickySubCategoryHeaders;
     private boolean stickyDescriptionHeaders;
     private boolean enableDescriptionColors;
@@ -216,6 +231,7 @@ public final class QuestSettingsScreen extends Screen {
     private boolean disableQuestBook;
     private boolean spawnWithQuestBook;
     private ConfigTab configTab = ConfigTab.ALL;
+    private ConfigScope configScope = ConfigScope.ALL;
 
     public QuestSettingsScreen(Screen parent) {
         super(tr("title"));
@@ -265,6 +281,7 @@ public final class QuestSettingsScreen extends Screen {
         // Rows are laid out again when active tab or scroll position changes
         configRows.clear();
         configTabButtons.clear();
+        configScopeButtons.clear();
         int uiHeaderY = py + 2;
         int uiRow1 = uiHeaderY + 10;
         int rowGap = 21;
@@ -349,10 +366,18 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.search_widget.subtitle"),
                 () -> trs(enableQuestSearchBox ? "state.on" : "state.off"),
                 () -> enableQuestSearchBox = !enableQuestSearchBox);
+        uiExpandTreeToggleRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.expand_tree_toggle"),
+                trs("row.expand_tree_toggle.subtitle"),
+                () -> trs(expandTreeToggle ? "state.on" : "state.off"),
+                () -> expandTreeToggle = !expandTreeToggle);
         uiCustomBackgroundsRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Custom backgrounds",
                 "Render category backgrounds in quest lists and trees.",
                 () -> trs(customBackgrounds ? "state.on" : "state.off"),
                 () -> customBackgrounds = !customBackgrounds);
+        uiBackgroundThemesRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw,
+                trs("row.background_themes"), trs("row.background_themes.subtitle"),
+                () -> trs(enableBackgroundThemes ? "state.on" : "state.off"),
+                () -> enableBackgroundThemes = !enableBackgroundThemes);
         uiStickySubCategoryHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Sticky sub-category headers",
                 "Keep the active sub-category heading visible while scrolling.",
                 () -> trs(stickySubCategoryHeaders ? "state.on" : "state.off"),
@@ -426,6 +451,7 @@ public final class QuestSettingsScreen extends Screen {
                 () -> spawnWithQuestBook = !spawnWithQuestBook);
 
         uiDisableCategoriesRow.serverOnly = true;
+        uiCustomBackgroundsRow.serverOnly = true;
         functionalityDisablePinningRow.serverOnly = true;
         functionalityAutoClaimRow.serverOnly = true;
         functionalityQuestRejectingRow.serverOnly = true;
@@ -446,6 +472,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiDescriptionAlignmentRow, ConfigTab.STYLE);
         addConfigRow(uiHideHeaderRow, ConfigTab.STYLE);
         addConfigRow(uiCustomBackgroundsRow, ConfigTab.STYLE);
+        addConfigRow(uiBackgroundThemesRow, ConfigTab.STYLE);
 
         addConfigRow(uiPinnedRow, ConfigTab.UI);
         addConfigRow(uiHideInventoryRow, ConfigTab.UI);
@@ -455,6 +482,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiDisableCategoriesRow, ConfigTab.UI);
         addConfigRow(uiShowIdFieldRow, ConfigTab.UI);
         addConfigRow(uiEnableSearchBoxRow, ConfigTab.UI);
+        addConfigRow(uiExpandTreeToggleRow, ConfigTab.UI);
         addConfigRow(uiStickySubCategoryHeadersRow, ConfigTab.STYLE);
         addConfigRow(uiStickyDescriptionHeadersRow, ConfigTab.STYLE);
 
@@ -472,6 +500,8 @@ public final class QuestSettingsScreen extends Screen {
         addConfigTabButton(ConfigTab.STYLE, CONFIG_TAB_STYLE_TEX, trs("tab.style"));
         addConfigTabButton(ConfigTab.UI, CONFIG_TAB_UI_TEX, trs("tab.ui"));
         addConfigTabButton(ConfigTab.FEATURES, CONFIG_TAB_FEATURES_TEX, trs("tab.features"));
+        addConfigScopeButton(ConfigScope.CLIENT, CLIENT_SCOPE_ICON, trs("scope.client"));
+        addConfigScopeButton(ConfigScope.SERVER, SERVER_SCOPE_ICON, trs("scope.server"));
         initColorFields();
         initConfigSearch();
         applyConfigScrollLayout();
@@ -521,6 +551,12 @@ public final class QuestSettingsScreen extends Screen {
     private void addConfigTabButton(ConfigTab tab, ResourceLocation icon, String tooltip) {
         ConfigTabButton button = new ConfigTabButton(tab, icon, tooltip);
         configTabButtons.add(button);
+        addRenderableWidget(button);
+    }
+
+    private void addConfigScopeButton(ConfigScope scope, ResourceLocation icon, String tooltip) {
+        ConfigScopeButton button = new ConfigScopeButton(scope, icon, tooltip);
+        configScopeButtons.add(button);
         addRenderableWidget(button);
     }
 
@@ -599,6 +635,12 @@ public final class QuestSettingsScreen extends Screen {
             button.visible = config;
             button.active = config;
         }
+        boolean showScopeFilters = config && canManageServerSettings();
+        if (!showScopeFilters) configScope = ConfigScope.CLIENT;
+        for (ConfigScopeButton button : configScopeButtons) {
+            button.visible = showScopeFilters;
+            button.active = showScopeFilters;
+        }
         resetConfigButton.visible = config;
         resetConfigButton.active = config;
         debugButton.visible = menu;
@@ -631,7 +673,9 @@ public final class QuestSettingsScreen extends Screen {
         questTextScale = Config.questTextScale();
         questIconScale = Config.questIconScale();
         enableQuestSearchBox = Config.enableQuestSearchBox();
+        expandTreeToggle = Config.expandTreeToggle();
         customBackgrounds = Config.customBackgrounds();
+        enableBackgroundThemes = Config.enableBackgroundThemes();
         stickySubCategoryHeaders = Config.stickySubCategoryHeaders();
         stickyDescriptionHeaders = Config.stickyDescriptionHeaders();
         enableDescriptionColors = Config.enableDescriptionColors();
@@ -799,7 +843,9 @@ public final class QuestSettingsScreen extends Screen {
         Config.QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
+        Config.EXPAND_TREE_TOGGLE.set(expandTreeToggle);
         Config.CUSTOM_BACKGROUNDS.set(customBackgrounds);
+        Config.ENABLE_BACKGROUND_THEMES.set(enableBackgroundThemes);
         Config.STICKY_SUBCATEGORY_HEADERS.set(stickySubCategoryHeaders);
         Config.STICKY_DESCRIPTION_HEADERS.set(stickyDescriptionHeaders);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
@@ -884,6 +930,7 @@ public final class QuestSettingsScreen extends Screen {
             if (canManageServerSettings()) disableCategories = false;
             showIdField = false;
             enableQuestSearchBox = false;
+            expandTreeToggle = true;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.STYLE) {
             hideQuestWidgetIcons = false;
@@ -900,6 +947,7 @@ public final class QuestSettingsScreen extends Screen {
             stickySubCategoryHeaders = true;
             stickyDescriptionHeaders = true;
             customBackgrounds = true;
+            enableBackgroundThemes = true;
         }
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
             enableQuestToasts = true;
@@ -1029,6 +1077,9 @@ public final class QuestSettingsScreen extends Screen {
             for (int i = 0; i < configTabButtons.size(); i++) {
                 ConfigTabButton button = configTabButtons.get(i);
                 button.visible = i < tabVisible.size() ? tabVisible.get(i) : true;
+                if (button.visible) button.render(gg, mouseX, mouseY, partialTick);
+            }
+            for (ConfigScopeButton button : configScopeButtons) {
                 if (button.visible) button.render(gg, mouseX, mouseY, partialTick);
             }
             if (backButton != null) backButton.visible = backVisible;
@@ -1190,12 +1241,15 @@ public final class QuestSettingsScreen extends Screen {
             resetConfigButton.active = page == Page.CONFIG && inView;
         }
         layoutConfigTabButtons();
+        layoutConfigScopeButtons();
     }
 
     private List<ConfigRow> visibleConfigRows() {
         List<ConfigRow> out = new ArrayList<>();
         for (ConfigRow row : configRows) {
             if (row.serverOnly && !canManageServerSettings()) continue;
+            if (configScope == ConfigScope.CLIENT && row.serverOnly) continue;
+            if (configScope == ConfigScope.SERVER && !row.serverOnly) continue;
             if (configTab != ConfigTab.ALL && row.group != configTab) continue;
             if (configTab == ConfigTab.ALL && !configSearchQuery.isBlank() && !row.matches(configSearchQuery)) continue;
             out.add(row);
@@ -1212,6 +1266,16 @@ public final class QuestSettingsScreen extends Screen {
             button.setY(startY + i * (TAB_H + TAB_GAP));
             button.visible = page == Page.CONFIG;
             button.active = page == Page.CONFIG;
+        }
+    }
+
+    private void layoutConfigScopeButtons() {
+        int startX = leftX + PANEL_W - 66;
+        int y = topY - 24;
+        for (int index = 0; index < configScopeButtons.size(); index++) {
+            ConfigScopeButton button = configScopeButtons.get(index);
+            button.setX(startX + index * 30);
+            button.setY(y);
         }
     }
 
@@ -1375,6 +1439,49 @@ public final class QuestSettingsScreen extends Screen {
         }
     }
 
+    private enum ConfigScope {
+        ALL,
+        CLIENT,
+        SERVER
+    }
+
+    private final class ConfigScopeButton extends AbstractButton {
+        private final ConfigScope scope;
+        private final ResourceLocation icon;
+        private final String tooltip;
+
+        private ConfigScopeButton(ConfigScope scope, ResourceLocation icon, String tooltip) {
+            super(0, 0, 32, 35, Component.empty());
+            this.scope = scope;
+            this.icon = icon;
+            this.tooltip = tooltip;
+        }
+
+        @Override
+        public void onPress() {
+            configScope = configScope == scope ? ConfigScope.ALL : scope;
+            configScrollY = 0f;
+            applyConfigScrollLayout();
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+            boolean selected = configScope == scope;
+            ResourceLocation texture = selected ? SCOPE_TAB_SELECTED_TEX
+                    : isMouseOver(mouseX, mouseY) ? SCOPE_TAB_HOVER_TEX : SCOPE_TAB_TEX;
+            int textureHeight = selected ? 35 : 32;
+            gg.blit(texture, getX(), getY(), 0, 0, 32, textureHeight, 32, textureHeight);
+            gg.blit(icon, getX() + 11, getY() + 7, 0, 0, 9, 9, 9, 9);
+            if (isMouseOver(mouseX, mouseY)) {
+                queueTooltip(List.of(Component.literal(tooltip)), mouseX, mouseY);
+            }
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {
+        }
+    }
+
     private final class ConfigTabButton extends AbstractButton {
         private final ConfigTab tab;
         private final ResourceLocation icon;
@@ -1477,6 +1584,8 @@ public final class QuestSettingsScreen extends Screen {
                 List<Component> tooltip = new ArrayList<>();
                 tooltip.add(Component.literal(label));
                 if (!subtitle.isBlank()) tooltip.add(Component.literal(subtitle));
+                tooltip.add(Component.literal(trs(serverOnly ? "scope.server" : "scope.client"))
+                        .withStyle(style -> style.withColor(serverOnly ? 0xFFFF55 : 0x55FFFF)));
                 queueTooltip(tooltip, mouseX, mouseY);
             }
         }

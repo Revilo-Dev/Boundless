@@ -72,6 +72,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
 
         selectedCategory = lastSelectedCategory;
+        if (!Config.expandTreeToggle()) expanded = false;
         boolean expandTree = expanded && usesTreeView();
         detailsPanelWidth = Math.min(147, Math.max(96, (this.width - 49) / 2));
         int maxTreeWidth = Math.max(96, this.width - 49 - detailsPanelWidth - 4);
@@ -136,6 +137,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             showingDetails = true;
             updateVisibility();
         });
+        list.setBackgroundBounds(leftX + 8, topY + 8, panelWidth - 17, panelHeight - 17);
         list.setTopInset(Config.enableQuestSearchBox() ? 18 : 0);
         list.setQuests(QuestData.all());
         list.setCategory(selectedCategory);
@@ -244,7 +246,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             settingsButton.active = showSettings;
         }
         if (expandButton != null) {
-            boolean showExpand = treeView && !showingDetails;
+            boolean showExpand = treeView && !showingDetails && Config.expandTreeToggle();
             expandButton.visible = showExpand;
             expandButton.active = showExpand;
         }

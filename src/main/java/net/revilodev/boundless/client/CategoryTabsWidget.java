@@ -234,7 +234,7 @@ public final class CategoryTabsWidget extends AbstractWidget {
 
             // save the tooltip so it can be drawn later
             if (hover) {
-                pendingTooltip = Component.literal(c.name);
+                pendingTooltip = QuestTextFormatting.component(c.name, 0xFFFFFF);
                 pendingTooltipX = mouseX;
                 pendingTooltipY = mouseY;
             }

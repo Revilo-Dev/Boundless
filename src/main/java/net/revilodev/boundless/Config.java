@@ -95,9 +95,15 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_QUEST_SEARCH_BOX =
             BUILDER.comment("If true, shows the quest search box above the quest list.")
                     .define("enableQuestSearchBox", false);
+    public static final ModConfigSpec.ConfigValue<Boolean> EXPAND_TREE_TOGGLE =
+            BUILDER.comment("If true, shows the expand panel button on tree quest views.")
+                    .define("expandTreeToggle", true);
     public static final ModConfigSpec.ConfigValue<Boolean> CUSTOM_BACKGROUNDS =
             BUILDER.comment("If true, renders custom category backgrounds in quest lists and trees.")
                     .define("customBackgrounds", true);
+    public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_BACKGROUND_THEMES =
+            BUILDER.comment("If true, allows category background themes on this client.")
+                    .define("enableBackgroundThemes", true);
     public static final ModConfigSpec.ConfigValue<Boolean> STICKY_SUBCATEGORY_HEADERS =
             BUILDER.comment("If true, keeps the current sub-category header visible while scrolling quest lists.")
                     .define("stickySubCategoryHeaders", true);
@@ -374,26 +380,9 @@ public final class Config {
         DISABLED_CATEGORIES.set(disabledCategories == null ? List.of() : List.copyOf(disabledCategories));
         APPLIED_QUEST_PACKS.set(appliedQuestPacks == null ? List.of() : normalizedCopy(appliedQuestPacks));
         DISABLED_QUEST_PACKS.set(disabledQuestPacks == null ? List.of() : normalizedCopy(disabledQuestPacks));
-        PINNED_QUEST_HUD_POSITION.set(pinnedQuestHudPosition);
-        HIDE_QUEST_BOOK_IN_INVENTORY.set(hideQuestBookInInventory);
-        QUEST_BOOK_INVENTORY_BUTTON_POSITION.set(questBookInventoryButtonPosition);
-        CENTER_INVENTORY_WITH_QUEST_PANEL.set(centerInventoryWithQuestPanel);
-        HIDE_CATEGORY_HEADER.set(hideCategoryHeader);
-        FILTER_DISPLAY_MODE.set(filterDisplayMode);
         DISABLE_CATEGORIES.set(disableCategories);
         ENABLE_BUILTIN_QUEST_PACK.set(enableBuiltinQuestPack);
-        HIDE_QUEST_WIDGET_ICONS.set(hideQuestWidgetIcons);
-        QUEST_TEXT_SCALE.set(Math.max(0.5D, Math.min(1.0D, questTextScale)));
-        QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
-        ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         CUSTOM_BACKGROUNDS.set(customBackgrounds);
-        ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
-        QUEST_WIDGET_TEXT_COLOR.set(normalizeHexColor(questWidgetTextColor, "FFFFFF"));
-        DESCRIPTION_TEXT_COLOR.set(normalizeHexColor(descriptionTextColor, "CFCFCF"));
-        ENABLE_DESCRIPTION_READ_MORE.set(enableDescriptionReadMore);
-        ENABLE_DESCRIPTION_TEXT_WRAPPING.set(enableDescriptionTextWrapping);
-        DESCRIPTION_TEXT_ALIGNMENT.set(descriptionTextAlignment);
-        ENABLE_QUEST_TOASTS.set(enableQuestToasts);
         DISABLE_QUEST_PINNING.set(disableQuestPinning);
         AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
         ENABLE_QUEST_REJECTING.set(enableQuestRejecting);
@@ -526,8 +515,16 @@ public final class Config {
         return ENABLE_QUEST_SEARCH_BOX.get();
     }
 
+    public static boolean expandTreeToggle() {
+        return EXPAND_TREE_TOGGLE.get();
+    }
+
     public static boolean customBackgrounds() {
         return CUSTOM_BACKGROUNDS.get();
+    }
+
+    public static boolean enableBackgroundThemes() {
+        return ENABLE_BACKGROUND_THEMES.get();
     }
 
     public static boolean enableDescriptionColors() {
