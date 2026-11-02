@@ -37,6 +37,7 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 
 @OnlyIn(Dist.CLIENT)
+// browses and manages questpack assets without blocking the render thread
 public final class QuestAssetManagerScreen extends Screen {
     private static final int PANEL_WIDTH = 270;
     private static final int PANEL_HEIGHT = 166;
@@ -113,6 +114,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void reloadEntries(Runnable afterLoad) {
+        // discard stale scans when the asset type changes mid-load
         int generation = ++loadGeneration;
         loading = true;
         status = "Loading " + type.label.toLowerCase(Locale.ROOT) + "...";
@@ -136,6 +138,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private List<AssetEntry> scanEntries(AssetType requestedType) {
+        // scan once in the background and publish an immutable result
         String usage = usageCorpus();
         List<AssetEntry> found = new ArrayList<>();
         Path root = requestedType.root();
@@ -192,6 +195,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private String usageCorpus() {
+        // read quest json once so every asset can share the same usage lookup
         StringBuilder content = new StringBuilder();
         Path root = Config.questPacksRoot();
         try {
@@ -276,6 +280,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void deleteSelected() {
+        // only delete files that still resolve inside their configured root
         if (selected == null) return;
         String name = selected.relative;
         try {
@@ -295,6 +300,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void renameSelected() {
+        // normalise the new name before building any resource id
         if (selected == null) return;
         AssetEntry entry = selected;
         String requested = TinyFileDialogs.tinyfd_inputBox(
@@ -413,6 +419,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void renderPreview(GuiGraphics graphics, AssetEntry entry, int x, int y) {
+        // use cached textures and never reload per visible row
         ResourceLocation texture = switch (type) {
             case ASSET -> QuestEditorCustomIcons.texture(entry.reference);
             case EMOJI -> QuestEditorEmojis.texture(entry.reference);

@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /** Loads PNG quest icons from config/boundless/assets into the client texture manager. */
+// resolves custom editor icons and their cached textures
 public final class QuestEditorCustomIcons {
     public static final String PREFIX = "boundless:custom_assets/";
     private static final Map<String, ResourceLocation> TEXTURES = new LinkedHashMap<>();

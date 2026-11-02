@@ -7,6 +7,7 @@ import net.neoforged.fml.ModList;
 
 import java.lang.reflect.Method;
 
+// reads optional level up data without making it required
 public final class LevelUpCompat {
     // Level Up is optional, so its API is resolved only after the mod list is ready.
     private static final ResourceLocation BOUNDLESS_QUEST_SOURCE =

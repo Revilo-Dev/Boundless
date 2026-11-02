@@ -7,6 +7,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.revilodev.boundless.BoundlessMod;
 
+// registers boundless items
 public final class ModItems {
     // Everything Boundless adds to the item registry.
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(BoundlessMod.MOD_ID);

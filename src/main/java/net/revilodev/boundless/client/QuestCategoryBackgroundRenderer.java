@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.editor.QuestEditorCustomIcons;
 
+// draws tiled blocks or stretched category background assets
 public final class QuestCategoryBackgroundRenderer {
     private static final int BASE_TILE_SIZE = 32;
     private static final int SOURCE_TILE_SIZE = 16;

@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 
 // shared emoji names and textures used by editor text and icon pickers
+// discovers bundled and custom editor emoji textures
 public final class QuestEditorEmojis {
     public static final String ICON_PREFIX = "boundless:emoji/";
     private static final String RESOURCE_PATH = "textures/icon/emoji";

@@ -752,19 +752,18 @@ public final class QuestData {
     }
 
     private static void loadModQuestPackData(Path packRoot, DataStore data) {
-        boolean treeLayout = readTreeLayout(packRoot.resolve("boundless").resolve("pack.json"));
         Path dataRoot = packRoot.resolve("data");
         if (!Files.isDirectory(dataRoot)) {
             String namespace = namespaceFromPackRoot(packRoot);
             Path directQuestsRoot = packRoot.resolve("quests");
             if (Files.isDirectory(directQuestsRoot)) {
-                loadQuestNamespace(directQuestsRoot, namespace, data, treeLayout);
+                loadQuestNamespace(directQuestsRoot, namespace, data);
             }
             try (DirectoryStream<Path> namespaces = Files.newDirectoryStream(packRoot)) {
                 for (Path namespaceDir : namespaces) {
                     if (!Files.isDirectory(namespaceDir)) continue;
                     if (!Files.isDirectory(namespaceDir.resolve("quests"))) continue;
-                    loadQuestNamespace(namespaceDir.resolve("quests"), normalizeNamespace(namespaceDir.getFileName().toString()), data, treeLayout);
+                    loadQuestNamespace(namespaceDir.resolve("quests"), normalizeNamespace(namespaceDir.getFileName().toString()), data);
                 }
             } catch (Exception e) {
                 BoundlessDebug.warnRateLimited("questpack-data:" + packRoot.getFileName(), 5_000L,
@@ -781,7 +780,7 @@ public final class QuestData {
                 Path questsRoot = namespaceDir.resolve("quests");
                 if (!Files.isDirectory(questsRoot)) continue;
 
-                loadQuestNamespace(questsRoot, ns, data, treeLayout);
+                loadQuestNamespace(questsRoot, ns, data);
             }
         } catch (Exception e) {
             BoundlessDebug.warnRateLimited("questpack-data:" + packRoot.getFileName(), 5_000L,
@@ -789,11 +788,11 @@ public final class QuestData {
         }
     }
 
-    private static void loadQuestNamespace(Path questsRoot, String namespace, DataStore data, boolean treeLayout) {
+    private static void loadQuestNamespace(Path questsRoot, String namespace, DataStore data) {
         if (!Files.isDirectory(questsRoot)) return;
         String ns = normalizeNamespace(namespace);
         // instance packs may use the boundless namespace without being built in data
-        loadCategoriesFromPath(questsRoot.resolve("categories"), ns, data, treeLayout);
+        loadCategoriesFromPath(questsRoot.resolve("categories"), ns, data);
         loadSubCategoriesFromPath(questsRoot.resolve("subcategories"), ns, data);
         loadSubCategoriesFromPath(questsRoot.resolve("sub_category"), ns, data);
         loadSubCategoriesFromPath(questsRoot.resolve("subcategory"), ns, data);
@@ -820,7 +819,7 @@ public final class QuestData {
         return out.isEmpty() ? "boundless_pack" : out.toString();
     }
 
-    private static void loadCategoriesFromPath(Path categoriesDir, String namespace, DataStore data, boolean packTreeLayout) {
+    private static void loadCategoriesFromPath(Path categoriesDir, String namespace, DataStore data) {
         if (!Files.isDirectory(categoriesDir)) return;
         try (DirectoryStream<Path> files = Files.newDirectoryStream(categoriesDir, "*.json")) {
             for (Path file : files) {
@@ -836,7 +835,7 @@ public final class QuestData {
                     String dependency = optString(obj, "dependency");
                     boolean autoComplete = parseBoolFlexible(obj, "auto_complete",
                             parseBoolFlexible(obj, "autoComplete", false));
-                    boolean treeLayout = packTreeLayout || "tree".equalsIgnoreCase(optString(obj, "layout"));
+                    boolean treeLayout = "tree".equalsIgnoreCase(optString(obj, "layout"));
                     String background = optString(obj, "background");
                     float backgroundTileScale = parseFloatFlexible(obj, "background_tile_scale", 0.5f);
                     boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
@@ -863,17 +862,6 @@ public final class QuestData {
             type = "icon".equalsIgnoreCase(type) ? "icon" : "text";
             value = value == null ? "" : value;
             scale = Math.max(0.25f, Math.min(4f, scale));
-        }
-    }
-
-    private static boolean readTreeLayout(Path metaPath) {
-        if (metaPath == null || !Files.exists(metaPath)) return false;
-        try (Reader reader = Files.newBufferedReader(metaPath, StandardCharsets.UTF_8)) {
-            JsonObject root = safeObject(reader);
-            if (root == null || !root.has("boundless") || !root.get("boundless").isJsonObject()) return false;
-            return "tree".equalsIgnoreCase(optString(root.getAsJsonObject("boundless"), "layout"));
-        } catch (Exception ignored) {
-            return false;
         }
     }
 

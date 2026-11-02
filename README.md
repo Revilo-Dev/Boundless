@@ -26,6 +26,7 @@ The GUI is configurable: text and icon scale, colours, category backgrounds, sti
 
 - Create list-based packs or visual quest trees.
 - Create categories, sub-categories and quests.
+- Format category and sub-category display titles without changing their generated IDs.
 - Define dependencies, incompatibilities, optional paths and automatic completion.
 - Reorder, duplicate, search and delete quests.
 - Choose objectives like collect, kill, effects and other types easily from browsers.
@@ -92,6 +93,7 @@ Most options are also available through the settings screen. Below list every en
 | `UI.questTextScale` | `1.0` | Quest text scale, from `0.5` to `1.0`. |
 | `UI.questIconScale` | `1.0` | Quest icon scale, from `0.5` to `1.0`. |
 | `UI.enableQuestSearchBox` | `false` | Show search above the quest list. |
+| `UI.expandTreeToggle` | `true` | Show the expand panel button on tree quest views. |
 | `UI.customBackgrounds` | `true` | Show custom category backgrounds. |
 | `UI.stickySubCategoryHeaders` | `true` | Keep the current sub-category heading visible. |
 | `UI.stickyDescriptionHeaders` | `true` | Keep the quest title visible while reading. |

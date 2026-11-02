@@ -114,7 +114,6 @@ import org.lwjgl.util.tinyfd.TinyFileDialogs;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.text.Normalizer;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -145,6 +144,10 @@ public abstract class QuestEditor extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter.png");
     protected static final ResourceLocation DELETE_ENABLED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter_hovered.png");
+    protected static final ResourceLocation MOVE_NODE_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/move.png");
+    protected static final ResourceLocation CONNECT_NODE_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/connect.png");
     protected static final ResourceLocation DELETE_CONFIRM_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/are_you_sure_button.png");
     protected static final ResourceLocation DELETE_CONFIRM_TEX_HOVER =
@@ -156,16 +159,10 @@ public abstract class QuestEditor extends Screen {
     protected static final ResourceLocation UNSAVED_EXCLAMATION_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/icon/exclamation.png");
     protected static final ResourceLocation FTB_IMPORT_WARNING_TEX = UNSAVED_EXCLAMATION_TEX;
-    protected static final ResourceLocation QUEST_TAB_SCROLL_ICON_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
     protected static final ResourceLocation BUILTIN_PACK_ENABLED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_confirmation.png");
     protected static final ResourceLocation BUILTIN_PACK_DISABLED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_reject.png");
-    protected static final ResourceLocation PACK_LIST_TYPE_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/icon-list-quest.png");
-    protected static final ResourceLocation PACK_TREE_TYPE_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/icon-tree-quest.png");
     protected static final ResourceLocation ORIGIN_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/origin.png");
     protected static final ResourceLocation ORIGIN_HOVER_TEX =
@@ -315,8 +312,6 @@ public abstract class QuestEditor extends Screen {
     protected Mode mode = Mode.PACK_LIST;
     protected EditorType editorType = EditorType.NONE;
     protected QuestPack currentPack;
-    protected QuestPack cachedLayoutPack;
-    protected boolean cachedTreeLayout;
     protected String selectedEntryId = "";
 
     // main editor buttons
@@ -352,7 +347,6 @@ public abstract class QuestEditor extends Screen {
     protected EditBox packNamespaceBox;
     protected EditBox packIconPathBox;
     protected ScaledMultiLineEditBox packDescriptionBox;
-    protected QuestEditorScreen.PackLayoutSelector packLayoutSelector;
     protected QuestEditorScreen.FtbImportSection ftbImportSection;
     protected boolean ftbImportRunning;
 
@@ -372,6 +366,8 @@ public abstract class QuestEditor extends Screen {
     protected long categoryBackgroundSaveAt;
     protected EditBox catDependencyBox;
     protected ToggleButton catAutoCompleteToggle;
+    protected QuestEditorScreen.CategoryLayoutSelector catLayoutSelector;
+    protected QuestEditorScreen.CategorySubCategorySection categorySubCategorySection;
 
     // sub category fields
     protected EditBox subIdBox;
@@ -447,6 +443,7 @@ public abstract class QuestEditor extends Screen {
     protected final Map<String, Integer> questIdCountCache = new HashMap<>();
     protected final Map<String, Set<Path>> questPathsByIdCache = new HashMap<>();
     protected boolean localQuestIdCacheReady;
+    protected Path idCachePackRoot;
     protected final Map<String, String> questIconByIdCache = new HashMap<>();
     protected final List<String> categorySuggestionCache = new ArrayList<>();
     protected final List<String> subCategorySuggestionCache = new ArrayList<>();
@@ -550,6 +547,7 @@ public abstract class QuestEditor extends Screen {
         int availableWidth = Math.max(202, width - TAB_W - 12);
         editorPanelWidth = Math.min(PANEL_W, Math.max(100, availableWidth / 2));
         int maxTreePanelWidth = Math.max(100, availableWidth - editorPanelWidth - 2);
+        if (!Config.expandTreeToggle()) treePanelExpanded = false;
         panelWidth = Math.min(treePanelExpanded ? 220 : PANEL_W, maxTreePanelWidth);
         panelHeight = Math.min(PANEL_H, Math.max(120, height - 26));
         int sideTabSpace = TAB_W - SIDE_TAB_X_OFFSET;
@@ -566,7 +564,9 @@ public abstract class QuestEditor extends Screen {
         listH = interiorH - BOTTOM_BAR_H;
         ph = listH;
 
-        leftList = new EditorListWidget(pxLeft, py, leftPw, listH, this::handleLeftClick, this::handleLeftAction, this::handleLeftSecondaryClick, this::handleEntryMoveAction, QuestEditorItemIcons::iconStackFromId);
+        leftList = new EditorListWidget(pxLeft, py, leftPw, listH, this::handleLeftClick, this::handleLeftAction,
+                this::handleLeftSecondaryClick, this::handleEntryMoveAction, this::openCurrentCategorySettings,
+                QuestEditorItemIcons::iconStackFromId);
         addRenderableWidget(leftList);
         questTree = new QuestEditorTreeWidget(pxLeft, py, leftPw, listH, this::openTreeQuest,
                 this::placeTreeQuest, this::saveTreePosition, this::requestDeleteTreeNode,
@@ -609,7 +609,7 @@ public abstract class QuestEditor extends Screen {
         createEntryButton.active = false;
         addRenderableWidget(createEntryButton);
         treeMoveButton = new QuestEditorScreen.TreeToolButton(Tool.MOVE, this::toggleTreeMoveMode,
-                SMALL_BTN_SIZE, DELETE_TEX, DELETE_ENABLED_TEX);
+                SMALL_BTN_SIZE, MOVE_NODE_TEX, MOVE_NODE_TEX);
         treeMoveButton.visible = false;
         treeMoveButton.active = false;
         addRenderableWidget(treeMoveButton);
@@ -619,7 +619,7 @@ public abstract class QuestEditor extends Screen {
         treeDeleteButton.active = false;
         addRenderableWidget(treeDeleteButton);
         treeConnectorButton = new QuestEditorScreen.TreeToolButton(Tool.CONNECT, this::toggleTreeConnectorMode,
-                SMALL_BTN_SIZE, DELETE_TEX, DELETE_ENABLED_TEX);
+                SMALL_BTN_SIZE, CONNECT_NODE_TEX, CONNECT_NODE_TEX);
         treeConnectorButton.visible = false;
         treeConnectorButton.active = false;
         addRenderableWidget(treeConnectorButton);
@@ -638,9 +638,6 @@ public abstract class QuestEditor extends Screen {
         setTreeTool(treeTool);
         importQuestPackButton = new IconButton(createPackButton.getX() + createPackButton.getWidth() + 2, barY, SMALL_BTN_SIZE, IMPORT_PACK_BUTTON_TEX, IMPORT_PACK_BUTTON_TEX_HOVER, this::openImportQuestPackDirectory);
         addRenderableWidget(importQuestPackButton);
-        categoriesTabButton = new EditorTabButton(trs("categories"), "boundless:quest_book", Mode.CATEGORY_LIST, () -> currentPack != null, () -> mode, this::setMode);
-        subCategoriesTabButton = new EditorTabButton(trs("subcategories"), "minecraft:book", Mode.SUBCATEGORY_LIST, () -> currentPack != null, () -> mode, this::setMode);
-        questsTabButton = new EditorTabButton(trs("quests"), QUEST_TAB_SCROLL_ICON_TEX, Mode.QUEST_LIST, () -> currentPack != null, () -> mode, this::setMode);
         questSearchBox = new EditBox(font, pxLeft + 2, barY, leftPw - 4, 20, tr("search"));
         questSearchBox.setMaxLength(128);
         questSearchBox.setHint(tr("search"));
@@ -695,15 +692,13 @@ public abstract class QuestEditor extends Screen {
         packNamespaceBox = createBox(trs("field.namespace"), BOX_H);
         packIconPathBox = createIconPickerBox(trs("field.pack_icon_path"));
         packDescriptionBox = makeMultiBox(trs("field.pack_description"), BOX_H_TALL, false);
-        packLayoutSelector = new QuestEditorScreen.PackLayoutSelector(font, this::markCurrentEditorUnsaved);
-        addRenderableWidget(packLayoutSelector);
         ftbImportSection = new QuestEditorScreen.FtbImportSection(
                 font, this::selectFtbQuestImportFolder, () -> ftbImportRunning);
         addRenderableWidget(ftbImportSection);
 
         catIdBox = createBox(trs("field.category_id"), BOX_H);
         catNameBox = createBox(trs("field.category_name"), BOX_H);
-        catNameBox.setMaxLength(22);
+        catNameBox.setMaxLength(128);
         catIconBox = createIconPickerBox(trs("field.category_icon"));
         catBackgroundBox = createIconPickerBox(trs("field.category_background"));
         catBackgroundModeButton = Button.builder(Component.empty(), button -> cycleCategoryBackgroundMode())
@@ -725,11 +720,20 @@ public abstract class QuestEditor extends Screen {
         addRenderableWidget(catBackgroundOpacitySlider);
         catDependencyBox = createBox(trs("field.unlock_quest"), BOX_H);
         catAutoCompleteToggle = createToggle(false);
+        catLayoutSelector = new QuestEditorScreen.CategoryLayoutSelector(font, this::applyCategoryEditorFields);
+        catLayoutSelector.visible = false;
+        catLayoutSelector.active = false;
+        addRenderableWidget(catLayoutSelector);
+        categorySubCategorySection = new QuestEditorScreen.CategorySubCategorySection(
+                font, this::openCategorySubCategory, this::createCategorySubCategory);
+        categorySubCategorySection.visible = false;
+        categorySubCategorySection.active = false;
+        addRenderableWidget(categorySubCategorySection);
 
         subIdBox = createBox(trs("field.subcategory_id"), BOX_H);
         subCategoryBox = createBox(trs("field.parent_category_id"), BOX_H);
         subNameBox = createBox(trs("field.subcategory_name"), BOX_H);
-        subNameBox.setMaxLength(26);
+        subNameBox.setMaxLength(128);
         subIconBox = createIconPickerBox(trs("field.subcategory_icon"));
         subDefaultOpenToggle = createToggle(false);
 
@@ -864,7 +868,7 @@ public abstract class QuestEditor extends Screen {
         }
         closeTransientMenus();
         mode = next;
-        if (next == Mode.QUEST_LIST && isTreePack() && currentPack != null) {
+        if (next == Mode.QUEST_LIST && currentPack != null) {
             List<NamedEntry> categories = categoryEntries();
             boolean categoryExists = categories.stream().anyMatch(category -> category.id.equals(treeCategoryId));
             if (!categoryExists) treeCategoryId = categories.isEmpty() ? "" : categories.getFirst().id;
@@ -875,6 +879,10 @@ public abstract class QuestEditor extends Screen {
         disarmDeleteConfirm();
         refreshLeftList(false);
         clearEditor();
+        if (next == Mode.QUEST_LIST && currentPack != null && !treeCategoryId.isBlank()) {
+            CategoryData category = categoryData(treeCategoryId);
+            if (category != null) showCategoryEditor(category, category.path);
+        }
         updateLeftPaneLayout();
         updateBackButtonVisibility();
         if (treePanelExpanded && (next != Mode.QUEST_LIST || !isTreePack())) {
@@ -911,19 +919,22 @@ public abstract class QuestEditor extends Screen {
             leftList.setScrollY(previousScroll);
         }
         leftList.setSelectedId(selectedEntryId);
-        refreshPackIdCaches(mode == Mode.QUEST_LIST ? questListIndex() : null);
+        QuestListIndex index = mode == Mode.QUEST_LIST ? questListIndex() : null;
+        if (!localQuestIdCacheReady || currentPack == null || !Objects.equals(idCachePackRoot, currentPack.root)) {
+            refreshPackIdCaches(index);
+            idCachePackRoot = currentPack == null ? null : currentPack.root;
+        }
         if (refreshTree) refreshQuestTree();
         refreshCategoryWorkspaceTabs();
     }
 
     protected boolean isTreePack() {
-        if (currentPack == null) return false;
-        if (cachedLayoutPack != currentPack) {
-            cachedLayoutPack = currentPack;
-            cachedTreeLayout = "tree".equalsIgnoreCase(
-                    QuestEditorPackFiles.readPackMeta(currentPack.root, currentPack.name).layout);
-        }
-        return cachedTreeLayout;
+        return isTreeCategory(treeCategoryId);
+    }
+
+    protected boolean isTreeCategory(String categoryId) {
+        CategoryData category = categoryData(categoryId);
+        return category != null && "tree".equalsIgnoreCase(category.layout);
     }
 
     protected void refreshQuestTree() {
@@ -934,8 +945,8 @@ public abstract class QuestEditor extends Screen {
             return;
         }
         List<QuestEntryData> quests = new ArrayList<>();
-        for (QuestListItem item : questListIndex().items) {
-            if (item.data != null && (treeCategoryId.isBlank() || treeCategoryId.equals(item.data.category))) quests.add(item.data);
+        for (QuestListItem item : questListIndex().questsByCategory.getOrDefault(treeCategoryId, List.of())) {
+            if (item.data != null) quests.add(item.data);
         }
         questTree.setQuests(quests);
         CategoryData category = categoryData(treeCategoryId);
@@ -963,7 +974,7 @@ public abstract class QuestEditor extends Screen {
             categoryWorkspaceDownButton = null;
         }
         categoryWorkspaceTabs.clear();
-        if (mode != Mode.QUEST_LIST || !isTreePack() || currentPack == null) return;
+        if (mode != Mode.QUEST_LIST || currentPack == null) return;
         List<NamedEntry> categories = categoryEntries();
         boolean currentExists = categories.stream().anyMatch(category -> category.id.equals(treeCategoryId));
         if (!currentExists && !categories.isEmpty()) treeCategoryId = categories.getFirst().id;
@@ -1031,10 +1042,53 @@ public abstract class QuestEditor extends Screen {
 
     protected void selectTreeCategory(NamedEntry entry) {
         if (entry == null || currentPack == null) return;
+        if (hasUnsavedEditorChanges()) {
+            setError(trs("error.save_before_navigation"));
+            return;
+        }
         treeCategoryId = entry.id;
-        refreshQuestTree();
+        selectedEntryId = "";
+        refreshLeftList(false);
         CategoryData category = categoryData(entry.id);
         if (category != null) showCategoryEditor(category, category.path);
+    }
+
+    protected void openCurrentCategorySettings() {
+        if (currentPack == null || treeCategoryId.isBlank()) return;
+        if (hasUnsavedEditorChanges() && editorType != EditorType.CATEGORY) {
+            setError(trs("error.save_before_navigation"));
+            return;
+        }
+        CategoryData category = categoryData(treeCategoryId);
+        if (category == null) return;
+        selectedEntryId = "";
+        if (leftList != null) leftList.setSelectedId("");
+        showCategoryEditor(category, category.path);
+    }
+
+    protected List<SubCategoryData> categorySubCategories(String categoryId) {
+        if (currentPack == null || safe(categoryId).isBlank()) return List.of();
+        return questListIndex().subCategoriesByCategory.getOrDefault(safe(categoryId).trim(), List.of());
+    }
+
+    protected void openCategorySubCategory(SubCategoryData subCategory) {
+        if (subCategory == null) return;
+        if (hasUnsavedEditorChanges()) {
+            setError(trs("error.save_before_navigation"));
+            return;
+        }
+        selectedEntryId = subCategory.id;
+        showSubCategoryEditor(subCategory, subCategory.path);
+    }
+
+    protected void createCategorySubCategory() {
+        if (hasUnsavedEditorChanges()) {
+            setError(trs("error.save_before_navigation"));
+            return;
+        }
+        SubCategoryData subCategory = new SubCategoryData();
+        subCategory.category = treeCategoryId;
+        showSubCategoryEditor(subCategory, null);
     }
 
     // build the pack selection list
@@ -1060,8 +1114,7 @@ public abstract class QuestEditor extends Screen {
             ResourceLocation actionIcon = enabled ? BUILTIN_PACK_ENABLED_TEX : BUILTIN_PACK_DISABLED_TEX;
             String actionTooltip = legacy ? trs("legacy_pack") : (enabled ? trs("enabled") : trs("disabled"));
             ResourceLocation rowTexture = legacy ? PACK_ACTION_NEEDED_TEX : (changed ? PACK_CHANGED_TEX : ROW_TEX);
-            ResourceLocation typeIcon = "tree".equalsIgnoreCase(meta.layout) ? PACK_TREE_TYPE_TEX : PACK_LIST_TYPE_TEX;
-            out.add(EditorEntry.pack(pack.name, pack.name, packIconId, typeIcon, actionIcon, actionTooltip,
+            out.add(EditorEntry.pack(pack.name, pack.name, packIconId, null, actionIcon, actionTooltip,
                     legacy ? trs("tooltip.incompatible_pack") : trs("tooltip.right_click_options"), rowTexture));
         }
         return out;
@@ -1100,49 +1153,41 @@ public abstract class QuestEditor extends Screen {
 
     // build grouped quest rows
     protected List<EditorEntry> buildQuestEntries() {
-        // group quests by category without reopening files for each row
+        // build only the selected category without reopening quest files
         List<EditorEntry> out = new ArrayList<>();
         if (currentPack == null) return out;
         QuestListIndex index = questListIndex();
-        Map<String, Map<String, List<NamedEntry>>> grouped = new LinkedHashMap<>();
-        for (QuestListItem item : index.items) {
+        Map<String, List<NamedEntry>> grouped = new LinkedHashMap<>();
+        for (QuestListItem item : index.questsByCategory.getOrDefault(safe(treeCategoryId).trim(), List.of())) {
             if (!matchesQuestSearch(item.entry)) continue;
             QuestEntryData data = item.data;
-            String categoryId = data == null ? "" : safe(data.category);
             String subCategoryId = data == null ? "" : safe(data.subCategory);
-            grouped.computeIfAbsent(categoryId, k -> new LinkedHashMap<>())
-                    .computeIfAbsent(subCategoryId, k -> new ArrayList<>())
-                    .add(item.entry);
+            grouped.computeIfAbsent(subCategoryId, ignored -> new ArrayList<>()).add(item.entry);
         }
 
-        for (Map.Entry<String, Map<String, List<NamedEntry>>> categoryEntry : grouped.entrySet()) {
-            String categoryId = safe(categoryEntry.getKey());
-            String categoryName = index.categoryNames.getOrDefault(categoryId, categoryId.isBlank() ? trs("unassigned") : categoryId);
-            boolean categoryCollapsed = collapsedQuestCategories.contains(categoryId);
-            out.add(EditorEntry.categoryHeader(categoryId, categoryName, categoryCollapsed));
-            if (categoryCollapsed) continue;
-
-            for (Map.Entry<String, List<NamedEntry>> subEntry : categoryEntry.getValue().entrySet()) {
-                String subId = safe(subEntry.getKey());
-                String subKey = categoryId + "::" + subId;
-                String subName = index.subCategoryNames.getOrDefault(subKey, subId.isBlank() ? trs("no_subcategory") : subId);
-                boolean subCollapsed = collapsedQuestSubCategories.contains(subKey);
-                out.add(EditorEntry.subCategoryHeader(subKey, subName, subCollapsed));
-                if (subCollapsed) continue;
-                for (NamedEntry quest : subEntry.getValue()) {
-                    QuestEntryData questData = index.questDataByEntryId.get(safe(quest.id));
-                    String invalidReason = questEntryInvalidReason(questData, index.categoryIds, index.subCategoryIds, index.questIds, index.duplicateQuestIds);
-                    boolean invalid = invalidReason != null;
-                    String importWarning = questData == null ? "" : String.join(" | ", questData.importWarnings);
-                    if (!importWarning.isBlank()) {
-                        out.add(EditorEntry.questWarning(quest.id, quest.name, quest.id, quest.icon,
-                                FTB_IMPORT_WARNING_TEX, importWarning,
-                                invalid ? PACK_ACTION_NEEDED_TEX : ROW_TEX, invalid ? invalidReason : ""));
-                    } else {
-                        out.add(invalid
-                                ? EditorEntry.quest(quest.id, quest.name, quest.id, quest.icon, PACK_ACTION_NEEDED_TEX, invalidReason)
-                                : EditorEntry.quest(quest.id, quest.name, quest.id, quest.icon));
-                    }
+        for (Map.Entry<String, List<NamedEntry>> subEntry : grouped.entrySet()) {
+            String subId = safe(subEntry.getKey()).trim();
+            String subKey = treeCategoryId + "::" + subId;
+            String subName = index.subCategoryNames.getOrDefault(subKey,
+                    subId.isBlank() ? trs("no_subcategory") : subId);
+            boolean subCollapsed = collapsedQuestSubCategories.contains(subKey);
+            if (!subId.isBlank()) out.add(EditorEntry.subCategoryHeader(subKey, subName, subCollapsed));
+            if (subCollapsed) continue;
+            for (NamedEntry quest : subEntry.getValue()) {
+                QuestEntryData questData = index.questDataByEntryId.get(safe(quest.id));
+                String invalidReason = questEntryInvalidReason(questData, index.categoryIds,
+                        index.subCategoryIds, index.questIds, index.duplicateQuestIds);
+                boolean invalid = invalidReason != null;
+                String importWarning = questData == null ? "" : String.join(" | ", questData.importWarnings);
+                if (!importWarning.isBlank()) {
+                    out.add(EditorEntry.questWarning(quest.id, quest.name, quest.id, quest.icon,
+                            FTB_IMPORT_WARNING_TEX, importWarning,
+                            invalid ? PACK_ACTION_NEEDED_TEX : ROW_TEX, invalid ? invalidReason : ""));
+                } else {
+                    out.add(invalid
+                            ? EditorEntry.quest(quest.id, quest.name, quest.id, quest.icon,
+                            PACK_ACTION_NEEDED_TEX, invalidReason)
+                            : EditorEntry.quest(quest.id, quest.name, quest.id, quest.icon));
                 }
             }
         }
@@ -1164,6 +1209,8 @@ public abstract class QuestEditor extends Screen {
         // clear every cache derived from the current quest index
         questListIndexCache = null;
         questListIndexPackRoot = null;
+        localQuestIdCacheReady = false;
+        idCachePackRoot = null;
         invalidateCategoryDataCache();
     }
 
@@ -1171,6 +1218,7 @@ public abstract class QuestEditor extends Screen {
         categoryDataCachePackRoot = null;
         categoryEntryCache = List.of();
         categoryDataCache.clear();
+        if (questListIndexCache != null) questListIndexCache.categoryDataById.clear();
     }
 
     protected List<NamedEntry> categoryEntries() {
@@ -1190,6 +1238,13 @@ public abstract class QuestEditor extends Screen {
         categoryEntries();
         CategoryData cached = categoryDataCache.get(normalized);
         if (cached != null) return cached;
+        if (questListIndexCache != null && Objects.equals(questListIndexPackRoot, currentPack.root)) {
+            CategoryData indexed = questListIndexCache.categoryDataById.get(normalized);
+            if (indexed != null) {
+                categoryDataCache.put(normalized, indexed);
+                return indexed;
+            }
+        }
         Path path = null;
         for (NamedEntry entry : categoryEntryCache) {
             if (entry != null && normalized.equals(entry.id)) {
@@ -1531,10 +1586,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected boolean categoryHasTreeNodes(String categoryId) {
-        for (QuestListItem item : questListIndex().items) {
-            if (item != null && item.data != null && categoryId.equals(item.data.category)) return true;
-        }
-        return false;
+        return !questListIndex().questsByCategory.getOrDefault(safe(categoryId).trim(), List.of()).isEmpty();
     }
 
     protected void makeCurrentQuestOrigin() {
@@ -1573,7 +1625,9 @@ public abstract class QuestEditor extends Screen {
         obj.addProperty("tree_y", y);
         try {
             QuestPackStorage.writeJsonAtomically(gson, obj, quest.path);
-            stageCurrentPackChange(trs("status.quest_position_staged"));
+            quest.treeX = Integer.toString(x);
+            quest.treeY = Integer.toString(y);
+            stageCurrentPackChange(trs("status.quest_position_staged"), false);
         } catch (IOException e) {
             setError(trs("error.save_quest_position_failed"));
         }
@@ -1618,7 +1672,7 @@ public abstract class QuestEditor extends Screen {
         object.add("stickers", array);
         try {
             QuestPackStorage.writeJsonAtomically(gson, object, category.path);
-            stageCurrentPackChange(trs("status.tree_sticker_saved"));
+            stageCurrentPackChange(trs("status.tree_sticker_saved"), false);
             QuestEditorPackFiles.queueBackupPack(currentPack, "stickers");
             QuestEditorPackFiles.mirrorPackDirectorySafe(currentPack, isSingleplayerAuthoritySession());
             statusMessage = trs("status.tree_sticker_saved");
@@ -1804,7 +1858,7 @@ public abstract class QuestEditor extends Screen {
             QuestPackStorage.writeJsonAtomically(gson, obj, quest.path);
             quest.incompatibleDependencies = String.join("\n", incompatibleDependencies);
             quest.lockAfterDependency = "false";
-            stageCurrentPackChange(trs(incompatible ? "status.incompatibility_added" : "status.incompatibility_removed"));
+            stageCurrentPackChange(trs(incompatible ? "status.incompatibility_added" : "status.incompatibility_removed"), false);
             QuestEditorPackFiles.queueBackupPack(currentPack, incompatible ? "incompatible" : "compatible");
             refreshLeftList();
             statusMessage = trs(incompatible ? "status.incompatibility_created" : "status.dependency_restored");
@@ -1835,11 +1889,13 @@ public abstract class QuestEditor extends Screen {
                 }
             }
             Files.deleteIfExists(quest.path);
-            if (editingPath != null && editingPath.equals(quest.path)) clearEditor();
+            boolean deletedOpenQuest = editingPath != null && editingPath.equals(quest.path);
+            if (deletedOpenQuest) clearEditor();
             selectedEntryId = "";
             stageCurrentPackChange(trs("status.quest_node_deleted"));
             QuestEditorPackFiles.queueBackupPack(currentPack, "deleted");
             refreshLeftList();
+            if (deletedOpenQuest) openCurrentCategorySettings();
             statusMessage = trs("status.quest_node_deleted");
             statusColor = 0xA0FFA0;
         } catch (IOException e) {
@@ -1868,7 +1924,7 @@ public abstract class QuestEditor extends Screen {
         try {
             QuestPackStorage.writeJsonAtomically(gson, obj, quest.path);
             quest.dependencies = String.join("\n", dependencies);
-            stageCurrentPackChange(trs(add ? "status.dependency_connected" : "status.dependency_removed"));
+            stageCurrentPackChange(trs(add ? "status.dependency_connected" : "status.dependency_removed"), false);
             QuestEditorPackFiles.queueBackupPack(currentPack, add ? "connected" : "disconnected");
             refreshLeftList();
             statusMessage = trs(add ? "status.dependency_connected" : "status.dependency_removed");
@@ -1911,7 +1967,7 @@ public abstract class QuestEditor extends Screen {
                 setError(trs("error.open_pack_failed"));
                 return;
             }
-            setMode(isTreePack() ? Mode.QUEST_LIST : Mode.CATEGORY_LIST);
+            setMode(Mode.QUEST_LIST);
             return;
         }
 
@@ -1935,7 +1991,7 @@ public abstract class QuestEditor extends Screen {
         currentPack = new QuestPack(currentPack.name, refreshedNamespace, currentPack.root, currentPack.legacy, currentPack.enabled);
         invalidateQuestListIndex();
         }
-        setMode(isTreePack() ? Mode.QUEST_LIST : Mode.CATEGORY_LIST);
+        setMode(Mode.QUEST_LIST);
     }
 
     // switch between pack sections
@@ -2000,7 +2056,9 @@ public abstract class QuestEditor extends Screen {
             return;
         }
         if (ENTRY_NEW.equals(entry.id)) {
-            showQuestEditor(new QuestEntryData(), null);
+            QuestEntryData data = new QuestEntryData();
+            data.category = treeCategoryId;
+            showQuestEditor(data, null);
             return;
         }
         if (currentPack == null) return;
@@ -2019,11 +2077,9 @@ public abstract class QuestEditor extends Screen {
         editingPath = null;
         packNameBox.setValue("");
         packIconPathBox.setValue("");
-        packLayoutSelector.setTreeLayout(false);
 
         setActiveFields(List.of(
                 field(trs("field.display"), packNameBox),
-                field(trs("field.questpack_type"), packLayoutSelector),
                 field(trs("field.import_existing_questline"), ftbImportSection)
         ));
         saveButton.setMessage(tr("create"));
@@ -2095,24 +2151,36 @@ public abstract class QuestEditor extends Screen {
         resetCategoryBackgroundAutosaveState();
         catDependencyBox.setValue(safe(data.dependency));
         catAutoCompleteToggle.setState(parseBool(data.autoComplete, false));
+        catLayoutSelector.setTreeLayout("tree".equalsIgnoreCase(data.layout));
+        categorySubCategorySection.setEntries(categorySubCategories(data.id));
 
-        List<FormField> fields = new ArrayList<>();
-        if (Config.showIdField()) fields.add(field(trs("field.id"), catIdBox));
-        fields.add(field(trs("field.display"), catNameBox));
-        fields.add(field(trs("field.category_background_help"), catBackgroundBox));
-        fields.add(field(trs("field.background_tile_scale"), catBackgroundScaleSlider));
-        fields.add(field(trs("field.background_darkening"), catBackgroundOpacitySlider));
-        if (!isTreePack()) {
-            fields.add(field(trs("field.unlock_quest"), catDependencyBox));
-            fields.add(field(trs("field.auto_complete") + " (" + trs("tooltip.auto_complete_category") + ")", catAutoCompleteToggle));
-        }
-        setActiveFields(fields);
-        catBackgroundScaleSlider.active = catBackgroundMode != CategoryBackgroundMode.FULL_IMAGE;
+        applyCategoryEditorFields();
         saveButton.setMessage(tr("save"));
         saveButton.visible = true;
         saveButton.active = true;
         markCurrentEditorLoaded(sourcePath != null);
         updateBackButtonVisibility();
+    }
+
+    protected void applyCategoryEditorFields() {
+        if (editorType != EditorType.CATEGORY) return;
+        float previousScroll = editorScroll;
+        List<FormField> fields = new ArrayList<>();
+        if (Config.showIdField()) fields.add(field(trs("field.id"), catIdBox));
+        fields.add(field(trs("field.display"), catNameBox));
+        fields.add(field(trs("field.category_type"), catLayoutSelector));
+        fields.add(field(trs("field.category_background_help"), catBackgroundBox));
+        if (!encodedCategoryBackground().isBlank() && catBackgroundMode != CategoryBackgroundMode.FULL_IMAGE) {
+            fields.add(field(trs("field.background_tile_scale"), catBackgroundScaleSlider));
+        }
+        fields.add(field(trs("field.background_darkening"), catBackgroundOpacitySlider));
+        if (!catLayoutSelector.isTreeLayout()) {
+            fields.add(field(trs("field.unlock_quest"), catDependencyBox));
+            fields.add(field(trs("field.auto_complete") + " (" + trs("tooltip.auto_complete_category") + ")", catAutoCompleteToggle));
+            fields.add(field(trs("field.subcategories"), categorySubCategorySection));
+        }
+        setActiveFields(fields);
+        editorScroll = previousScroll;
     }
 
     protected void setCategoryBackgroundValue(String encoded) {
@@ -2150,6 +2218,7 @@ public abstract class QuestEditor extends Screen {
         if (catBackgroundScaleSlider != null) {
             catBackgroundScaleSlider.active = catBackgroundMode != CategoryBackgroundMode.FULL_IMAGE;
         }
+        applyCategoryEditorFields();
         queueCategoryBackgroundAutosave(true);
     }
 
@@ -2202,7 +2271,7 @@ public abstract class QuestEditor extends Screen {
         questDescriptionBox.setValue(safe(data.description));
         resetTranslationRows(true, data.descriptionTranslations);
         questMediaSelector.setValue(safe(data.media));
-        QuestCategorySelection previousSelection = sourcePath == null && currentPack != null
+        QuestCategorySelection previousSelection = sourcePath == null && safe(data.category).isBlank() && currentPack != null
                 ? LAST_QUEST_CATEGORY_SELECTIONS.get(currentPack.name) : null;
         setDropdownBoxValue(questCategoryBox, previousSelection == null ? safe(data.category) : previousSelection.category());
         setDropdownBoxValue(questSubCategoryBox, previousSelection == null ? safe(data.subCategory) : previousSelection.subCategory());
@@ -2314,23 +2383,13 @@ public abstract class QuestEditor extends Screen {
             Files.createDirectories(root.getParent());
             Files.createDirectories(root);
             String iconPath = QuestEditorPackFiles.cleanIconId(packIconPathBox.getValue());
-            String layout = packLayoutSelector.isTreeLayout() ? "tree" : "list";
-            QuestEditorPackFiles.writePackMeta(root, name, "Boundless Quest Pack: " + name, iconPath, layout, true);
+            QuestEditorPackFiles.writePackMeta(root, name, "Boundless Quest Pack: " + name, iconPath, true);
             QuestPack pack = new QuestPack(name, namespace, root, false, true);
             pack.ensureDirs();
             currentPack = pack;
-            JsonObject firstCategory = QuestEditorJsonBuilder.buildCategory(
-                    namespace, name, iconPath, 0, "", false, "", 0.5f, false, 0.45f, this::setError);
-            if (firstCategory == null) return;
-            if ("tree".equals(layout)) firstCategory.addProperty("layout", "tree");
-            QuestPackStorage.writeJsonAtomically(gson, firstCategory, pack.categoriesDir.resolve(namespace + ".json"));
             QuestEditorPackFiles.backupPack(currentPack, "created");
-            if ("tree".equals(layout)) {
-                treeCategoryId = namespace;
-                setMode(Mode.QUEST_LIST);
-            } else {
-                setMode(Mode.CATEGORY_LIST);
-            }
+            treeCategoryId = "";
+            setMode(Mode.QUEST_LIST);
             stagePackChange(pack, trs("status.pack_staged"));
         } catch (Exception e) {
             setError(trs("error.create_pack_failed"));
@@ -2375,7 +2434,6 @@ public abstract class QuestEditor extends Screen {
             setError(trs("error.pack_exists"));
             return;
         }
-        packLayoutSelector.setTreeLayout(true);
         ftbImportRunning = true;
         statusMessage = trs("status.importing_ftb");
         statusColor = 0xFFFFFFFF;
@@ -2406,7 +2464,6 @@ public abstract class QuestEditor extends Screen {
         try {
             currentPack = result.pack();
             currentPack.ensureDirs();
-            cachedLayoutPack = null;
             selectedEntryId = currentPack.name;
             String importStatus = "Imported " + result.quests() + " quests from " + result.chapters()
                     + " chapters (" + result.warnings().size() + " warning"
@@ -2473,7 +2530,7 @@ public abstract class QuestEditor extends Screen {
             String description = "Boundless Quest Pack: " + requestedName;
             String iconPath = QuestEditorPackFiles.cleanIconId(packIconPathBox.getValue());
             PackMeta meta = QuestEditorPackFiles.readPackMeta(newRoot, requestedName);
-            QuestEditorPackFiles.writePackMeta(newRoot, requestedName, description, iconPath, meta.layout, currentPack.enabled);
+            QuestEditorPackFiles.writePackMeta(newRoot, requestedName, description, iconPath, currentPack.enabled);
             currentPack = new QuestPack(requestedName, requestedNamespace, newRoot, currentPack.legacy, currentPack.enabled);
             invalidateQuestListIndex();
             currentPack.ensureDirs();
@@ -2503,7 +2560,7 @@ public abstract class QuestEditor extends Screen {
             return;
         }
         selectedEntryId = id;
-        if (isTreePack()) treeCategoryId = id;
+        treeCategoryId = id;
         JsonObject obj = buildCategoryJson(id);
         if (obj == null) return;
         Path target = currentPack.categoriesDir.resolve(id + ".json");
@@ -2547,7 +2604,7 @@ public abstract class QuestEditor extends Screen {
                 catBackgroundOpacitySlider.getOpacity(),
                 this::setError
         );
-        if (category != null && isTreePack()) category.addProperty("layout", "tree");
+        if (category != null && catLayoutSelector.isTreeLayout()) category.addProperty("layout", "tree");
         return category;
     }
 
@@ -2605,12 +2662,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected static String questIdFromName(String name) {
-        String normalized = Normalizer.normalize(name == null ? "" : name, Normalizer.Form.NFKD)
-                .replaceAll("\\p{M}+", "")
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-+|-+$)", "");
-        return normalized;
+        return QuestEditorNaming.idFromDisplayName(name);
     }
 
     protected void rememberQuestCategorySelection() {
@@ -2691,7 +2743,7 @@ public abstract class QuestEditor extends Screen {
             String duplicateName = nextAvailablePackName(currentPack.name);
             Path target = QuestEditorPackFiles.packsRoot().resolve(duplicateName);
             QuestEditorPackFiles.mirrorDirectory(currentPack.root, target);
-            QuestEditorPackFiles.writePackMeta(target, duplicateName, safe(meta.description), safe(meta.iconPath), meta.layout, meta.enabled);
+            QuestEditorPackFiles.writePackMeta(target, duplicateName, safe(meta.description), safe(meta.iconPath), meta.enabled);
             QuestPack duplicated = new QuestPack(duplicateName, currentPack.namespace, target, false, currentPack.enabled);
             duplicated.ensureDirs();
             currentPack = duplicated;
@@ -2820,9 +2872,10 @@ public abstract class QuestEditor extends Screen {
             disarmDeleteConfirm();
             selectedEntryId = "";
             clearEditor();
-            refreshLeftList();
             if (deleted) {
                 stageCurrentPackChange(trs("status.deletion_staged"));
+                refreshLeftList();
+                openCurrentCategorySettings();
             } else {
                 statusMessage = trs("status.nothing_to_delete");
                 statusColor = 0xA0A0A0;
@@ -2847,9 +2900,12 @@ public abstract class QuestEditor extends Screen {
             disarmDeleteConfirm();
             selectedEntryId = "";
             clearEditor();
-            refreshLeftList();
             if (deleted) {
                 stageCurrentPackChange(trs("status.deletion_staged"));
+                List<NamedEntry> categories = categoryEntries();
+                treeCategoryId = categories.isEmpty() ? "" : categories.getFirst().id;
+                refreshLeftList();
+                openCurrentCategorySettings();
             } else {
                 statusMessage = trs("status.nothing_to_delete");
                 statusColor = 0xA0A0A0;
@@ -2874,9 +2930,10 @@ public abstract class QuestEditor extends Screen {
             disarmDeleteConfirm();
             selectedEntryId = "";
             clearEditor();
-            refreshLeftList();
             if (deleted) {
                 stageCurrentPackChange(trs("status.deletion_staged"));
+                refreshLeftList();
+                openCurrentCategorySettings();
             } else {
                 statusMessage = trs("status.nothing_to_delete");
                 statusColor = 0xA0A0A0;
@@ -3060,6 +3117,10 @@ public abstract class QuestEditor extends Screen {
 
     protected void stageCurrentPackChange(String message) {
         stagePackChange(currentPack, message);
+    }
+
+    protected void stageCurrentPackChange(String message, boolean invalidateIndex) {
+        stagePackChange(currentPack, message, invalidateIndex);
     }
 
     protected void stagePackChange(QuestPack pack, String message) {
@@ -4176,6 +4237,11 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void applyDescriptionFormat(String formatCode) {
+        EditBox titleBox = focusedTitleFormatBox();
+        if (titleBox != null) {
+            if (!formatCode.startsWith("__")) wrapTitleSelection(titleBox, formatCode);
+            return;
+        }
         // wrap the current selection and return focus to the description
         if (questDescriptionBox == null) return;
         if ("__emoji__".equals(formatCode)) {
@@ -4197,6 +4263,22 @@ public abstract class QuestEditor extends Screen {
         }
         questDescriptionBox.wrapSelection(formatCode, "/x");
         questDescriptionBox.setFocused(true);
+        markCurrentEditorUnsaved();
+    }
+
+    protected EditBox focusedTitleFormatBox() {
+        if (editorType == EditorType.CATEGORY && catNameBox != null && catNameBox.isFocused()) return catNameBox;
+        if (editorType == EditorType.SUBCATEGORY && subNameBox != null && subNameBox.isFocused()) return subNameBox;
+        return null;
+    }
+
+    protected void wrapTitleSelection(EditBox box, String formatCode) {
+        String selected = box.getHighlighted();
+        int cursor = box.getCursorPosition();
+        box.insertText(formatCode + selected + "/x");
+        if (selected.isEmpty()) box.setCursorPosition(cursor + formatCode.length());
+        box.setHighlightPos(box.getCursorPosition());
+        setFocused(box);
         markCurrentEditorUnsaved();
     }
 
@@ -4253,7 +4335,6 @@ public abstract class QuestEditor extends Screen {
         fields.packNamespace = safe(packNamespaceBox == null ? "" : packNamespaceBox.getValue());
         fields.packIconPath = safe(packIconPathBox == null ? "" : packIconPathBox.getValue());
         fields.packDescription = safe(packDescriptionBox == null ? "" : packDescriptionBox.getValue());
-        fields.packTreeLayout = packLayoutSelector != null && packLayoutSelector.isTreeLayout();
         fields.categoryId = safe(catIdBox == null ? "" : catIdBox.getValue());
         fields.categoryName = safe(catNameBox == null ? "" : catNameBox.getValue());
         fields.categoryIcon = safe(catIconBox == null ? "" : catIconBox.getValue());
@@ -4263,6 +4344,7 @@ public abstract class QuestEditor extends Screen {
         fields.categoryBackgroundDarkeningOpacity = catBackgroundOpacitySlider == null ? 0.45f : catBackgroundOpacitySlider.getOpacity();
         fields.categoryDependency = safe(catDependencyBox == null ? "" : catDependencyBox.getValue());
         fields.categoryAutoComplete = catAutoCompleteToggle != null && catAutoCompleteToggle.isOn();
+        fields.categoryTreeLayout = catLayoutSelector != null && catLayoutSelector.isTreeLayout();
         fields.subCategoryId = safe(subIdBox == null ? "" : subIdBox.getValue());
         fields.subCategoryParent = safe(subCategoryBox == null ? "" : subCategoryBox.getValue());
         fields.subCategoryName = safe(subNameBox == null ? "" : subNameBox.getValue());
@@ -4398,7 +4480,6 @@ public abstract class QuestEditor extends Screen {
         state.packNamespace = safe(packNamespaceBox == null ? "" : packNamespaceBox.getValue());
         state.packIconPath = safe(packIconPathBox == null ? "" : packIconPathBox.getValue());
         state.packDescription = safe(packDescriptionBox == null ? "" : packDescriptionBox.getValue());
-        state.packTreeLayout = packLayoutSelector != null && packLayoutSelector.isTreeLayout();
 
         state.catId = safe(catIdBox == null ? "" : catIdBox.getValue());
         state.catName = safe(catNameBox == null ? "" : catNameBox.getValue());
@@ -4409,6 +4490,7 @@ public abstract class QuestEditor extends Screen {
         state.catBackgroundDarkeningOpacity = catBackgroundOpacitySlider == null ? 0.45f : catBackgroundOpacitySlider.getOpacity();
         state.catDependency = safe(catDependencyBox == null ? "" : catDependencyBox.getValue());
         state.catAutoComplete = catAutoCompleteToggle != null && catAutoCompleteToggle.isOn();
+        state.categoryTreeLayout = catLayoutSelector != null && catLayoutSelector.isTreeLayout();
 
         state.subId = safe(subIdBox == null ? "" : subIdBox.getValue());
         state.subCategory = safe(subCategoryBox == null ? "" : subCategoryBox.getValue());
@@ -4474,7 +4556,6 @@ public abstract class QuestEditor extends Screen {
                 showPackCreate();
                 packNameBox.setValue(state.packName);
                 packNamespaceBox.setValue(state.packNamespace);
-                packLayoutSelector.setTreeLayout(state.packTreeLayout);
             }
             case PACK_OPTIONS -> {
                 if (currentPack != null) {
@@ -4497,6 +4578,7 @@ public abstract class QuestEditor extends Screen {
                 data.backgroundDarkeningOpacity = Float.toString(state.catBackgroundDarkeningOpacity);
                 data.dependency = state.catDependency;
                 data.autoComplete = state.catAutoComplete ? "true" : "false";
+                data.layout = state.categoryTreeLayout ? "tree" : "list";
                 showCategoryEditor(data, state.editingPath);
             }
             case SUBCATEGORY -> {

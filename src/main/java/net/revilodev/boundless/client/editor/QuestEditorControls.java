@@ -20,6 +20,7 @@ import net.minecraft.world.item.ItemStack;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EditorEntry;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EditorEntryKind;
 import net.revilodev.boundless.client.QuestSubCategoryHeaderRenderer;
+import net.revilodev.boundless.client.QuestTextFormatting;
 import net.revilodev.boundless.client.editor.QuestEditorModels.MoveDirection;
 
 // shared editor button controls
@@ -415,7 +416,8 @@ public final class QuestEditorControls {
         private final Consumer<EditorEntry> onActionClick;
         private final Consumer<EditorEntry> onSecondaryClick;
         private final BiConsumer<EditorEntry, MoveDirection> onMoveClick;
-            private final Function<String, ItemStack> iconResolver;
+        private final Runnable onBackgroundClick;
+        private final Function<String, ItemStack> iconResolver;
         private float scrollY = 0f;
         private int[] entryOffsets = new int[0];
         private int contentHeight;
@@ -424,13 +426,14 @@ public final class QuestEditorControls {
         private int pendingTooltipX;
         private int pendingTooltipY;
 
-        public EditorListWidget(int x, int y, int w, int h, Consumer<EditorEntry> onClick, Consumer<EditorEntry> onActionClick, Consumer<EditorEntry> onSecondaryClick, BiConsumer<EditorEntry, MoveDirection> onMoveClick, Function<String, ItemStack> iconResolver) {
+        public EditorListWidget(int x, int y, int w, int h, Consumer<EditorEntry> onClick, Consumer<EditorEntry> onActionClick, Consumer<EditorEntry> onSecondaryClick, BiConsumer<EditorEntry, MoveDirection> onMoveClick, Runnable onBackgroundClick, Function<String, ItemStack> iconResolver) {
             super(x, y, w, h, Component.empty());
             this.onClick = onClick;
             this.onActionClick = onActionClick;
             this.onSecondaryClick = onSecondaryClick;
             this.onMoveClick = onMoveClick;
-                this.iconResolver = iconResolver;
+            this.onBackgroundClick = onBackgroundClick;
+            this.iconResolver = iconResolver;
         }
 
         public void setBounds(int x, int y, int w, int h) {
@@ -539,7 +542,9 @@ public final class QuestEditorControls {
                     } else {
                         gg.pose().pushPose();
                         gg.pose().translate(0, 0, 200);
-                        QuestSubCategoryHeaderRenderer.renderBackground(gg, getX(), top, width, rowH);
+                        if (entry.kind == EditorEntryKind.CATEGORY_HEADER) {
+                            QuestSubCategoryHeaderRenderer.renderBackground(gg, getX(), top, width, rowH);
+                        }
                         float iconScale = 0.45f;
                         int iconSize = (int) (16 * iconScale);
                         int iconX = getX() + 2;
@@ -564,12 +569,11 @@ public final class QuestEditorControls {
                         int markerX = getX() + width - 7;
                         int maxW = markerX - textX - 3;
                         int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
-                        if (Minecraft.getInstance().font.width(name) > maxWUnscaled) {
-                            name = Minecraft.getInstance().font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - Minecraft.getInstance().font.width("..."))) + "...";
-                        }
                         int headerColor = entry.kind == EditorEntryKind.CATEGORY_HEADER ? 0xFFFFFF : 0xD0D0D0;
+                        Component formattedName = QuestTextFormatting.componentByWidth(
+                                name, headerColor, Minecraft.getInstance().font, maxWUnscaled);
                         QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, Minecraft.getInstance().font,
-                                name, textScale, textX, textY, headerColor);
+                                formattedName, textScale, textX, textY, headerColor);
                         QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, Minecraft.getInstance().font,
                                 marker, textScale, markerX, textY, headerColor);
                         gg.pose().popPose();
@@ -700,6 +704,10 @@ public final class QuestEditorControls {
                     return true;
                 }
                 if (onClick != null) onClick.accept(entry);
+                return true;
+            }
+            if (button == 0 && onBackgroundClick != null) {
+                onBackgroundClick.run();
                 return true;
             }
             return false;

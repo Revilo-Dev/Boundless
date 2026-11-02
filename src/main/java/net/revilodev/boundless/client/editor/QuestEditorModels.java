@@ -182,11 +182,15 @@ public final class QuestEditorModels {
 
         public final Map<String, String> categoryNames = new HashMap<>();
         public final Map<String, String> subCategoryNames = new HashMap<>();
+        public final Map<String, CategoryData> categoryDataById = new HashMap<>();
+        public final Map<String, SubCategoryData> subCategoryDataById = new HashMap<>();
+        public final Map<String, List<SubCategoryData>> subCategoriesByCategory = new HashMap<>();
         public final Set<String> categoryIds = new HashSet<>();
         public final Set<String> subCategoryIds = new HashSet<>();
         public final Set<String> questIds = new HashSet<>();
         public final Set<String> duplicateQuestIds = new HashSet<>();
         public final Map<String, QuestEntryData> questDataByEntryId = new HashMap<>();
+        public final Map<String, List<QuestListItem>> questsByCategory = new HashMap<>();
         public final List<QuestListItem> items = new ArrayList<>();
     }
 
@@ -249,7 +253,6 @@ public final class QuestEditorModels {
     public static final class PackMeta {
         public String description = "";
         public String iconPath = "";
-        public String layout = "list";
         public boolean enabled = true;
     }
 
@@ -262,6 +265,7 @@ public final class QuestEditorModels {
         public String order = "";
         public String dependency = "";
         public String autoComplete = "";
+        public String layout = "list";
         public String background = "";
         public String backgroundTileScale = "";
         public String backgroundDarkening = "";
@@ -507,7 +511,7 @@ public final class QuestEditorModels {
 
         public String packDescription = "";
 
-        public boolean packTreeLayout = false;
+        public boolean categoryTreeLayout = false;
 
         public String catId = "";
 
