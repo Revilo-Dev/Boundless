@@ -4,6 +4,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.revilodev.boundless.network.BoundlessNetwork;
 
+// runs server-side quest checks at the configured interval
 public final class ServerQuestTicker {
     private ServerQuestTicker() {}
 

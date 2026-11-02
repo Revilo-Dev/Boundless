@@ -36,6 +36,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+// converts ftb quest data into a boundless questpack
 public final class FtbQuestImporter {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int POSITION_SCALE = 48;
@@ -54,6 +55,7 @@ public final class FtbQuestImporter {
     }
 
     public static ImportResult importPack(Path selectedPath, Path packsRoot, String requestedName) throws IOException {
+        // write into staging so a failed import never leaves a partial pack
         Path sourceRoot = resolveQuestRoot(selectedPath);
         Path normalizedPacksRoot = packsRoot.toAbsolutePath().normalize();
         String packName = QuestEditorNaming.cleanPackName(requestedName);
@@ -90,6 +92,7 @@ public final class FtbQuestImporter {
     }
 
     static Path resolveQuestRoot(Path selectedPath) throws IOException {
+        // accept the common ftb folder levels instead of one exact path
         if (selectedPath == null) throw new IOException("No FTB Quests folder selected");
         Path selected = selectedPath.toAbsolutePath().normalize();
         if (Files.isRegularFile(selected)) selected = selected.getParent();
@@ -151,6 +154,7 @@ public final class FtbQuestImporter {
     }
 
     private static final class ImportContext {
+        // shared lookup tables avoid rescanning thousands of imported quests
         private final Path sourceRoot;
         private final String packName;
         private final String namespace;
@@ -178,6 +182,7 @@ public final class FtbQuestImporter {
         }
 
         private void read() throws IOException {
+            // read shared language and reward data before individual chapters
             Path dataFile = firstExisting(sourceRoot.resolve("data.snbt"), sourceRoot.resolve("data.json5"),
                     sourceRoot.resolve("data.json"));
             if (dataFile != null) bookData = readCompound(dataFile);
@@ -353,6 +358,7 @@ public final class FtbQuestImporter {
         }
 
         private void resolveExclusiveDependencies() {
+            // ftb dependency groups become normal and incompatible links
             Map<String, List<QuestDraft>> dependentsByFtbId = new HashMap<>();
             for (QuestDraft quest : questsByFtbId.values()) {
                 for (String dependency : stringList(quest.tag, "dependencies")) {
@@ -373,6 +379,7 @@ public final class FtbQuestImporter {
         }
 
         private void write() throws IOException {
+            // write categories before quests so the pack is always ordered
             Files.createDirectories(stagingRoot);
             QuestEditorPackFiles.writePackMeta(stagingRoot, packName,
                     "Imported from FTB Quests: " + packName, firstPackIcon(), "tree", true);
@@ -505,6 +512,7 @@ public final class FtbQuestImporter {
         }
 
         private JsonObject convertTasks(QuestDraft quest) {
+            // preserve supported tasks and report anything that cannot convert
             List<CompoundTag> tasks = compoundList(quest.tag, "tasks");
             List<CompoundTag> required = tasks.stream().filter(task -> !task.getBoolean("optional_task")).toList();
             if (!required.isEmpty() && required.size() < tasks.size()) {
@@ -650,6 +658,7 @@ public final class FtbQuestImporter {
         }
 
         private JsonObject convertRewards(QuestDraft quest) {
+            // combine compatible reward types into boundless reward entries
             RewardBundle bundle = new RewardBundle();
             for (CompoundTag reward : compoundList(quest.tag, "rewards")) {
                 int added = convertReward(quest, reward, bundle, 0);
@@ -823,6 +832,7 @@ public final class FtbQuestImporter {
         }
 
         private JsonObject questTranslations(QuestDraft quest) {
+            // write translated titles and descriptions under the same quest keys
             JsonObject translations = new JsonObject();
             String fallbackDescription = questDescription(quest);
             String directTitleKey = stringValue(quest.tag, "title");
@@ -911,6 +921,7 @@ public final class FtbQuestImporter {
         }
 
         private void writeReport() throws IOException {
+            // keep import warnings beside the generated pack for later fixes
             StringBuilder report = new StringBuilder();
             report.append("Boundless FTB Quests Import Report\n")
                     .append("Source: ").append(sourceRoot).append('\n')
@@ -1129,6 +1140,7 @@ public final class FtbQuestImporter {
     }
 
     private static CompoundTag readCompound(Path file) throws IOException {
+        // support json, json5, and snbt through one compound interface
         String source = Files.readString(file, StandardCharsets.UTF_8);
         try {
             return FtbSnbtParser.parse(source);

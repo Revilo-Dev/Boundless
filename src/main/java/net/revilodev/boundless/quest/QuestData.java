@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
+// loads questpacks into separate client and server snapshots
 public final class QuestData {
     private QuestData() {}
 
@@ -606,7 +607,7 @@ public final class QuestData {
     }
 
     public static void forceReloadAll(MinecraftServer server) {
-        // Reload both resource-pack data and instance-local quest packs.
+        // reload both resource pack data and instance local questpacks
         CLIENT_DATA.loaded = false;
         SERVER_DATA.loaded = false;
         CLIENT_DATA.worldId = null;
@@ -615,7 +616,7 @@ public final class QuestData {
     }
 
     private static synchronized void load(ResourceManager rm, boolean forceReload, DataStore data) {
-        // The maps are rebuilt together so categories never point at stale quests.
+        // rebuild every map together so categories never point at stale quests
         data.clear();
 
         Map<ResourceLocation, List<Resource>> catStacks =
@@ -982,6 +983,7 @@ public final class QuestData {
     }
 
     public static synchronized void loadClient(boolean forceReload) {
+        // a server snapshot wins while connected to multiplayer
         if (FMLEnvironment.dist != Dist.CLIENT) return;
 
         Minecraft mc = Minecraft.getInstance();
@@ -1014,6 +1016,7 @@ public final class QuestData {
     }
 
     public static synchronized void loadServer(MinecraftServer server, boolean forceReload) {
+        // reuse loaded data until the world identity changes
         String worldId;
         try {
             worldId = server.getWorldData().getLevelName() + "@" + server.getWorldData().worldGenOptions().seed();

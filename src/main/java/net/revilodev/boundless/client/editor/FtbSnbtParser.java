@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
+// small lenient snbt reader for ftb quest files
 final class FtbSnbtParser {
     private static final Pattern NUMBER = Pattern.compile(
             "[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?[bBsSlLfFdD]?");
@@ -211,6 +212,7 @@ final class FtbSnbtParser {
     }
 
     private void skipWhitespaceAndComments() {
+        // ftb files may mix hash, line, and block comments
         while (position < source.length()) {
             char current = source.charAt(position);
             if (Character.isWhitespace(current)) {

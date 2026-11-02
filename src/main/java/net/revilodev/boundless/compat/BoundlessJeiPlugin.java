@@ -10,6 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.revilodev.boundless.client.QuestPanelClient;
 
 @JeiPlugin
+// exposes boundless recipe focus support to jei
 public final class BoundlessJeiPlugin implements IModPlugin {
     @Override
     public ResourceLocation getPluginUid() {

@@ -3,6 +3,7 @@ package net.revilodev.boundless.client;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
+// draws compact subcategory headers and outlined labels
 public final class QuestSubCategoryHeaderRenderer {
     private static final int BACKGROUND_COLOR = 0xFF373737;
     private static final int OUTLINE_COLOR = 0xFF000000;

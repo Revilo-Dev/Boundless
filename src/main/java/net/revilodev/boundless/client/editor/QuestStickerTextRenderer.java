@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 
+// renders formatted sticker text and inline emoji tokens
 public final class QuestStickerTextRenderer {
     private QuestStickerTextRenderer() {
     }
@@ -22,6 +23,7 @@ public final class QuestStickerTextRenderer {
     }
 
     private static Metrics walk(GuiGraphics graphics, Font font, String raw, int startX, int startY, boolean draw) {
+        // measure and draw through the same token walk to keep hitboxes exact
         String text = raw == null ? "" : raw;
         FormatState state = new FormatState();
         int x = startX;

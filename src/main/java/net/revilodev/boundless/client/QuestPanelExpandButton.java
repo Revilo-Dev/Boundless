@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.function.BooleanSupplier;
 
+// toggles the expanded quest tree panel
 public final class QuestPanelExpandButton extends AbstractButton {
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(
             "boundless", "textures/gui/sprites/editor/tree/button-enlarge.png");

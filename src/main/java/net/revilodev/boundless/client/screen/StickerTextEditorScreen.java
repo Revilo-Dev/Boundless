@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 @OnlyIn(Dist.CLIENT)
+// compact text and emoji editor for tree stickers
 public final class StickerTextEditorScreen extends Screen {
     private static final ResourceLocation EMOJI_GUI = ResourceLocation.fromNamespaceAndPath(
             "boundless", "textures/gui/sprites/editor/emoji-gui.png");
@@ -124,6 +125,7 @@ public final class StickerTextEditorScreen extends Screen {
     }
 
     private void renderNineSlice(GuiGraphics graphics, int x, int y, int width, int height) {
+        // keep corners fixed and stretch only the panel centre
         int slice = 5;
         int center = 10;
         graphics.blit(PANEL_GUI, x, y, 0, 0, slice, slice, 20, 20);
@@ -139,6 +141,7 @@ public final class StickerTextEditorScreen extends Screen {
     }
 
     private void renderEmojiPanel(GuiGraphics graphics) {
+        // render the picker above the editor panel and its backdrop
         int x = panelX + PANEL_WIDTH - EMOJI_WIDTH - 5;
         int y = panelY + 15;
         graphics.blit(EMOJI_GUI, x, y, 0, 0, EMOJI_WIDTH, EMOJI_HEIGHT, EMOJI_WIDTH, EMOJI_HEIGHT);

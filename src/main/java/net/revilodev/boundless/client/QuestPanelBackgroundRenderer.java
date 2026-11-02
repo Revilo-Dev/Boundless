@@ -3,6 +3,7 @@ package net.revilodev.boundless.client;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
 
+// repeats the panel centre while keeping both edge slices fixed
 public final class QuestPanelBackgroundRenderer {
     private static final int TEXTURE_WIDTH = 147;
     private static final int TEXTURE_HEIGHT = 166;

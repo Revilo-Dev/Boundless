@@ -4,6 +4,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 
+// isolates optional jei calls from the main quest code
 public final class JeiCompat {
     // Kept as Object so JEI remains an optional dependency at runtime.
     private static Object runtime;

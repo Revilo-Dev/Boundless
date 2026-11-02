@@ -27,7 +27,7 @@ public final class CategoryHeaderWidget extends AbstractWidget {
     // Width fixed end of three-slice texture
     private static final int SLICE = 3;
 
-    //supplier used instead of fixed title so title can change without redrawing
+    // Width fixed end of three-slice texture
     private final Supplier<String> titleSupplier;
 
     private int panelX;

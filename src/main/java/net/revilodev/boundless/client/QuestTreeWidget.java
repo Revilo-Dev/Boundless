@@ -26,6 +26,7 @@ import java.util.function.Consumer;
 
 // shared quest tree canvas
 @OnlyIn(Dist.CLIENT)
+// renders the playable quest tree and keeps its view state
 public final class QuestTreeWidget extends AbstractWidget {
     private static final ResourceLocation ZOOM_IN = texture("button-zoom-in");
     private static final ResourceLocation ZOOM_OUT = texture("button-zoom-out");
@@ -123,6 +124,7 @@ public final class QuestTreeWidget extends AbstractWidget {
 
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+        // render links before nodes so icons always stay readable
         if (!visible) return;
         QuestData.Quest hovered = tooltipSuppressed || isOverZoomControls(mouseX, mouseY) ? null : questAt(mouseX, mouseY);
         QuestCategoryBackgroundRenderer.render(gg, background, backgroundDarkening, backgroundDarkeningOpacity,
@@ -228,6 +230,7 @@ public final class QuestTreeWidget extends AbstractWidget {
     }
 
     private void zoomAt(double mouseX, double mouseY, float targetZoom) {
+        // keep the point under the cursor fixed while zooming
         float nextZoom = Mth.clamp(targetZoom, .15f, 2f);
         if (nextZoom == zoom) return;
         float centerX = getX() + width / 2f;
@@ -382,11 +385,13 @@ public final class QuestTreeWidget extends AbstractWidget {
     }
 
     private void invalidateQuestStates() {
+        // progress changes invalidate colours without rebuilding layout
         questStates.clear();
         questStateTick = Long.MIN_VALUE;
     }
 
     private void saveView() {
+        // remember pan and zoom separately for each category tree
         if (!viewInitialized || viewKey == null || viewKey.isBlank()) return;
         SAVED_VIEWS.put(viewKey, new ViewState(zoom, panX, panY));
     }
