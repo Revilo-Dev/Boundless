@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+// loads and caches quest images and animated gifs
 public final class QuestMediaRenderer {
     private static final Map<Path, MediaAsset> CACHE = new HashMap<>();
     private static final Map<Path, Long> RESTART_TIMES = new HashMap<>();
@@ -79,6 +80,7 @@ public final class QuestMediaRenderer {
     }
 
     private static MediaAsset asset(String reference) {
+        // cache decoded frames because media can render every tick
         Path path = resolve(reference);
         if (path == null) return null;
         return CACHE.computeIfAbsent(path, QuestMediaRenderer::load);
@@ -111,6 +113,7 @@ public final class QuestMediaRenderer {
     }
 
     private static MediaAsset loadGif(Path path) throws IOException {
+        // keep frame delays so gifs play at their authored speed
         List<MediaFrame> frames = new ArrayList<>();
         int width = 0;
         int height = 0;

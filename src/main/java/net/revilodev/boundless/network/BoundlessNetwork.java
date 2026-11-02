@@ -1273,8 +1273,8 @@ public final class BoundlessNetwork {
     // toggle quest packs on the current authority
     private static void handleSetQuestPackEnabled(SetQuestPackEnabled p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
 
             if (p.builtin()) {
                 Config.ENABLE_BUILTIN_QUEST_PACK.set(p.enabled());
@@ -1295,8 +1295,8 @@ public final class BoundlessNetwork {
     // apply synced config edits on the server authority
     private static void handleUpdateServerConfig(UpdateServerConfig p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
 
             Config.DISABLE_CATEGORIES.set(p.disableCategories());
             Config.CUSTOM_BACKGROUNDS.set(p.customBackgrounds());
@@ -1319,8 +1319,8 @@ public final class BoundlessNetwork {
     private static void handleUploadQuestPackChunk(UploadQuestPackChunk p, IPayloadContext ctx) {
         // chunks are assembled before unpacking into a pack folder
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
             String id = normalizeQuestPackFolderName(p.id());
             if (id.isBlank()) return;
             pruneUploadSessions();
@@ -1373,8 +1373,8 @@ public final class BoundlessNetwork {
     // delete quest packs on the server authority
     private static void handleDeleteQuestPack(DeleteQuestPack p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            ServerPlayer sp = (ServerPlayer) ctx.player();
-            if (sp == null || !sp.createCommandSourceStack().hasPermission(2)) return;
+            ServerPlayer sp = operator(ctx);
+            if (sp == null) return;
             String id = normalizeQuestPackFolderName(p.id());
             if (id.isBlank() || BUILTIN_QUEST_PACK_ID.equalsIgnoreCase(id)) return;
             MinecraftServer server = sp.server;
@@ -1395,6 +1395,11 @@ public final class BoundlessNetwork {
                 reloadAndSyncAll(server);
             }));
         });
+    }
+
+    private static ServerPlayer operator(IPayloadContext ctx) {
+        if (!(ctx.player() instanceof ServerPlayer player)) return null;
+        return player.createCommandSourceStack().hasPermission(2) ? player : null;
     }
 
     // mark observe targets on the server authority

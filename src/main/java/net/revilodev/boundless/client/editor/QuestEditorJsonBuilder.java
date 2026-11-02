@@ -16,7 +16,8 @@ public final class QuestEditorJsonBuilder {
     }
 
     // build category
-    public static JsonObject buildCategory(String id, String name, String icon, int order, String dependency,
+    public static JsonObject buildCategory(String id, String name, Map<String, String> nameTranslations,
+                                           String icon, int order, String dependency,
                                            boolean autoComplete, String background, float backgroundTileScale,
                                            boolean backgroundDarkening,
                                            float backgroundDarkeningOpacity, Consumer<String> onError) {
@@ -28,6 +29,7 @@ public final class QuestEditorJsonBuilder {
         JsonObject obj = new JsonObject();
         obj.addProperty("id", categoryId);
         addOptional(obj, "name", name);
+        addTranslations(obj, nameTranslations, Map.of());
         addOptional(obj, "icon", icon);
         obj.addProperty("order", order);
         addOptional(obj, "dependency", dependency);
@@ -40,7 +42,9 @@ public final class QuestEditorJsonBuilder {
     }
 
     // build sub category
-    public static JsonObject buildSubCategory(String id, String category, String name, String icon, int order, boolean defaultOpen, Consumer<String> onError) {
+    public static JsonObject buildSubCategory(String id, String category, String name,
+                                              Map<String, String> nameTranslations, String icon, int order,
+                                              boolean defaultOpen, Consumer<String> onError) {
         String subId = safe(id).trim();
         if (subId.isBlank()) {
             setError(onError, "subcategory_id_required");
@@ -50,6 +54,7 @@ public final class QuestEditorJsonBuilder {
         obj.addProperty("id", subId);
         addOptional(obj, "category", category);
         addOptional(obj, "name", name);
+        addTranslations(obj, nameTranslations, Map.of());
         addOptional(obj, "icon", icon);
         obj.addProperty("order", order);
         obj.addProperty("default_open", defaultOpen);

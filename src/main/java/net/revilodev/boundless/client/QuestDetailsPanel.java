@@ -511,6 +511,8 @@ public final class QuestDetailsPanel extends AbstractWidget {
     @Override
     protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
         // detail content shares one cached layout per panel width
+        edit.visible = false;
+        edit.active = false;
         if (!this.visible || quest == null) return;
 
         depRegions.clear();
@@ -2270,8 +2272,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
     }
 
     private boolean canQuickEdit() {
-        return Config.quickEdit() && mc.player != null
-                && (mc.hasSingleplayerServer() || mc.player.hasPermissions(2));
+        return Config.quickEdit() && BoundlessPermissions.canManageQuests();
     }
 
     private static final class EditButton extends AbstractButton {

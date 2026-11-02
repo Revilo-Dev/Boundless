@@ -19,6 +19,7 @@ import net.revilodev.boundless.client.editor.QuestEditorModels.QuestPack;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.JarURLConnection;
 import java.net.URL;
@@ -183,12 +184,12 @@ public final class QuestEditorPackFiles {
             if (!Files.exists(materializedMarker) || !containsCompleteBuiltinWorkspace(questsRoot)) {
                 copyBundledQuestFiles(questsRoot);
                 if (containsCompleteBuiltinWorkspace(questsRoot)) {
-                    Files.writeString(materializedMarker, "2\n", StandardCharsets.UTF_8);
+                    Files.writeString(materializedMarker, "3\n", StandardCharsets.UTF_8);
                 }
             }
             if (!Files.exists(packMetaPath(root))) {
                 writePackMeta(root, BUILTIN_PACK_NAME, "Editable built-in Boundless quest pack", "boundless:quest_book",
-                        "list", Config.enableBuiltinQuestPack());
+                        Config.enableBuiltinQuestPack());
             }
         } catch (Exception ignored) {
         }
@@ -218,13 +219,18 @@ public final class QuestEditorPackFiles {
     private static void copyBundledQuestFiles(Path questsRoot) throws Exception {
         Files.createDirectories(questsRoot);
         String resourceDirectory = "data/boundless/quests";
-        var modFileInfo = ModList.get().getModFileById("boundless");
-        if (modFileInfo != null) {
-            Path modQuestDirectory = modFileInfo.getFile().findResource("data", "boundless", "quests");
-            if (Files.isDirectory(modQuestDirectory)) copyQuestDirectory(modQuestDirectory, questsRoot);
+        try {
+            var modFileInfo = ModList.get().getModFileById("boundless");
+            if (modFileInfo != null) {
+                Path modQuestDirectory = modFileInfo.getFile().findResource("data", "boundless", "quests");
+                if (Files.isDirectory(modQuestDirectory)) copyQuestDirectory(modQuestDirectory, questsRoot);
+            }
+        } catch (Exception ignored) {
         }
         if (containsCompleteBuiltinWorkspace(questsRoot)) return;
         ClassLoader loader = QuestEditorPackFiles.class.getClassLoader();
+        copyBundledQuestManifest(loader, resourceDirectory, questsRoot);
+        if (containsCompleteBuiltinWorkspace(questsRoot)) return;
         Enumeration<URL> resources = loader.getResources(resourceDirectory);
         while (resources.hasMoreElements()) {
             URL resource = resources.nextElement();
@@ -249,6 +255,26 @@ public final class QuestEditorPackFiles {
                     copyQuestJarEntries(jar, resourceDirectory + "/", questsRoot);
                 }
             }
+        }
+    }
+
+    private static void copyBundledQuestManifest(ClassLoader loader, String resourceDirectory, Path questsRoot) {
+        String manifestPath = resourceDirectory + "/workspace-files.txt";
+        try (InputStream manifestStream = loader.getResourceAsStream(manifestPath)) {
+            if (manifestStream == null) return;
+            List<String> files = new BufferedReader(new java.io.InputStreamReader(manifestStream, StandardCharsets.UTF_8))
+                    .lines().map(String::trim).filter(line -> !line.isBlank()).toList();
+            for (String relative : files) {
+                Path target = questsRoot.resolve(relative).normalize();
+                if (!target.startsWith(questsRoot) || Files.exists(target)) continue;
+                try (InputStream input = loader.getResourceAsStream(resourceDirectory + "/" + relative)) {
+                    if (input == null) continue;
+                    Path parent = target.getParent();
+                    if (parent != null) Files.createDirectories(parent);
+                    Files.copy(input, target);
+                }
+            }
+        } catch (IOException ignored) {
         }
     }
 
@@ -369,9 +395,6 @@ public final class QuestEditorPackFiles {
             if (boundless != null && boundless.has("icon_path") && boundless.get("icon_path").isJsonPrimitive()) {
                 meta.iconPath = safe(boundless.get("icon_path").getAsString());
             }
-            if (boundless != null && boundless.has("layout") && boundless.get("layout").isJsonPrimitive()) {
-                meta.layout = normalizeLayout(boundless.get("layout").getAsString());
-            }
             if (boundless != null && boundless.has("enabled")) {
                 JsonElement enabled = boundless.get("enabled");
                 if (enabled != null && enabled.isJsonPrimitive()) {
@@ -394,7 +417,7 @@ public final class QuestEditorPackFiles {
         if (pack == null || pack.root == null) return false;
         try {
             PackMeta meta = readPackMeta(pack.root, pack.name);
-            writePackMeta(pack.root, pack.name, safe(meta.description), safe(meta.iconPath), meta.layout, enabled);
+            writePackMeta(pack.root, pack.name, safe(meta.description), safe(meta.iconPath), enabled);
             QuestPackStorage.snapshotQuestPack(pack.root, pack.name, "enabled");
             return true;
         } catch (Exception ignored) {
@@ -505,7 +528,7 @@ public final class QuestEditorPackFiles {
     }
 
     // write pack meta
-    public static void writePackMeta(Path root, String name, String description, String iconPath, String layout, boolean enabled) throws IOException {
+    public static void writePackMeta(Path root, String name, String description, String iconPath, boolean enabled) throws IOException {
         JsonObject pack = new JsonObject();
         JsonObject body = new JsonObject();
         body.addProperty("pack_format", 0);
@@ -515,16 +538,11 @@ public final class QuestEditorPackFiles {
         if (iconPath != null && !iconPath.isBlank()) {
             boundless.addProperty("icon_path", iconPath);
         }
-        boundless.addProperty("layout", normalizeLayout(layout));
         boundless.addProperty("enabled", enabled);
         pack.add("boundless", boundless);
 
         Path meta = packMetaPath(root);
         QuestPackStorage.writeJsonAtomically(GSON, pack, meta);
-    }
-
-    public static String normalizeLayout(String raw) {
-        return "tree".equalsIgnoreCase(safe(raw).trim()) ? "tree" : "list";
     }
 
     // create questpack backup

@@ -17,6 +17,7 @@ import net.revilodev.boundless.client.QuestMediaRenderer;
 import net.revilodev.boundless.client.QuestPanelBackgroundRenderer;
 import net.revilodev.boundless.client.editor.QuestEditorCustomIcons;
 import net.revilodev.boundless.client.editor.QuestEditorControls;
+import net.revilodev.boundless.client.BoundlessPermissions;
 import net.revilodev.boundless.client.editor.QuestEditorEmojis;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -72,8 +73,7 @@ public final class QuestAssetManagerScreen extends Screen {
 
     @Override
     protected void init() {
-        if (minecraft == null || minecraft.player == null
-                || (!minecraft.hasSingleplayerServer() && !minecraft.player.hasPermissions(2))) {
+        if (!BoundlessPermissions.canManageQuests()) {
             if (minecraft != null) minecraft.setScreen(parent);
             return;
         }
@@ -236,6 +236,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void upload() {
+        if (!BoundlessPermissions.canManageQuests()) return;
         try {
             Path root = type.root().toAbsolutePath().normalize();
             Files.createDirectories(root);
@@ -250,6 +251,7 @@ public final class QuestAssetManagerScreen extends Screen {
                         type.description, false);
             }
             if (selectedFile == null || selectedFile.isBlank()) return;
+            if (!BoundlessPermissions.canManageQuests()) return;
             Path source = Path.of(selectedFile).toAbsolutePath().normalize();
             if (!Files.isRegularFile(source) || !type.accepts(source.getFileName().toString())) {
                 throw new IOException("Unsupported file type");
@@ -280,6 +282,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void deleteSelected() {
+        if (!BoundlessPermissions.canManageQuests()) return;
         // only delete files that still resolve inside their configured root
         if (selected == null) return;
         String name = selected.relative;
@@ -300,12 +303,14 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private void renameSelected() {
+        if (!BoundlessPermissions.canManageQuests()) return;
         // normalise the new name before building any resource id
         if (selected == null) return;
         AssetEntry entry = selected;
         String requested = TinyFileDialogs.tinyfd_inputBox(
                 "Rename " + type.label.toLowerCase(Locale.ROOT), "New file name", entry.path.getFileName().toString());
         if (requested == null) return;
+        if (!BoundlessPermissions.canManageQuests()) return;
         requested = requested.trim();
         if (requested.isBlank() || requested.contains("/") || requested.contains("\\")) {
             status = "Enter a valid file name";
@@ -464,6 +469,12 @@ public final class QuestAssetManagerScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (!BoundlessPermissions.canManageQuests() && minecraft != null) minecraft.setScreen(parent);
     }
 
     @Override

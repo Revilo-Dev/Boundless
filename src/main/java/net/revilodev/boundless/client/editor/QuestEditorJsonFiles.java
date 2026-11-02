@@ -113,6 +113,7 @@ public final class QuestEditorJsonFiles {
         data.path = path;
         data.id = optString(obj, "id", id);
         data.name = optString(obj, "name", "");
+        data.nameTranslations = translationValues(obj, "name");
         data.icon = optString(obj, "icon", "");
         data.order = optStringFlexible(obj, "order", "");
         data.dependency = optString(obj, "dependency", "");
@@ -150,6 +151,7 @@ public final class QuestEditorJsonFiles {
         data.id = optString(obj, "id", id);
         data.category = optString(obj, "category", "");
         data.name = optString(obj, "name", "");
+        data.nameTranslations = translationValues(obj, "name");
         data.icon = optString(obj, "icon", "");
         data.order = optStringFlexible(obj, "order", "");
         data.defaultOpen = optStringFlexible(obj, "default_open", "");

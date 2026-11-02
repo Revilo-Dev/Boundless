@@ -261,6 +261,7 @@ public final class QuestEditorModels {
         public Path path;
         public String id = "";
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String order = "";
         public String dependency = "";
@@ -278,6 +279,7 @@ public final class QuestEditorModels {
         public String id = "";
         public String category = "";
         public String name = "";
+        public Map<String, String> nameTranslations = Map.of();
         public String icon = "";
         public String order = "";
         public String defaultOpen = "";
@@ -516,6 +518,7 @@ public final class QuestEditorModels {
         public String catId = "";
 
         public String catName = "";
+        public Map<String, String> catNameTranslations = Map.of();
 
         public String catIcon = "";
 
@@ -536,6 +539,7 @@ public final class QuestEditorModels {
         public String subCategory = "";
 
         public String subName = "";
+        public Map<String, String> subNameTranslations = Map.of();
 
         public String subIcon = "";
 

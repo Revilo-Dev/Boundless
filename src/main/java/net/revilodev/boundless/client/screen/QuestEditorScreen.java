@@ -2004,6 +2004,7 @@ public final class QuestEditorScreen extends QuestEditor {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         // foreground menus and pickers receive scroll before the editor body
+        if (!ensureEditorAccess()) return true;
         mouseX /= uiScale;
         mouseY /= uiScale;
         int categoryStripX = leftX - TAB_W + SIDE_TAB_X_OFFSET;
@@ -2720,6 +2721,7 @@ public final class QuestEditorScreen extends QuestEditor {
     protected void exitEditor() {
         // apply staged changes only when the editor fully closes
         if (closingEditor) return;
+        if (!ensureEditorAccess()) return;
         flushCategoryBackgroundAutosave();
         closingEditor = true;
         clearPendingInitState();
@@ -2759,6 +2761,7 @@ public final class QuestEditorScreen extends QuestEditor {
     @Override
     public void tick() {
         // run delayed saves and widget cursors on the client tick
+        if (!ensureEditorAccess()) return;
         super.tick();
         tickCategoryBackgroundAutosave();
     }
@@ -2766,6 +2769,7 @@ public final class QuestEditorScreen extends QuestEditor {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // route clicks from topmost modal layers down to normal controls
+        if (!ensureEditorAccess()) return true;
         mouseX /= uiScale;
         mouseY /= uiScale;
         if (isUnsavedChangesPopupOpen()) {
@@ -2983,6 +2987,7 @@ public final class QuestEditorScreen extends QuestEditor {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (!ensureEditorAccess()) return true;
         mouseX /= uiScale;
         mouseY /= uiScale;
         if (button == 0 && deleteHoldActive) {
@@ -2994,6 +2999,7 @@ public final class QuestEditorScreen extends QuestEditor {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (!ensureEditorAccess()) return true;
         return super.mouseDragged(mouseX / uiScale, mouseY / uiScale, button, dragX / uiScale, dragY / uiScale);
     }
 
@@ -3177,6 +3183,7 @@ public final class QuestEditorScreen extends QuestEditor {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // foreground menus handle keys before focused editor fields
+        if (!ensureEditorAccess()) return true;
         if (popupMenus.keyPressed(keyCode, this::dropdownOptions)) return true;
         if (questTree != null && questTree.visible && questTree.keyPressed(keyCode, scanCode, modifiers)) {
             if (treeTool != questTree.tool()) setTreeTool(questTree.tool());
@@ -3247,6 +3254,7 @@ public final class QuestEditorScreen extends QuestEditor {
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         // send text only to the active field or picker search
+        if (!ensureEditorAccess()) return true;
         if (popupMenus.charTyped(codePoint, this::dropdownOptions)) return true;
         if (itemPickerSearchBox != null && itemPickerSearchBox.active && itemPickerSearchBox.isFocused()
                 && itemPickerSearchBox.charTyped(codePoint, modifiers)) {

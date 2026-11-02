@@ -9,6 +9,7 @@ import net.minecraft.util.FormattedCharSequence;
 import java.util.ArrayList;
 import java.util.List;
 
+// keeps editor tooltips inside the scaled screen bounds
 public final class QuestEditorTooltips {
     private QuestEditorTooltips() {
     }

@@ -61,6 +61,11 @@ public final class QuestListWidget extends AbstractWidget {
     private float backgroundTileScale = 0.5f;
     private boolean backgroundDarkening;
     private float backgroundDarkeningOpacity = 0.45f;
+    private int backgroundX;
+    private int backgroundY;
+    private int backgroundWidth;
+    private int backgroundHeight;
+    private boolean customBackgroundBounds;
     private boolean bypassFilters = false;
     private List<RowEntry> cachedRows = List.of();
     private int cachedContentHeight = 0;
@@ -114,6 +119,14 @@ public final class QuestListWidget extends AbstractWidget {
         this.setY(y);
         this.width = w;
         this.height = h;
+    }
+
+    public void setBackgroundBounds(int x, int y, int width, int height) {
+        backgroundX = x;
+        backgroundY = y;
+        backgroundWidth = width;
+        backgroundHeight = height;
+        customBackgroundBounds = true;
     }
 
     // apply the live quest search text
@@ -441,7 +454,10 @@ public final class QuestListWidget extends AbstractWidget {
         RenderSystem.enableBlend();
         QuestCategoryBackgroundRenderer.render(gg, background, backgroundDarkening, backgroundDarkeningOpacity,
                 backgroundTileScale,
-                getX(), getY(), width, height);
+                customBackgroundBounds ? backgroundX : getX(),
+                customBackgroundBounds ? backgroundY : getY(),
+                customBackgroundBounds ? backgroundWidth : width,
+                customBackgroundBounds ? backgroundHeight : height);
         int contentTop = getY() + topInset;
         int viewportHeight = Math.max(0, height - topInset);
         gg.enableScissor(getX(), contentTop, getX() + width, contentTop + viewportHeight);
@@ -520,7 +536,7 @@ public final class QuestListWidget extends AbstractWidget {
         gg.pose().pushPose();
         gg.pose().translate(0, 0, 400);
         for (HeaderRender header : visibleHeaders) {
-            renderSubCategoryHeader(gg, header.subCategory, header.y, hideIcons, widgetTextColor, true);
+            renderSubCategoryHeader(gg, header.subCategory, header.y, hideIcons, widgetTextColor);
         }
         gg.pose().popPose();
 
@@ -555,13 +571,12 @@ public final class QuestListWidget extends AbstractWidget {
         }
         if (activeHeader == null) return;
 
-        renderSubCategoryHeader(gg, activeHeader, contentTop, hideIcons, widgetTextColor, true);
+        renderSubCategoryHeader(gg, activeHeader, contentTop, hideIcons, widgetTextColor);
     }
 
     private void renderSubCategoryHeader(GuiGraphics gg, QuestData.SubCategory activeHeader, int contentTop,
-                                         boolean hideIcons, int widgetTextColor, boolean background) {
+                                         boolean hideIcons, int widgetTextColor) {
         int h = subHeaderH;
-        if (background) QuestSubCategoryHeaderRenderer.renderBackground(gg, getX(), contentTop, width, h);
         float iconScale = 0.45f * configuredIconScale();
         int iconSize = (int) (16 * iconScale);
         int iconX = getX() + 2;
@@ -582,11 +597,9 @@ public final class QuestListWidget extends AbstractWidget {
         int symbolWidth = (int) (mc.font.width(symbol) * textScale);
         int symbolX = getX() + width - symbolWidth - 2;
         int maxWidth = (int) ((symbolX - textX - 2) / textScale);
-        if (mc.font.width(name) > maxWidth) {
-            name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWidth - mc.font.width("..."))) + "...";
-        }
+        Component formattedName = QuestTextFormatting.componentByWidth(name, widgetTextColor, mc.font, maxWidth);
         int textY = contentTop + (h - (int) (mc.font.lineHeight * textScale)) / 2 + 1;
-        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, mc.font, name, textScale, textX, textY, widgetTextColor);
+        QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, mc.font, formattedName, textScale, textX, textY, widgetTextColor);
         QuestSubCategoryHeaderRenderer.drawOutlinedText(gg, mc.font, symbol, textScale, symbolX, textY, widgetTextColor);
     }
 

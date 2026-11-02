@@ -589,7 +589,9 @@ public final class QuestEditorControls {
                         textX = getX() + 25 + entry.indent;
                     }
                     int labelColor = 0xFFFFFF;
-                    gg.drawString(Minecraft.getInstance().font, entry.label, textX, top + 7, labelColor, false);
+                    Component formattedLabel = QuestTextFormatting.componentByWidth(entry.label, labelColor,
+                            Minecraft.getInstance().font, Math.max(0, getX() + width - textX - 24));
+                    gg.drawString(Minecraft.getInstance().font, formattedLabel, textX, top + 7, labelColor, false);
 
                     if (entry.kind == EditorEntryKind.NORMAL && entry.subtitle != null && !entry.subtitle.isBlank()) {
                         drawScaledString(gg, entry.subtitle, 0.55f, textX, top + 18, 0xB0B0B0);

@@ -29,7 +29,8 @@ public final class QuestCategoryBackgroundRenderer {
 
     public static void render(GuiGraphics graphics, String background, boolean darkening, float darkeningOpacity,
                               float tileScale, int x, int y, int width, int height) {
-        if (!Config.customBackgrounds() || background == null || background.isBlank() || width <= 0 || height <= 0) return;
+        if (!Config.enableBackgroundThemes() || !Config.customBackgrounds()
+                || background == null || background.isBlank() || width <= 0 || height <= 0) return;
         int tileSize = Math.max(3, Math.round(BASE_TILE_SIZE * Math.max(0.1f, Math.min(2f, tileScale))));
         String value = background.trim();
         if (value.startsWith("custom_tile:")) {

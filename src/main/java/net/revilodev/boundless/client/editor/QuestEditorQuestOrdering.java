@@ -40,6 +40,8 @@ public final class QuestEditorQuestOrdering {
         for (NamedEntry category : QuestEditorJsonFiles.listCategoryEntries(pack)) {
             String id = safe(category.id);
             index.categoryNames.put(id, safe(category.name));
+            QuestEditorModels.CategoryData data = QuestEditorJsonFiles.loadCategory(category.path, id);
+            if (data != null) index.categoryDataById.put(id, data);
             if (!id.isBlank() && !"all".equalsIgnoreCase(id)) index.categoryIds.add(id);
         }
         for (NamedEntry subCategory : QuestEditorJsonFiles.listSubCategoryEntries(pack)) {
@@ -47,6 +49,10 @@ public final class QuestEditorQuestOrdering {
             String parent = data == null ? "" : safe(data.category);
             String id = safe(subCategory.id);
             index.subCategoryNames.put(parent + "::" + id, safe(subCategory.name));
+            if (data != null) {
+                index.subCategoryDataById.put(id, data);
+                index.subCategoriesByCategory.computeIfAbsent(parent, ignored -> new ArrayList<>()).add(data);
+            }
             if (!id.isBlank()) {
                 index.subCategoryIds.add(id);
                 if (!parent.isBlank()) index.subCategoryIds.add(parent + "::" + id);
@@ -60,6 +66,7 @@ public final class QuestEditorQuestOrdering {
             if (!id.isBlank() && !index.questIds.add(id)) index.duplicateQuestIds.add(id);
             index.questDataByEntryId.put(safe(item.entry.id), data);
             index.items.add(item);
+            index.questsByCategory.computeIfAbsent(safe(data.category).trim(), ignored -> new ArrayList<>()).add(item);
         }
 
         return index;
@@ -115,10 +122,14 @@ public final class QuestEditorQuestOrdering {
         index.questIds.clear();
         index.duplicateQuestIds.clear();
         index.questDataByEntryId.clear();
+        index.questsByCategory.clear();
         for (QuestListItem item : index.items) {
             String id = safe(item.data == null ? item.entry.id : item.data.id).trim();
             if (!id.isBlank() && !index.questIds.add(id)) index.duplicateQuestIds.add(id);
             index.questDataByEntryId.put(safe(item.entry.id), item.data);
+            if (item.data != null) {
+                index.questsByCategory.computeIfAbsent(safe(item.data.category).trim(), ignored -> new ArrayList<>()).add(item);
+            }
         }
     }
 

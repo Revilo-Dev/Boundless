@@ -25,6 +25,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 // editor registry suggestion caches
+// caches registry ids used by editor suggestions and pickers
 public final class QuestEditorSuggestionCaches {
     private final List<String> itemIds = new ArrayList<>();
     private final List<String> itemTagIds = new ArrayList<>();
@@ -95,6 +96,7 @@ public final class QuestEditorSuggestionCaches {
     }
 
     public void clearPackScopedCaches() {
+        // registry caches survive pack changes but pack files do not
         advancementIds.clear();
         lootTableIds.clear();
         biomeIds.clear();
@@ -109,6 +111,7 @@ public final class QuestEditorSuggestionCaches {
     }
 
     private void ensureItemIdCache() {
+        // build each registry list only when its field first needs it
         if (!itemIds.isEmpty()) return;
         for (ResourceLocation rl : BuiltInRegistries.ITEM.keySet()) {
             if (rl != null) itemIds.add(rl.toString());
@@ -231,6 +234,7 @@ public final class QuestEditorSuggestionCaches {
     }
 
     private void ensureLootTableIdCache(QuestPack currentPack) {
+        // merge pack, datapack, and vanilla loot table sources once
         if (!lootTableIds.isEmpty()) return;
         Set<String> found = new LinkedHashSet<>();
 
@@ -281,6 +285,7 @@ public final class QuestEditorSuggestionCaches {
     }
 
     private void collectLootTablesFromZip(Path zipPath, Set<String> out) {
+        // inspect archives without extracting them into the game directory
         if (zipPath == null || out == null || !Files.exists(zipPath)) return;
         try (ZipFile zip = new ZipFile(zipPath.toFile())) {
             zip.stream()

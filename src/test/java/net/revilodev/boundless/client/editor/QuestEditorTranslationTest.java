@@ -2,12 +2,15 @@ package net.revilodev.boundless.client.editor;
 
 import com.google.gson.JsonObject;
 import net.revilodev.boundless.client.editor.QuestEditorJsonBuilder.QuestBuildFields;
+import net.revilodev.boundless.client.editor.QuestEditorModels.CategoryData;
 import net.revilodev.boundless.client.editor.QuestEditorModels.QuestEntryData;
 import net.revilodev.boundless.client.editor.QuestEditorModels.QuestListIndex;
+import net.revilodev.boundless.client.editor.QuestEditorModels.SubCategoryData;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,6 +41,26 @@ final class QuestEditorTranslationTest {
     }
 
     @Test
+    void writesAndLoadsCategoryTitleTranslations() throws Exception {
+        JsonObject category = QuestEditorJsonBuilder.buildCategory("main", "/rMain", Map.of("pl_pl", "Glowna"),
+                "minecraft:book", 0, "", false, "", 0.5f, false, 0.45f,
+                message -> { throw new AssertionError(message); });
+        Path categoryPath = temporaryDirectory.resolve("main.json");
+        Files.writeString(categoryPath, category.toString());
+        CategoryData loadedCategory = QuestEditorJsonFiles.loadCategory(categoryPath, "main");
+
+        JsonObject subCategory = QuestEditorJsonBuilder.buildSubCategory("start", "main", "/gStart",
+                Map.of("pl_pl", "Poczatek"), "minecraft:book", 0, true,
+                message -> { throw new AssertionError(message); });
+        Path subCategoryPath = temporaryDirectory.resolve("start.json");
+        Files.writeString(subCategoryPath, subCategory.toString());
+        SubCategoryData loadedSubCategory = QuestEditorJsonFiles.loadSubCategory(subCategoryPath, "start");
+
+        assertEquals("Glowna", loadedCategory.nameTranslations.get("pl_pl"));
+        assertEquals("Poczatek", loadedSubCategory.nameTranslations.get("pl_pl"));
+    }
+
+    @Test
     void updatesLargeQuestIndexWithoutReparsingPack() {
         QuestListIndex index = new QuestListIndex();
         JsonObject original = quest("large", "Before");
@@ -51,6 +74,14 @@ final class QuestEditorTranslationTest {
         assertEquals(1, index.items.size());
         assertSame(retained, index.items.getFirst().data);
         assertEquals("After", retained.name);
+        assertEquals(1, index.questsByCategory.get("main").size());
+
+        JsonObject moved = quest("large", "Moved");
+        moved.addProperty("category", "second");
+        QuestEditorQuestOrdering.upsertQuestListIndex(index, moved, path, path);
+
+        assertEquals(0, index.questsByCategory.getOrDefault("main", java.util.List.of()).size());
+        assertEquals(1, index.questsByCategory.get("second").size());
     }
 
     private static JsonObject quest(String id, String name) {

@@ -17,6 +17,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.revilodev.boundless.Config;
 import net.revilodev.boundless.client.CategoryHeaderWidget;
+import net.revilodev.boundless.client.BoundlessPermissions;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.client.QuestListWidget;
 import net.revilodev.boundless.network.BoundlessNetwork;
@@ -232,6 +233,7 @@ public final class QuestSettingsScreen extends Screen {
     private boolean spawnWithQuestBook;
     private ConfigTab configTab = ConfigTab.ALL;
     private ConfigScope configScope = ConfigScope.ALL;
+    private boolean operatorAccess;
 
     public QuestSettingsScreen(Screen parent) {
         super(tr("title"));
@@ -239,8 +241,7 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private boolean canManageServerSettings() {
-        Minecraft mc = Minecraft.getInstance();
-        return mc.player != null && (mc.hasSingleplayerServer() || mc.player.hasPermissions(2));
+        return BoundlessPermissions.canManageQuests();
     }
 
     @Override
@@ -264,7 +265,19 @@ public final class QuestSettingsScreen extends Screen {
         initNavButtons();
         initHeader();
 
+        operatorAccess = canManageServerSettings();
         setPage(Page.MENU);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        boolean nextOperatorAccess = canManageServerSettings();
+        if (operatorAccess == nextOperatorAccess) return;
+        operatorAccess = nextOperatorAccess;
+        if (menuList != null) menuList.setQuests(buildMenuQuests());
+        if (!operatorAccess) configScope = ConfigScope.CLIENT;
+        setPage(page);
     }
 
     private void initMenu() {
@@ -844,7 +857,6 @@ public final class QuestSettingsScreen extends Screen {
         Config.QUEST_ICON_SCALE.set(Math.max(0.5D, Math.min(1.0D, questIconScale)));
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         Config.EXPAND_TREE_TOGGLE.set(expandTreeToggle);
-        Config.CUSTOM_BACKGROUNDS.set(customBackgrounds);
         Config.ENABLE_BACKGROUND_THEMES.set(enableBackgroundThemes);
         Config.STICKY_SUBCATEGORY_HEADERS.set(stickySubCategoryHeaders);
         Config.STICKY_DESCRIPTION_HEADERS.set(stickyDescriptionHeaders);
@@ -861,6 +873,7 @@ public final class QuestSettingsScreen extends Screen {
         Config.MULTI_LANGUAGE_QUESTS.set(multiLanguageQuests);
         if (canManageServerSettings()) {
             Config.DISABLE_CATEGORIES.set(disableCategories);
+            Config.CUSTOM_BACKGROUNDS.set(customBackgrounds);
             Config.DISABLE_QUEST_PINNING.set(disableQuestPinning);
             Config.AUTO_CLAIM_QUEST_REWARDS.set(autoClaimQuestRewards);
             Config.ENABLE_QUEST_REJECTING.set(enableQuestRejecting);
@@ -1270,8 +1283,8 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void layoutConfigScopeButtons() {
-        int startX = leftX + PANEL_W - 66;
-        int y = topY - 24;
+        int startX = leftX + 10;
+        int y = topY + PANEL_H - 35 + 29;
         for (int index = 0; index < configScopeButtons.size(); index++) {
             ConfigScopeButton button = configScopeButtons.get(index);
             button.setX(startX + index * 30);
@@ -1467,12 +1480,14 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean selected = configScope == scope;
+            boolean hovered = isMouseOver(mouseX, mouseY);
             ResourceLocation texture = selected ? SCOPE_TAB_SELECTED_TEX
-                    : isMouseOver(mouseX, mouseY) ? SCOPE_TAB_HOVER_TEX : SCOPE_TAB_TEX;
+                    : hovered ? SCOPE_TAB_HOVER_TEX : SCOPE_TAB_TEX;
             int textureHeight = selected ? 35 : 32;
-            gg.blit(texture, getX(), getY(), 0, 0, 32, textureHeight, 32, textureHeight);
-            gg.blit(icon, getX() + 11, getY() + 7, 0, 0, 9, 9, 9, 9);
-            if (isMouseOver(mouseX, mouseY)) {
+            int textureY = getY() + getHeight() - textureHeight;
+            gg.blit(texture, getX(), textureY, 0, 0, 32, textureHeight, 32, textureHeight);
+            gg.blit(icon, getX() + 11, getY() + 7 + (hovered ? 1 : 0), 0, 0, 9, 9, 9, 9);
+            if (hovered) {
                 queueTooltip(List.of(Component.literal(tooltip)), mouseX, mouseY);
             }
         }

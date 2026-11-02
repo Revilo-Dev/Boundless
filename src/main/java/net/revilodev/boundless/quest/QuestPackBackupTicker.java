@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+// schedules questpack backups without blocking normal ticks
 public final class QuestPackBackupTicker {
     private static final ExecutorService BACKUP_EXECUTOR = Executors.newSingleThreadExecutor(task -> {
         Thread thread = new Thread(task, "boundless-questpack-backups");
