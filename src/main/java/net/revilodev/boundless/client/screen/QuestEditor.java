@@ -34,6 +34,7 @@ import net.revilodev.boundless.client.QuestCategoryBackgroundRenderer;
 import net.revilodev.boundless.client.QuestPanelBackgroundRenderer;
 import net.revilodev.boundless.client.QuestPanelExpandButton;
 import net.revilodev.boundless.client.QuestPanelClient;
+import net.revilodev.boundless.client.BoundlessPermissions;
 import net.revilodev.boundless.client.editor.ScaledMultiLineEditBox;
 import net.revilodev.boundless.client.editor.QuestEditorControls.ActionButton;
 import net.revilodev.boundless.client.editor.QuestEditorControls.BackButton;
@@ -245,7 +246,7 @@ public abstract class QuestEditor extends Screen {
     protected static final int ENTRY_ROW_GAP = 2;
     protected static final float ENTRY_INPUT_TEXT_SCALE = 0.5f;
     protected static final int ENTRY_REMOVE_BTN_W = 10;
-    protected static final int ENTRY_TYPE_BTN_W = 21;
+    protected static final int ENTRY_TYPE_BTN_W = 30;
     protected static final int ENTRY_ITEM_PICK_BTN_W = 12;
     protected static final int ENTRY_COUNT_BTN_W = 12;
     protected static final float ENTRY_COUNT_TEXT_SCALE = 0.55f;
@@ -540,6 +541,11 @@ public abstract class QuestEditor extends Screen {
     @Override
     // build the editor layout
     protected void init() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!BoundlessPermissions.canManageQuests()) {
+            minecraft.setScreen(parent);
+            return;
+        }
         uiScale = 1.0f;
         width = Math.max(1, Math.round(width / uiScale));
         height = Math.max(1, Math.round(height / uiScale));
@@ -1383,6 +1389,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void handleLeftAction(EditorEntry entry) {
+        if (!ensureEditorAccess()) return;
         if (entry == null || mode != Mode.PACK_LIST) return;
         // action clicks toggle pack enabled state
         if (ENTRY_BUILTIN_PACK.equals(entry.id)) {
@@ -1435,6 +1442,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void handleEntryMoveAction(EditorEntry entry, MoveDirection direction) {
+        if (!ensureEditorAccess()) return;
         if (entry == null || direction == null || currentPack == null) return;
         if (entry.kind == EditorEntryKind.CATEGORY_HEADER || entry.kind == EditorEntryKind.SUBCATEGORY_HEADER) return;
 
@@ -1523,6 +1531,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void placeTreeQuest(Integer x, Integer y) {
         // create a quest at the requested tree position with a unique id
+        if (!ensureEditorAccess()) return;
         if (questTree == null || currentPack == null || treeCategoryId.isBlank()) return;
         int number = nextTreeQuestNumber();
         String name = String.format(Locale.ROOT, "New Quest %02d", number);
@@ -1591,6 +1600,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void makeCurrentQuestOrigin() {
         // make the current quest the only origin in its category
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || editorType != EditorType.QUEST || editingPath == null) return;
         String questId = safe(questIdBox.getValue()).trim();
         String categoryId = dropdownBoxValue(questCategoryBox);
@@ -1618,6 +1628,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void saveTreePosition(QuestEntryData quest, int x, int y) {
         // update only the moved quest instead of rebuilding the whole pack
+        if (!ensureEditorAccess()) return;
         if (quest == null || quest.path == null) return;
         JsonObject obj = QuestEditorJsonFiles.readJson(quest.path);
         if (obj == null) return;
@@ -1654,6 +1665,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void saveTreeStickers(List<QuestData.Sticker> stickers) {
         // write sticker changes back to the active category file
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || treeCategoryId.isBlank()) return;
         CategoryData category = categoryData(treeCategoryId);
         if (category == null || category.path == null) return;
@@ -1712,6 +1724,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void autosaveTreeBackground(String background, boolean alreadyUnsaved) {
+        if (!ensureEditorAccess()) return;
         if (editorType != EditorType.QUEST || editingPath == null || currentPack == null) {
             markCurrentEditorUnsaved();
             return;
@@ -1785,6 +1798,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void autosaveCategoryBackground(String state) {
         // skip writes when the encoded background state has not changed
+        if (!ensureEditorAccess()) return;
         JsonObject obj = QuestEditorJsonFiles.readJson(editingPath);
         if (obj == null) return;
         String background = encodedCategoryBackground();
@@ -1841,6 +1855,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void toggleTreeIncompatibility(QuestEntryData quest, String dependencyId) {
         // swap a dependency between normal and incompatible states
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || quest == null || quest.path == null || dependencyId == null || dependencyId.isBlank()) return;
         JsonObject obj = QuestEditorJsonFiles.readJson(quest.path);
         if (obj == null) return;
@@ -1870,6 +1885,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void deleteTreeNode(QuestEntryData quest) {
         // remove the quest and clean references from remaining nodes
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || quest == null || quest.path == null) return;
         try {
             for (QuestListItem item : QuestEditorQuestOrdering.listQuestListItems(currentPack)) {
@@ -1905,6 +1921,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void changeTreeDependency(QuestEntryData quest, String dependencyId, boolean add) {
         // update one dependency edge and preserve the rest of the quest json
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || quest == null || quest.path == null || quest.id.equals(dependencyId)) return;
         JsonObject obj = QuestEditorJsonFiles.readJson(quest.path);
         if (obj == null) return;
@@ -2141,7 +2158,9 @@ public abstract class QuestEditor extends Screen {
         editingPath = sourcePath;
 
         catIdBox.setValue(safe(data.id));
+        catIdBox.setEditable(sourcePath == null);
         catNameBox.setValue(safe(data.name));
+        resetTranslationRows(false, data.nameTranslations);
         catIconBox.setValue(safe(data.icon));
         setCategoryBackgroundValue(data.background);
         catBackgroundScaleSlider.setScale(parseFloat(data.backgroundTileScale, 0.5f));
@@ -2240,8 +2259,10 @@ public abstract class QuestEditor extends Screen {
         editingPath = sourcePath;
 
         subIdBox.setValue(safe(data.id));
+        subIdBox.setEditable(sourcePath == null);
         setDropdownBoxValue(subCategoryBox, safe(data.category));
         subNameBox.setValue(safe(data.name));
+        resetTranslationRows(false, data.nameTranslations);
         subIconBox.setValue(safe(data.icon));
         subDefaultOpenToggle.setState(parseBool(data.defaultOpen, true));
 
@@ -2265,6 +2286,7 @@ public abstract class QuestEditor extends Screen {
 
         // copy quest data into the active form
         questIdBox.setValue(safe(data.id));
+        questIdBox.setEditable(sourcePath == null);
         questNameBox.setValue(safe(data.name));
         resetTranslationRows(false, data.nameTranslations);
         questIconBox.setValue(safe(data.icon).isBlank() ? "boundless:quest_book" : safe(data.icon));
@@ -2328,6 +2350,7 @@ public abstract class QuestEditor extends Screen {
     }
     protected void saveCurrent() {
         // route save through the active editor type
+        if (!ensureEditorAccess()) return;
         if (currentPack == null && editorType != EditorType.PACK_CREATE) return;
         statusMessage = "";
         statusColor = 0xA0A0A0;
@@ -2355,6 +2378,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void savePackCreate() {
         // create the pack structure before opening its workspace
+        if (!ensureEditorAccess()) return;
         String name = QuestEditorNaming.cleanPackName(packNameBox.getValue());
         if (!Objects.equals(name, safe(packNameBox.getValue()))) {
             packNameBox.setValue(name);
@@ -2421,6 +2445,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void beginFtbQuestImport(Path sourceFolder) {
         // import large packs away from the render thread
+        if (!ensureEditorAccess()) return;
         String requestedName = QuestEditorNaming.cleanPackName(packNameBox.getValue());
         if (requestedName.isBlank()) {
             requestedName = QuestEditorNaming.nextCopyPack("ftb-quests-import");
@@ -2450,6 +2475,16 @@ public abstract class QuestEditor extends Screen {
     protected void finishFtbQuestImport(FtbQuestImporter.ImportResult result, Throwable error) {
         // publish the imported pack and surface any conversion warnings
         ftbImportRunning = false;
+        if (!BoundlessPermissions.canManageQuests()) {
+            if (result != null && result.pack() != null) {
+                try {
+                    QuestEditorPackFiles.deleteDirectory(result.pack().root);
+                } catch (IOException ignored) {
+                }
+            }
+            ensureEditorAccess();
+            return;
+        }
         if (error != null || result == null) {
             Throwable cause = error;
             while (cause != null && cause.getCause() != null
@@ -2482,6 +2517,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void savePackOptions() {
         // rename or update the pack without dropping its existing data
+        if (!ensureEditorAccess()) return;
         if (currentPack == null) return;
 
         String requestedName = QuestEditorNaming.cleanPackName(packNameBox.getValue());
@@ -2553,7 +2589,8 @@ public abstract class QuestEditor extends Screen {
 
     protected void saveCategory() {
         // preserve category order while writing edited values
-        String id = Config.showIdField() ? safe(catIdBox.getValue()).trim() : questIdFromName(catNameBox.getValue());
+        if (!ensureEditorAccess()) return;
+        String id = savedEntryId(editingPath, catIdBox, catNameBox);
         catIdBox.setValue(id);
         if (id.isBlank()) {
             setError(trs("error.category_id_required"));
@@ -2576,7 +2613,8 @@ public abstract class QuestEditor extends Screen {
 
     protected void saveSubCategory() {
         // keep subcategory placement stable across edits
-        String id = Config.showIdField() ? safe(subIdBox.getValue()).trim() : questIdFromName(subNameBox.getValue());
+        if (!ensureEditorAccess()) return;
+        String id = savedEntryId(editingPath, subIdBox, subNameBox);
         subIdBox.setValue(id);
         if (id.isBlank()) {
             setError(trs("error.subcategory_id_required"));
@@ -2594,6 +2632,7 @@ public abstract class QuestEditor extends Screen {
         JsonObject category = QuestEditorJsonBuilder.buildCategory(
                 id,
                 catNameBox.getValue(),
+                translationValues(false),
                 catIconBox.getValue(),
                 resolveCategoryOrder(id),
                 catDependencyBox.getValue(),
@@ -2614,6 +2653,7 @@ public abstract class QuestEditor extends Screen {
                 id,
                 dropdownBoxValue(subCategoryBox),
                 subNameBox.getValue(),
+                translationValues(false),
                 subIconBox.getValue(),
                 resolveSubCategoryOrder(id),
                 subDefaultOpenToggle.isOn(),
@@ -2649,7 +2689,8 @@ public abstract class QuestEditor extends Screen {
 
     protected void saveQuest() {
         // validate and write the quest using its current category selection
-        String id = Config.showIdField() ? safe(questIdBox.getValue()).trim() : questIdFromName(questNameBox.getValue());
+        if (!ensureEditorAccess()) return;
+        String id = savedEntryId(editingPath, questIdBox, questNameBox);
         questIdBox.setValue(id);
         selectedEntryId = id;
         JsonObject obj = buildQuestJson(id);
@@ -2663,6 +2704,13 @@ public abstract class QuestEditor extends Screen {
 
     protected static String questIdFromName(String name) {
         return QuestEditorNaming.idFromDisplayName(name);
+    }
+
+    protected static String savedEntryId(Path existingPath, EditBox idBox, EditBox nameBox) {
+        String currentValue = idBox == null ? "" : idBox.getValue();
+        String currentId = currentValue == null ? "" : currentValue.trim();
+        if (existingPath != null || Config.showIdField()) return currentId;
+        return questIdFromName(nameBox == null ? "" : nameBox.getValue());
     }
 
     protected void rememberQuestCategorySelection() {
@@ -2705,6 +2753,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void saveJson(JsonObject obj, Path target, Path original) {
         // write through a temporary file before replacing the original
+        if (!ensureEditorAccess()) return;
         try {
             QuestEntryData previousQuest = editorType == EditorType.QUEST && questListIndexCache != null
                     ? questListIndexCache.questDataByEntryId.get(selectedEntryId) : null;
@@ -2733,6 +2782,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void duplicateCurrentPackAsIs() {
         // copy the pack folder without rebuilding its quest data
+        if (!ensureEditorAccess()) return;
         if (currentPack == null) return;
         try {
             if (!QuestEditorPackFiles.ensurePack(currentPack)) {
@@ -2761,6 +2811,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void openPackDirectory() {
+        if (!ensureEditorAccess()) return;
         try {
             if (currentPack == null || !QuestEditorPackFiles.ensurePack(currentPack)) {
                 setError(trs("error.open_pack_failed"));
@@ -2775,6 +2826,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void openImportQuestPackDirectory() {
+        if (!ensureEditorAccess()) return;
         Path importRoot = Config.boundlessConfigRoot();
         try {
             Files.createDirectories(importRoot);
@@ -2844,6 +2896,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void duplicateCurrent() {
+        if (!ensureEditorAccess()) return;
         if (mode == Mode.PACK_MENU && currentPack != null) {
             duplicateCurrentPackAsIs();
             return;
@@ -2859,6 +2912,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void deleteQuest() {
         // remove the quest and any references that point to it
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || editorType != EditorType.QUEST) return;
         String id = safe(questIdBox.getValue()).trim();
         if (id.isBlank()) {
@@ -2887,6 +2941,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void deleteCategory() {
         // delete the category and its owned editor data
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || editorType != EditorType.CATEGORY) return;
         String id = safe(catIdBox.getValue()).trim();
         if (id.isBlank()) {
@@ -2917,6 +2972,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void deleteSubCategory() {
         // delete the subcategory without changing other category entries
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || editorType != EditorType.SUBCATEGORY) return;
         String id = safe(subIdBox.getValue()).trim();
         if (id.isBlank()) {
@@ -3064,6 +3120,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void deletePack(QuestPack pack) {
         // protect the built in pack and remove backups with deleted packs
+        if (!ensureEditorAccess()) return;
         if (pack == null) return;
         if (QuestEditorPackFiles.isBuiltinPack(pack)) {
             setError(trs("error.builtin_pack_delete"));
@@ -3098,6 +3155,7 @@ public abstract class QuestEditor extends Screen {
 
     protected boolean applyChanges() {
         // mirror staged files then reload quest data on the client thread
+        if (!ensureEditorAccess()) return false;
         ScreenState state = captureState();
         if (state != null) {
             pendingState = state;
@@ -3158,6 +3216,11 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void applyStagedChangesOnClose() {
+        if (!BoundlessPermissions.canManageQuests()) {
+            stagedPacks.clear();
+            stagedDeletedPackNames.clear();
+            return;
+        }
         if (!hasStagedChanges()) return;
         Minecraft mc = Minecraft.getInstance();
         QuestPack selectedPack = currentPack;
@@ -3195,7 +3258,16 @@ public abstract class QuestEditor extends Screen {
 
     protected boolean isSingleplayerAuthoritySession() {
         Minecraft mc = Minecraft.getInstance();
-        return mc != null && mc.getSingleplayerServer() != null;
+        return BoundlessPermissions.canManageQuests() && mc != null && mc.getSingleplayerServer() != null;
+    }
+
+    protected boolean ensureEditorAccess() {
+        if (BoundlessPermissions.canManageQuests()) return true;
+        stagedPacks.clear();
+        stagedDeletedPackNames.clear();
+        closingEditor = true;
+        Minecraft.getInstance().setScreen(parent);
+        return false;
     }
 
     // this refreshes an open editor after a server sync
@@ -3205,6 +3277,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void exportCurrentPack() {
         // export the current pack after flushing its staged changes
+        if (!ensureEditorAccess()) return;
         if (currentPack == null || currentPack.root == null || !Files.isDirectory(currentPack.root)) {
             setError(trs("error.no_pack_to_export"));
             return;
@@ -3248,6 +3321,7 @@ public abstract class QuestEditor extends Screen {
 
     protected void restoreBackup(QuestPackStorage.Snapshot snapshot) {
         // restore the snapshot then rebuild editor caches from disk
+        if (!ensureEditorAccess()) return;
         QuestPack pack = currentPack;
         if (pack == null || snapshot == null) return;
         boolean previousEnabled = pack.enabled;
@@ -4134,6 +4208,18 @@ public abstract class QuestEditor extends Screen {
         gg.enableScissor(clipLeft, clipTop, clipRight, clipBottom);
         for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
             if (box == null || !box.visible) continue;
+            int backgroundX = box.getX() - DEP_ENTRY_ICON_SPACE;
+            int backgroundY = box.getY();
+            int backgroundWidth = DEP_ENTRY_ICON_SPACE - 2;
+            int backgroundHeight = Math.min(ENTRY_ROW_H, box.getHeight());
+            gg.fill(backgroundX, backgroundY, backgroundX + backgroundWidth,
+                    backgroundY + backgroundHeight, 0xFF000000);
+            gg.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + 1, 0xFF8A8A8A);
+            gg.fill(backgroundX, backgroundY + backgroundHeight - 1, backgroundX + backgroundWidth,
+                    backgroundY + backgroundHeight, 0xFF8A8A8A);
+            gg.fill(backgroundX, backgroundY, backgroundX + 1, backgroundY + backgroundHeight, 0xFF8A8A8A);
+            gg.fill(backgroundX + backgroundWidth - 1, backgroundY, backgroundX + backgroundWidth,
+                    backgroundY + backgroundHeight, 0xFF8A8A8A);
             String dependencyId = safe(box.getValue()).trim();
             if (dependencyId.isBlank()) continue;
             ItemStack icon = dependencyIconStack(dependencyId);
@@ -4337,6 +4423,7 @@ public abstract class QuestEditor extends Screen {
         fields.packDescription = safe(packDescriptionBox == null ? "" : packDescriptionBox.getValue());
         fields.categoryId = safe(catIdBox == null ? "" : catIdBox.getValue());
         fields.categoryName = safe(catNameBox == null ? "" : catNameBox.getValue());
+        fields.categoryNameTranslations = editorType == EditorType.CATEGORY ? translationValues(false).toString() : "";
         fields.categoryIcon = safe(catIconBox == null ? "" : catIconBox.getValue());
         fields.categoryBackground = encodedCategoryBackground();
         fields.categoryBackgroundTileScale = catBackgroundScaleSlider == null ? 0.5f : catBackgroundScaleSlider.getScale();
@@ -4348,6 +4435,7 @@ public abstract class QuestEditor extends Screen {
         fields.subCategoryId = safe(subIdBox == null ? "" : subIdBox.getValue());
         fields.subCategoryParent = safe(subCategoryBox == null ? "" : subCategoryBox.getValue());
         fields.subCategoryName = safe(subNameBox == null ? "" : subNameBox.getValue());
+        fields.subCategoryNameTranslations = editorType == EditorType.SUBCATEGORY ? translationValues(false).toString() : "";
         fields.subCategoryIcon = safe(subIconBox == null ? "" : subIconBox.getValue());
         fields.subCategoryDefaultOpen = subDefaultOpenToggle != null && subDefaultOpenToggle.isOn();
         fields.questId = safe(questIdBox == null ? "" : questIdBox.getValue());
@@ -4483,6 +4571,7 @@ public abstract class QuestEditor extends Screen {
 
         state.catId = safe(catIdBox == null ? "" : catIdBox.getValue());
         state.catName = safe(catNameBox == null ? "" : catNameBox.getValue());
+        state.catNameTranslations = editorType == EditorType.CATEGORY ? translationValues(false) : Map.of();
         state.catIcon = safe(catIconBox == null ? "" : catIconBox.getValue());
         state.catBackground = encodedCategoryBackground();
         state.catBackgroundTileScale = catBackgroundScaleSlider == null ? 0.5f : catBackgroundScaleSlider.getScale();
@@ -4495,6 +4584,7 @@ public abstract class QuestEditor extends Screen {
         state.subId = safe(subIdBox == null ? "" : subIdBox.getValue());
         state.subCategory = safe(subCategoryBox == null ? "" : subCategoryBox.getValue());
         state.subName = safe(subNameBox == null ? "" : subNameBox.getValue());
+        state.subNameTranslations = editorType == EditorType.SUBCATEGORY ? translationValues(false) : Map.of();
         state.subIcon = safe(subIconBox == null ? "" : subIconBox.getValue());
         state.subDefaultOpen = subDefaultOpenToggle != null && subDefaultOpenToggle.isOn();
 
@@ -4571,6 +4661,7 @@ public abstract class QuestEditor extends Screen {
                 CategoryData data = new CategoryData();
                 data.id = state.catId;
                 data.name = state.catName;
+                data.nameTranslations = state.catNameTranslations;
                 data.icon = state.catIcon;
                 data.background = state.catBackground;
                 data.backgroundTileScale = Float.toString(state.catBackgroundTileScale);
@@ -4586,6 +4677,7 @@ public abstract class QuestEditor extends Screen {
                 data.id = state.subId;
                 data.category = state.subCategory;
                 data.name = state.subName;
+                data.nameTranslations = state.subNameTranslations;
                 data.icon = state.subIcon;
                 data.defaultOpen = state.subDefaultOpen ? "true" : "false";
                 showSubCategoryEditor(data, state.editingPath);

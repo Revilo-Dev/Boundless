@@ -420,7 +420,9 @@ public final class QuestData {
     public static final class Category {
         public final String id;
         public final String icon;
-        public final String name;
+        public final String fallbackName;
+        public final Map<String, String> nameTranslations;
+        public String name;
         public final int order;
         public final boolean excludeFromAll;
         public final String dependency;
@@ -468,9 +470,19 @@ public final class QuestData {
                         boolean excludeFromAll, String dependency, boolean autoComplete,
                         boolean treeLayout, String background, float backgroundTileScale,
                         boolean backgroundDarkening, float backgroundDarkeningOpacity, List<Sticker> stickers) {
+            this(id, icon, name, Map.of(), order, excludeFromAll, dependency, autoComplete, treeLayout,
+                    background, backgroundTileScale, backgroundDarkening, backgroundDarkeningOpacity, stickers);
+        }
+
+        public Category(String id, String icon, String name, Map<String, String> nameTranslations, int order,
+                        boolean excludeFromAll, String dependency, boolean autoComplete,
+                        boolean treeLayout, String background, float backgroundTileScale,
+                        boolean backgroundDarkening, float backgroundDarkeningOpacity, List<Sticker> stickers) {
             this.id = id;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
-            this.name = name == null || name.isBlank() ? id : name;
+            this.fallbackName = name == null || name.isBlank() ? id : name;
+            this.nameTranslations = Quest.immutableTranslations(nameTranslations);
+            this.name = Quest.localizedQuestText(this.fallbackName, this.nameTranslations, id);
             this.order = order;
             this.excludeFromAll = excludeFromAll;
             this.dependency = dependency == null ? "" : dependency;
@@ -481,6 +493,10 @@ public final class QuestData {
             this.backgroundDarkening = backgroundDarkening;
             this.backgroundDarkeningOpacity = Math.max(0f, Math.min(1f, backgroundDarkeningOpacity));
             this.stickers = stickers == null ? List.of() : List.copyOf(stickers);
+        }
+
+        private void relocalize() {
+            name = Quest.localizedQuestText(fallbackName, nameTranslations, id);
         }
 
         public Optional<Item> iconItem() {
@@ -510,7 +526,9 @@ public final class QuestData {
         public final String id;
         public final String category;
         public final String icon;
-        public final String name;
+        public final String fallbackName;
+        public final Map<String, String> nameTranslations;
+        public String name;
         public final int order;
         public final boolean defaultOpen;
         public final List<String> quests;
@@ -518,14 +536,26 @@ public final class QuestData {
 
         public SubCategory(String id, String category, String icon, String name,
                            int order, boolean defaultOpen, List<String> quests, String sourcePath) {
+            this(id, category, icon, name, Map.of(), order, defaultOpen, quests, sourcePath);
+        }
+
+        public SubCategory(String id, String category, String icon, String name,
+                           Map<String, String> nameTranslations, int order, boolean defaultOpen,
+                           List<String> quests, String sourcePath) {
             this.id = id == null ? "" : id;
             this.category = category == null ? "" : category;
             this.icon = icon == null || icon.isBlank() ? "minecraft:book" : icon;
-            this.name = name == null || name.isBlank() ? this.id : name;
+            this.fallbackName = name == null || name.isBlank() ? this.id : name;
+            this.nameTranslations = Quest.immutableTranslations(nameTranslations);
+            this.name = Quest.localizedQuestText(this.fallbackName, this.nameTranslations, this.id);
             this.order = order;
             this.defaultOpen = defaultOpen;
             this.quests = quests == null ? List.of() : List.copyOf(quests);
             this.sourcePath = sourcePath == null ? "" : sourcePath;
+        }
+
+        private void relocalize() {
+            name = Quest.localizedQuestText(fallbackName, nameTranslations, id);
         }
 
         public Optional<Item> iconItem() {
@@ -637,6 +667,7 @@ public final class QuestData {
 
                 String icon = optString(obj, "icon");
                 String cname = optString(obj, "name");
+                Map<String, String> nameTranslations = parseNameTranslations(obj);
                 int order = parseIntFlexible(obj, "order", 0);
                 boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
                 String dependency = optString(obj, "dependency");
@@ -649,7 +680,7 @@ public final class QuestData {
                 float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
                 List<Sticker> stickers = parseStickers(obj);
 
-                data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
+                data.categories.put(id, new Category(id, icon, cname, nameTranslations, order, excludeFromAll, dependency,
                         autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
                         backgroundDarkeningOpacity, stickers));
             } catch (Exception e) {
@@ -830,6 +861,7 @@ public final class QuestData {
                     if (id == null || id.isBlank()) continue;
                     String icon = optString(obj, "icon");
                     String cname = optString(obj, "name");
+                    Map<String, String> nameTranslations = parseNameTranslations(obj);
                     int order = parseIntFlexible(obj, "order", 0);
                     boolean excludeFromAll = parseBoolFlexible(obj, "exclude_from_all", false);
                     String dependency = optString(obj, "dependency");
@@ -841,7 +873,7 @@ public final class QuestData {
                     boolean backgroundDarkening = parseBoolFlexible(obj, "background_darkening", false);
                     float backgroundDarkeningOpacity = parseFloatFlexible(obj, "background_darkening_opacity", 0.45f);
                     List<Sticker> stickers = parseStickers(obj);
-                    data.categories.put(id, new Category(id, icon, cname, order, excludeFromAll, dependency,
+                    data.categories.put(id, new Category(id, icon, cname, nameTranslations, order, excludeFromAll, dependency,
                             autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
                             backgroundDarkeningOpacity, stickers));
                 } catch (Exception e) {
@@ -941,6 +973,7 @@ public final class QuestData {
 
         String icon = optString(obj, "icon");
         String name = optString(obj, "name");
+        Map<String, String> nameTranslations = parseNameTranslations(obj);
         int order = parseIntFlexible(obj, "order", 0);
         boolean defaultOpen = parseBoolFlexible(obj, "default_open", true);
         if (obj.has("defaultOpen")) {
@@ -948,7 +981,8 @@ public final class QuestData {
         }
 
         String key = subKey(cat, id);
-        data.subCategories.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, List.of(), sourcePath));
+        data.subCategories.put(key, new SubCategory(id, cat, icon, name, nameTranslations,
+                order, defaultOpen, List.of(), sourcePath));
         return true;
     }
 
@@ -1164,6 +1198,7 @@ public final class QuestData {
             String id = meta != null ? meta.id : qs.get(0).subCategory;
             String icon = meta != null ? meta.icon : qs.get(0).icon;
             String name = meta != null ? meta.name : prettifyId(id);
+            Map<String, String> nameTranslations = meta != null ? meta.nameTranslations : Map.of();
             int order = meta != null ? meta.order : 0;
             boolean defaultOpen = meta != null ? meta.defaultOpen : true;
             String sourcePath = meta != null ? meta.sourcePath : "";
@@ -1171,7 +1206,7 @@ public final class QuestData {
             List<String> questIds = new ArrayList<>(qs.size());
             for (Quest q : qs) questIds.add(q.id);
 
-            out.add(new SubCategory(id, cat, icon, name, order, defaultOpen, questIds, sourcePath));
+            out.add(new SubCategory(id, cat, icon, name, nameTranslations, order, defaultOpen, questIds, sourcePath));
         }
 
         out.sort((a, b) -> {
@@ -1239,6 +1274,8 @@ public final class QuestData {
     }
 
     public static synchronized void relocalizeClientTranslations() {
+        for (Category category : CLIENT_DATA.categories.values()) category.relocalize();
+        for (SubCategory subCategory : CLIENT_DATA.subCategories.values()) subCategory.relocalize();
         for (Quest quest : CLIENT_DATA.quests.values()) quest.relocalize();
     }
 
@@ -1251,6 +1288,19 @@ public final class QuestData {
             if (value != null && !value.isBlank()) values.put(normalizeLocale(entry.getKey()), value);
         }
         return values;
+    }
+
+    private static Map<String, String> parseNameTranslations(JsonObject obj) {
+        Map<String, String> values = parseTranslations(obj, "name");
+        if (!values.isEmpty() || obj == null || !obj.has("nameTranslations")
+                || !obj.get("nameTranslations").isJsonObject()) return values;
+        Map<String, String> serialized = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : obj.getAsJsonObject("nameTranslations").entrySet()) {
+            if (!entry.getValue().isJsonPrimitive()) continue;
+            String value = entry.getValue().getAsString();
+            if (value != null && !value.isBlank()) serialized.put(normalizeLocale(entry.getKey()), value);
+        }
+        return serialized;
     }
 
     private static String normalizeLocale(String locale) {
@@ -1819,6 +1869,7 @@ public final class QuestData {
 
                     String icon = optString(o, "icon");
                     String name = optString(o, "name");
+                    Map<String, String> nameTranslations = parseNameTranslations(o);
                     int order = parseIntFlexible(o, "order", 0);
                     boolean excludeFromAll = parseBoolFlexible(o, "excludeFromAll", false);
                     String dependency = optString(o, "dependency");
@@ -1831,7 +1882,7 @@ public final class QuestData {
                     float backgroundDarkeningOpacity = parseFloatFlexible(o, "backgroundDarkeningOpacity", 0.45f);
                     List<Sticker> stickers = parseStickers(o);
 
-                    parsed.categories.put(id, new Category(id, icon, name, order, excludeFromAll, dependency,
+                    parsed.categories.put(id, new Category(id, icon, name, nameTranslations, order, excludeFromAll, dependency,
                             autoComplete, treeLayout, background, backgroundTileScale, backgroundDarkening,
                             backgroundDarkeningOpacity, stickers));
                 }
@@ -1849,6 +1900,7 @@ public final class QuestData {
                     if (cat == null) cat = "";
                     String icon = optString(o, "icon");
                     String name = optString(o, "name");
+                    Map<String, String> nameTranslations = parseNameTranslations(o);
                     int order = parseIntFlexible(o, "order", 0);
                     boolean defaultOpen = parseBoolFlexible(o, "defaultOpen", true);
                     String sourcePath = optString(o, "sourcePath");
@@ -1864,7 +1916,8 @@ public final class QuestData {
                     }
 
                     String key = subKey(cat, id);
-                    parsed.subCategories.put(key, new SubCategory(id, cat, icon, name, order, defaultOpen, questIds, sourcePath));
+                    parsed.subCategories.put(key, new SubCategory(id, cat, icon, name, nameTranslations,
+                            order, defaultOpen, questIds, sourcePath));
                 }
             }
 

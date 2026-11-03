@@ -7,14 +7,18 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.util.Mth;
 import net.revilodev.boundless.client.editor.QuestEditorModels.DropdownMenuTarget;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EntryRowKind;
+import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 // editor popup menus
+// shared dropdown and row type menus for the quest editor
 public final class QuestEditorPopupMenus {
     private static final int ENTRY_ROW_H = 14;
     private static final int ID_SUGGESTION_BG_COLOR = 0xFF000000;
@@ -22,7 +26,7 @@ public final class QuestEditorPopupMenus {
     private static final int ID_SUGGESTION_BORDER_COLOR = 0xFFFFFFFF;
     private static final int ID_SUGGESTION_SCROLL_TRACK_COLOR = 0xFF2C2C2C;
     private static final int ID_SUGGESTION_SCROLL_THUMB_COLOR = 0xFFFFFFFF;
-    private static final int ID_SUGGESTION_SCROLL_W = 3;
+    private static final int ID_SUGGESTION_SCROLL_W = 1;
 
     private EntryRowKind openTypeMenuKind;
     private int openTypeMenuRow = -1;
@@ -37,6 +41,7 @@ public final class QuestEditorPopupMenus {
     private int openDropdownW;
     private int openDropdownH;
     private int openDropdownScroll = 0;
+    private String openDropdownQuery = "";
     private final Map<DropdownMenuTarget, Integer> savedDropdownScrolls = new EnumMap<>(DropdownMenuTarget.class);
 
     public void close() {
@@ -45,6 +50,7 @@ public final class QuestEditorPopupMenus {
         openTypeMenuScroll = 0;
         openDropdownTarget = null;
         openDropdownScroll = 0;
+        openDropdownQuery = "";
     }
 
     public boolean hasOpenMenu() {
@@ -57,18 +63,19 @@ public final class QuestEditorPopupMenus {
         openTypeMenuX = x;
         openTypeMenuY = y + ENTRY_ROW_H;
         openTypeMenuW = Math.max(56, width + 10);
-        openTypeMenuH = Math.min(5, QuestEditorEntryTypes.entryTypeOptions(kind).size()) * ENTRY_ROW_H;
+        openTypeMenuH = menuHeight(QuestEditorEntryTypes.entryTypeOptions(kind).size());
         openTypeMenuScroll = 0;
     }
 
     public boolean clickTypeMenu(double mouseX, double mouseY, BiConsumer<EntryRowKind, TypeSelection> selectionHandler) {
         if (openTypeMenuKind == null || openTypeMenuRow < 0) return false;
-        if (mouseX < openTypeMenuX || mouseX > openTypeMenuX + openTypeMenuW || mouseY < openTypeMenuY || mouseY > openTypeMenuY + openTypeMenuH) {
+        if (mouseX < openTypeMenuX + 1 || mouseX >= openTypeMenuX + openTypeMenuW - 1
+                || mouseY < openTypeMenuY + 1 || mouseY >= openTypeMenuY + openTypeMenuH - 1) {
             openTypeMenuKind = null;
             openTypeMenuRow = -1;
             return false;
         }
-        int index = openTypeMenuScroll + (int) ((mouseY - openTypeMenuY) / ENTRY_ROW_H);
+        int index = openTypeMenuScroll + rowAt(mouseY, openTypeMenuY);
         List<String> options = QuestEditorEntryTypes.entryTypeOptions(openTypeMenuKind);
         if (index >= 0 && index < options.size() && selectionHandler != null) {
             selectionHandler.accept(openTypeMenuKind, new TypeSelection(openTypeMenuRow, options.get(index)));
@@ -99,9 +106,10 @@ public final class QuestEditorPopupMenus {
         List<String> options = optionsProvider.apply(target);
         if (options.isEmpty()) return;
         openDropdownTarget = target;
+        openDropdownQuery = "";
         openDropdownX = box.getX();
         openDropdownW = Math.max(70, box.getWidth());
-        openDropdownH = Math.min(5, options.size()) * ENTRY_ROW_H;
+        openDropdownH = menuHeight(options.size());
         int preferredBelowY = box.getY() + box.getHeight();
         int preferredAboveY = box.getY() - openDropdownH;
         openDropdownY = preferredBelowY;
@@ -114,36 +122,57 @@ public final class QuestEditorPopupMenus {
 
     public boolean clickDropdownMenu(double mouseX, double mouseY, Function<DropdownMenuTarget, List<String>> optionsProvider, BiConsumer<DropdownMenuTarget, String> selectionHandler) {
         if (openDropdownTarget == null) return false;
-        if (mouseX < openDropdownX || mouseX > openDropdownX + openDropdownW || mouseY < openDropdownY || mouseY > openDropdownY + openDropdownH) {
+        if (mouseX < openDropdownX + 1 || mouseX >= openDropdownX + openDropdownW - 1
+                || mouseY < openDropdownY + 1 || mouseY >= openDropdownY + openDropdownH - 1) {
             rememberDropdownScroll(openDropdownTarget, openDropdownScroll);
             openDropdownTarget = null;
+            openDropdownQuery = "";
             return false;
         }
-        List<String> options = optionsProvider.apply(openDropdownTarget);
-        int index = openDropdownScroll + (int) ((mouseY - openDropdownY) / ENTRY_ROW_H);
+        List<String> options = filteredDropdownOptions(optionsProvider);
+        int index = openDropdownScroll + rowAt(mouseY, openDropdownY);
         if (index >= 0 && index < options.size() && selectionHandler != null) {
             selectionHandler.accept(openDropdownTarget, options.get(index));
         }
         rememberDropdownScroll(openDropdownTarget, openDropdownScroll);
         openDropdownTarget = null;
+        openDropdownQuery = "";
         return true;
     }
 
     public void renderDropdownMenu(GuiGraphics gg, Font font, int mouseX, int mouseY, Function<DropdownMenuTarget, List<String>> optionsProvider) {
         if (openDropdownTarget == null || optionsProvider == null) return;
-        List<String> options = optionsProvider.apply(openDropdownTarget);
+        List<String> options = filteredDropdownOptions(optionsProvider);
+        openDropdownH = menuHeight(options.size());
         renderMenu(gg, font, mouseX, mouseY, openDropdownX, openDropdownY, openDropdownW, openDropdownH, openDropdownScroll, options);
     }
 
     public boolean scrollDropdownMenu(double mouseX, double mouseY, double delta, Function<DropdownMenuTarget, List<String>> optionsProvider) {
         if (openDropdownTarget == null) return false;
         if (mouseX < openDropdownX || mouseX > openDropdownX + openDropdownW || mouseY < openDropdownY || mouseY > openDropdownY + openDropdownH) return true;
-        List<String> options = optionsProvider.apply(openDropdownTarget);
+        List<String> options = filteredDropdownOptions(optionsProvider);
         int visible = Math.min(5, options.size());
         int maxStart = Math.max(0, options.size() - visible);
         openDropdownScroll = Mth.clamp(openDropdownScroll - (delta > 0 ? 1 : -1), 0, maxStart);
         rememberDropdownScroll(openDropdownTarget, openDropdownScroll);
         return true;
+    }
+
+    public boolean charTyped(char codePoint, Function<DropdownMenuTarget, List<String>> optionsProvider) {
+        if (!isLanguageDropdown() || !Character.isLetterOrDigit(codePoint)) return false;
+        openDropdownQuery += Character.toLowerCase(codePoint);
+        refreshFilteredDropdown(optionsProvider);
+        return true;
+    }
+
+    public boolean keyPressed(int keyCode, Function<DropdownMenuTarget, List<String>> optionsProvider) {
+        if (!isLanguageDropdown()) return false;
+        if (keyCode == GLFW.GLFW_KEY_BACKSPACE && !openDropdownQuery.isEmpty()) {
+            openDropdownQuery = openDropdownQuery.substring(0, openDropdownQuery.length() - 1);
+            refreshFilteredDropdown(optionsProvider);
+            return true;
+        }
+        return false;
     }
 
     public boolean isOpenDropdownField(EditBox box, EditBox subCategoryBox, EditBox questCategoryBox, EditBox questSubCategoryBox) {
@@ -164,17 +193,16 @@ public final class QuestEditorPopupMenus {
         gg.fill(x, y + height - 1, x + width, y + height, ID_SUGGESTION_BORDER_COLOR);
         gg.fill(x, y, x + 1, y + height, ID_SUGGESTION_BORDER_COLOR);
         gg.fill(x + width - 1, y, x + width, y + height, ID_SUGGESTION_BORDER_COLOR);
-        int visible = Math.min(5, options.size());
+        int visible = visibleRows(options.size());
         int start = Mth.clamp(scroll, 0, Math.max(0, options.size() - visible));
         int end = Math.min(options.size(), start + visible);
         for (int i = start; i < end; i++) {
             int row = i - start;
-            int rowY = y + row * ENTRY_ROW_H;
-            boolean hovered = mouseX >= x && mouseX <= x + width && mouseY >= rowY && mouseY < rowY + ENTRY_ROW_H;
-            gg.fill(x + 1, rowY, x + width - 1, rowY + ENTRY_ROW_H, ID_SUGGESTION_BORDER_COLOR);
-            gg.fill(x + 2, rowY + 1, x + width - 2, rowY + ENTRY_ROW_H - 1,
-                    hovered ? 0xFF2D2D2D : ID_SUGGESTION_BG_COLOR);
-            gg.drawString(font, options.get(i), x + 4, rowY + 2, ID_SUGGESTION_TEXT_COLOR, false);
+            int rowY = y + 1 + row * ENTRY_ROW_H;
+            boolean hovered = mouseX >= x + 1 && mouseX < x + width - 1
+                    && mouseY >= rowY && mouseY < rowY + ENTRY_ROW_H;
+            if (hovered) gg.fill(x + 1, rowY, x + width - 1, rowY + ENTRY_ROW_H, 0xFF2D2D2D);
+            gg.drawString(font, options.get(i), x + 3, rowY + 2, ID_SUGGESTION_TEXT_COLOR, false);
         }
         if (options.size() > visible) renderScrollThumb(gg, x, y, width, height, scroll, visible, options.size());
         gg.pose().popPose();
@@ -198,6 +226,41 @@ public final class QuestEditorPopupMenus {
 
     private void rememberDropdownScroll(DropdownMenuTarget target, int scroll) {
         if (target != null) savedDropdownScrolls.put(target, Math.max(0, scroll));
+    }
+
+    private boolean isLanguageDropdown() {
+        return openDropdownTarget == DropdownMenuTarget.QUEST_NAME_LANGUAGE
+                || openDropdownTarget == DropdownMenuTarget.QUEST_DESCRIPTION_LANGUAGE;
+    }
+
+    private List<String> filteredDropdownOptions(Function<DropdownMenuTarget, List<String>> optionsProvider) {
+        if (openDropdownTarget == null || optionsProvider == null) return List.of();
+        List<String> options = optionsProvider.apply(openDropdownTarget);
+        if (!isLanguageDropdown() || openDropdownQuery.isBlank()) return options;
+        String query = openDropdownQuery.toLowerCase(Locale.ROOT);
+        List<String> filtered = new ArrayList<>();
+        for (String option : options) {
+            if (option != null && option.toLowerCase(Locale.ROOT).contains(query)) filtered.add(option);
+        }
+        return filtered;
+    }
+
+    private void refreshFilteredDropdown(Function<DropdownMenuTarget, List<String>> optionsProvider) {
+        List<String> options = filteredDropdownOptions(optionsProvider);
+        openDropdownScroll = 0;
+        openDropdownH = menuHeight(options.size());
+    }
+
+    private static int visibleRows(int size) {
+        return Math.min(5, Math.max(0, size));
+    }
+
+    private static int menuHeight(int size) {
+        return visibleRows(size) * ENTRY_ROW_H + 2;
+    }
+
+    private static int rowAt(double mouseY, int menuY) {
+        return (int) ((mouseY - menuY - 1) / ENTRY_ROW_H);
     }
 
     // type selection
