@@ -148,12 +148,22 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
             this.seekCursorScreen(mouseX, mouseY);
             return true;
         }
+        if (this.getHeight() <= 32) return false;
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (!this.visible || !this.active) return false;
+        if (this.getHeight() <= 32) {
+            if (this.withinContentAreaPoint(mouseX, mouseY) && button == 0) {
+                this.textField.setSelecting(true);
+                this.seekCursorScreen(mouseX, mouseY);
+                this.textField.setSelecting(Screen.hasShiftDown());
+                return true;
+            }
+            return false;
+        }
         if (super.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         } else if (this.withinContentAreaPoint(mouseX, mouseY) && button == 0) {

@@ -189,14 +189,26 @@ public final class QuestData {
             String base = fallback == null || fallback.isBlank() ? emptyFallback : fallback;
             if (!Config.multiLanguageQuests() || translations == null || translations.isEmpty()
                     || FMLEnvironment.dist != Dist.CLIENT) return base;
-            String locale = "";
-            try {
-                locale = normalizeLocale(Minecraft.getInstance().getLanguageManager().getSelected());
-            } catch (Throwable ignored) {
+            String locale = normalizeLocale(Config.preferredLanguage());
+            if (locale.isBlank() || "client".equals(locale)) {
+                try {
+                    locale = normalizeLocale(Minecraft.getInstance().getLanguageManager().getSelected());
+                } catch (Throwable ignored) {
+                    locale = "en_us";
+                }
             }
-            String translated = translations.get(locale);
-            if (translated == null && locale.contains("_")) translated = translations.get(locale.substring(0, locale.indexOf('_')));
+            String translated = translatedText(translations, locale);
+            if (translated == null) translated = translatedText(translations, "en_us");
+            if (translated == null) translated = translations.get("en");
             return translated == null || translated.isBlank() ? base : translated;
+        }
+
+        private static String translatedText(Map<String, String> translations, String locale) {
+            String translated = translations.get(locale);
+            if (translated == null && locale.contains("_")) {
+                translated = translations.get(locale.substring(0, locale.indexOf('_')));
+            }
+            return translated;
         }
 
         private static String normalizeLocale(String locale) {

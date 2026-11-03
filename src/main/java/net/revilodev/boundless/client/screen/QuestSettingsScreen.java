@@ -20,6 +20,8 @@ import net.revilodev.boundless.client.CategoryHeaderWidget;
 import net.revilodev.boundless.client.BoundlessPermissions;
 import net.revilodev.boundless.client.QuestPanelClient;
 import net.revilodev.boundless.client.QuestListWidget;
+import net.revilodev.boundless.client.editor.QuestEditorModels.DropdownMenuTarget;
+import net.revilodev.boundless.client.editor.QuestEditorPopupMenus;
 import net.revilodev.boundless.network.BoundlessNetwork;
 import net.revilodev.boundless.quest.QuestData;
 
@@ -154,6 +156,7 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow functionalityQuestScrollsRow;
     private ConfigRow functionalityQuickEditRow;
     private ConfigRow functionalityMultiLanguageRow;
+    private ConfigRow functionalityPreferredLanguageRow;
     private ConfigRow gameplayDisableQuestBookRow;
     private ConfigRow gameplaySpawnWithBookRow;
 
@@ -229,11 +232,13 @@ public final class QuestSettingsScreen extends Screen {
     private boolean enableQuestScrolls;
     private boolean quickEdit;
     private boolean multiLanguageQuests;
+    private String preferredLanguage;
     private boolean disableQuestBook;
     private boolean spawnWithQuestBook;
     private ConfigTab configTab = ConfigTab.ALL;
     private ConfigScope configScope = ConfigScope.ALL;
     private boolean operatorAccess;
+    private final QuestEditorPopupMenus popupMenus = new QuestEditorPopupMenus();
 
     public QuestSettingsScreen(Screen parent) {
         super(tr("title"));
@@ -446,10 +451,13 @@ public final class QuestSettingsScreen extends Screen {
                 "Show an operator-only edit button on quest pages.",
                 () -> trs(quickEdit ? "state.on" : "state.off"),
                 () -> quickEdit = !quickEdit);
-        functionalityMultiLanguageRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, "Multi-language quests",
-                "Use quest title and description translations matching the game language.",
+        functionalityMultiLanguageRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, trs("row.multi_language"),
+                trs("row.multi_language.subtitle"),
                 () -> trs(multiLanguageQuests ? "state.on" : "state.off"),
                 () -> multiLanguageQuests = !multiLanguageQuests);
+        functionalityPreferredLanguageRow = new ConfigRow(px, functionalityQuickEditBaseY, pw,
+                trs("row.preferred_language"), trs("row.preferred_language.subtitle"),
+                this::formatPreferredLanguage, this::openPreferredLanguageDropdown);
 
         gameplayDisableQuestBookRow = new ConfigRow(px, gameplayDisableQuestBookBaseY, pw, trs("row.quest_book"),
                 trs("row.quest_book.subtitle"),
@@ -506,6 +514,7 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(functionalityQuestScrollsRow, ConfigTab.FEATURES);
         addConfigRow(functionalityQuickEditRow, ConfigTab.FEATURES);
         addConfigRow(functionalityMultiLanguageRow, ConfigTab.FEATURES);
+        addConfigRow(functionalityPreferredLanguageRow, ConfigTab.FEATURES);
         addConfigRow(gameplayDisableQuestBookRow, ConfigTab.FEATURES);
         addConfigRow(gameplaySpawnWithBookRow, ConfigTab.FEATURES);
 
@@ -615,6 +624,7 @@ public final class QuestSettingsScreen extends Screen {
 
     private void setPage(Page next) {
         // Both pages share one widget list, so visibility does the page switching
+        popupMenus.close();
         page = next;
 
         boolean menu = page == Page.MENU;
@@ -710,6 +720,7 @@ public final class QuestSettingsScreen extends Screen {
         enableQuestScrolls = Config.enableQuestScrolls();
         quickEdit = Config.quickEdit();
         multiLanguageQuests = Config.multiLanguageQuests();
+        preferredLanguage = Config.preferredLanguage();
         disableQuestBook = Config.disableQuestBook();
         spawnWithQuestBook = Config.spawnWithQuestBook();
     }
@@ -835,6 +846,46 @@ public final class QuestSettingsScreen extends Screen {
         };
     }
 
+    private void openPreferredLanguageDropdown() {
+        popupMenus.openDropdownMenu(DropdownMenuTarget.PREFERRED_LANGUAGE, functionalityPreferredLanguageRow,
+                configViewportTop(), configViewportBottom() - configViewportTop(), this::preferredLanguageOptions);
+    }
+
+    private List<String> preferredLanguageOptions(DropdownMenuTarget target) {
+        if (target != DropdownMenuTarget.PREFERRED_LANGUAGE) return List.of();
+        List<String> options = new ArrayList<>();
+        options.add("client");
+        try {
+            options.addAll(Minecraft.getInstance().getLanguageManager().getLanguages().keySet());
+        } catch (Throwable ignored) {
+            options.add("en_us");
+        }
+        return options.stream().distinct().toList();
+    }
+
+    private String formatPreferredLanguage() {
+        String normalized = normalizePreferredLanguage(preferredLanguage);
+        if ("client".equals(normalized)) return trs("language.client");
+        try {
+            var language = Minecraft.getInstance().getLanguageManager().getLanguage(normalized);
+            if (language != null) return language.toComponent().getString();
+        } catch (Throwable ignored) {
+        }
+        return normalized;
+    }
+
+    private String normalizePreferredLanguage(String language) {
+        if (language == null || language.isBlank()) return "client";
+        return language.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+    }
+
+    private void applyPreferredLanguage(DropdownMenuTarget target, String language) {
+        if (target != DropdownMenuTarget.PREFERRED_LANGUAGE) return;
+        preferredLanguage = normalizePreferredLanguage(language);
+        saveConfig(false);
+        applyConfigScrollLayout();
+    }
+
     private void saveConfig() {
         saveConfig(false);
     }
@@ -871,6 +922,7 @@ public final class QuestSettingsScreen extends Screen {
         Config.DESCRIPTION_TEXT_ALIGNMENT.set(normalizeDescriptionTextAlignment(descriptionTextAlignment));
         Config.ENABLE_QUEST_TOASTS.set(enableQuestToasts);
         Config.MULTI_LANGUAGE_QUESTS.set(multiLanguageQuests);
+        Config.PREFERRED_LANGUAGE.set(normalizePreferredLanguage(preferredLanguage));
         if (canManageServerSettings()) {
             Config.DISABLE_CATEGORIES.set(disableCategories);
             Config.CUSTOM_BACKGROUNDS.set(customBackgrounds);
@@ -965,6 +1017,7 @@ public final class QuestSettingsScreen extends Screen {
         if (tab == ConfigTab.ALL || tab == ConfigTab.FEATURES) {
             enableQuestToasts = true;
             multiLanguageQuests = true;
+            preferredLanguage = "client";
             if (canManageServerSettings()) {
                 disableQuestPinning = false;
                 autoClaimQuestRewards = false;
@@ -1107,7 +1160,8 @@ public final class QuestSettingsScreen extends Screen {
             if (debugButton != null && debugButton.visible) debugButton.render(gg, mouseX, mouseY, partialTick);
 
             renderConfigScrollbar(gg);
-            renderPendingTooltipOnTop(gg);
+            popupMenus.renderDropdownMenu(gg, font, mouseX, mouseY, this::preferredLanguageOptions);
+            if (!popupMenus.hasOpenMenu()) renderPendingTooltipOnTop(gg);
             return;
         }
 
@@ -1334,6 +1388,7 @@ public final class QuestSettingsScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         // Keep wheel input in the panel so background widgets do not consume it.
         if (page == Page.CONFIG) {
+            if (popupMenus.scrollDropdownMenu(mouseX, mouseY, scrollY, this::preferredLanguageOptions)) return true;
             int top = configViewportTop();
             int bottom = configViewportBottom();
             if (mouseX < px || mouseX > px + pw || mouseY < top || mouseY > bottom) {
@@ -1352,6 +1407,10 @@ public final class QuestSettingsScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (page == Page.CONFIG && button == 0) {
+            if (popupMenus.hasOpenMenu()) {
+                popupMenus.clickDropdownMenu(mouseX, mouseY, this::preferredLanguageOptions, this::applyPreferredLanguage);
+                return true;
+            }
             if (questWidgetTextColorField != null && questWidgetTextColorField.visible
                     && questWidgetTextColorField.isMouseOver(mouseX, mouseY)) {
                 questWidgetTextColorField.setFocused(true);
@@ -1385,6 +1444,18 @@ public final class QuestSettingsScreen extends Screen {
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (page == Page.CONFIG && popupMenus.keyPressed(keyCode, this::preferredLanguageOptions)) return true;
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (page == Page.CONFIG && popupMenus.charTyped(codePoint, this::preferredLanguageOptions)) return true;
+        return super.charTyped(codePoint, modifiers);
     }
 
     @Override

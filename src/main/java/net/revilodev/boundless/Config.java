@@ -196,6 +196,9 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> MULTI_LANGUAGE_QUESTS =
             BUILDER.comment("If true, quest titles and descriptions use the translation matching the client's language when available.")
                     .define("multiLanguageQuests", true);
+    public static final ModConfigSpec.ConfigValue<String> PREFERRED_LANGUAGE =
+            BUILDER.comment("Preferred quest translation language. Use client to follow the client's selected language.")
+                    .define("preferredLanguage", "client", Config::isPreferredLanguage);
     // questPackBackupInterval controls automatic full pack backups
     public static final ModConfigSpec.ConfigValue<String> QUEST_PACK_BACKUP_INTERVAL =
             BUILDER.comment("Automatic questpack backup interval: 1m, 5m, 10m, 30m, off.")
@@ -291,6 +294,21 @@ public final class Config {
         } catch (RuntimeException ignored) {
             return true;
         }
+    }
+
+    public static String preferredLanguage() {
+        try {
+            String value = PREFERRED_LANGUAGE.get();
+            return value == null || value.isBlank() ? "client" : value.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+        } catch (RuntimeException ignored) {
+            return "client";
+        }
+    }
+
+    private static boolean isPreferredLanguage(Object value) {
+        if (!(value instanceof String language)) return false;
+        String normalized = language.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+        return "client".equals(normalized) || normalized.matches("[a-z]{2,3}(_[a-z0-9]{2,8})*");
     }
 
     public static List<? extends String> disabledCategories() {

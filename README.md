@@ -132,6 +132,7 @@ Colours use six-digit RGB hex values without `#`.
 | `Functionality.enableQuestScrolls` | `true` | Enable quest completion scrolls. |
 | `Functionality.quickEdit` | `false` | Let operators edit a quest from the quest book. |
 | `Functionality.multiLanguageQuests` | `true` | Use the client's matching quest translation. |
+| `Functionality.preferredLanguage` | `client` | Choose a quest translation language or follow the client language. |
 | `Functionality.questPackBackupInterval` | `5m` | Backup every `1m`, `5m`, `10m`, `30m` or turn it `off`. |
 
 ### Gameplay and Diagnostics
