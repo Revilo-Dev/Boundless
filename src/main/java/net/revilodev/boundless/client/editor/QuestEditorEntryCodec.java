@@ -522,7 +522,7 @@ public final class QuestEditorEntryCodec {
 
                 }
 
-                case "advancement" -> {
+                case "advance", "advancement" -> {
 
                     String advancementId = normalizeNamespacedId(parsed.id, false);
 
@@ -931,7 +931,7 @@ public final class QuestEditorEntryCodec {
 
                     String advancement = e.getAsString();
 
-                    if (!advancement.isBlank()) out.add("advancement: " + advancement);
+                    if (!advancement.isBlank()) out.add("advance: " + advancement);
 
                     continue;
 
@@ -941,7 +941,7 @@ public final class QuestEditorEntryCodec {
 
                 String advancement = optString(e.getAsJsonObject(), "advancement", "");
 
-                if (!advancement.isBlank()) out.add("advancement: " + advancement);
+                if (!advancement.isBlank()) out.add("advance: " + advancement);
 
             }
 

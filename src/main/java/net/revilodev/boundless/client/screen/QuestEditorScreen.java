@@ -1373,9 +1373,6 @@ public final class QuestEditorScreen extends QuestEditor {
     }
 
     protected ScaledMultiLineEditBox focusedMultiIdSuggestionField() {
-        for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
-            if (box.visible && box.isFocused()) return box;
-        }
         for (ScaledMultiLineEditBox box : completionEntryBoxes) {
             if (box.visible && box.isFocused()) return box;
         }
@@ -1431,14 +1428,14 @@ public final class QuestEditorScreen extends QuestEditor {
                         ? List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "xp", "levelup", "field")
                         : List.of("collect", "submit", "kill", "achieve", "effect", "observe", "check", "biome", "dimension", "xp", "field"))
                     : (LevelUpCompat.isAvailable()
-                        ? List.of("item", "xp", "levelup", "command", "loot", "advancement", "toast")
-                        : List.of("item", "xp", "command", "loot", "advancement", "toast"));
+                        ? List.of("item", "xp", "levelup", "command", "loot", "advance", "toast")
+                        : List.of("item", "xp", "command", "loot", "advance", "toast"));
         }
         return switch (ctx.type) {
             case "collect", "submit", "item" -> suggestionCaches.itemSuggestions();
             case "kill", "entity" -> suggestionCaches.entitySuggestions();
             case "effect" -> suggestionCaches.effectSuggestions();
-            case "achieve", "advancement" -> suggestionCaches.advancementSuggestions();
+            case "achieve", "advance", "advancement" -> suggestionCaches.advancementSuggestions();
             case "observe" -> suggestionCaches.observeSuggestions();
             case "check" -> List.of("understand");
             case "biome" -> suggestionCaches.biomeSuggestions();
@@ -1585,7 +1582,7 @@ public final class QuestEditorScreen extends QuestEditor {
             if (isCompletionEntryField(field) || isRewardEntryField(field)) {
                 if (ctx.type.equals("collect") || ctx.type.equals("submit") || ctx.type.equals("item")
                         || ctx.type.equals("kill") || ctx.type.equals("entity") || ctx.type.equals("effect")
-                        || ctx.type.equals("achieve") || ctx.type.equals("advancement")
+                        || ctx.type.equals("achieve") || ctx.type.equals("advance") || ctx.type.equals("advancement")
                         || ctx.type.equals("icon")) {
                     replacement = QuestEditorEntryCodec.normalizeNamespacedId(suggestion, false);
                 }
@@ -1741,8 +1738,10 @@ public final class QuestEditorScreen extends QuestEditor {
                 EditBox embeddedIcon = embeddedIconBoxForDisplayField(field.widget);
                 if (field.widget instanceof EditBox eb) {
                     if (embeddedIcon != null) {
+                        boolean titleField = field.widget == questNameBox || field.widget == catNameBox || field.widget == subNameBox;
+                        int languageSpace = titleField && Config.multiLanguageQuests() ? 16 : 0;
                         eb.setX(boxX + 22);
-                        eb.setWidth(Math.max(10, widgetWidth - 22));
+                        eb.setWidth(Math.max(10, widgetWidth - 22 - languageSpace));
                     } else if (eb instanceof IconPickerBox) {
                         eb.setWidth(20);
                     } else {
@@ -2506,16 +2505,6 @@ public final class QuestEditorScreen extends QuestEditor {
             if (!subCategorySuggestionCache.contains(localSub)) subCategorySuggestionCache.add(localSub);
         }
 
-        for (QuestData.Category c : QuestData.categoriesOrdered()) {
-            if (c == null || c.id == null || c.id.isBlank()) continue;
-            if ("all".equalsIgnoreCase(c.id.trim())) continue;
-            categoryIdCache.add(c.id);
-        }
-        for (QuestData.SubCategory sc : QuestData.subCategoriesAllOrdered()) {
-            if (sc == null || sc.id == null || sc.id.isBlank()) continue;
-            subCategoryIdCache.add(sc.id);
-            addSubCategorySuggestion(sc.id, sc.category);
-        }
         for (QuestData.Quest q : QuestData.all()) {
             if (q == null || q.id == null || q.id.isBlank()) continue;
             questIdCache.add(q.id);
@@ -2775,6 +2764,7 @@ public final class QuestEditorScreen extends QuestEditor {
         if (isUnsavedChangesPopupOpen()) {
             return handleUnsavedChangesPopupClick(mouseX, mouseY, button);
         }
+        if (emojiPickerOpen) return clickEmojiPicker(mouseX, mouseY, button);
         if (button == 0 && clickPackBackup(mouseX, mouseY)) return true;
         if (button == 0 && clickTitleFormatterButton(mouseX, mouseY)) return true;
         if (button == 0 && clickItemPicker(mouseX, mouseY)) return true;
@@ -3044,8 +3034,10 @@ public final class QuestEditorScreen extends QuestEditor {
         for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
             if (box == null || !box.visible || !box.active) continue;
             if (!box.isMouseOver(mouseX, mouseY)) continue;
-            if (box.mouseClicked(mouseX, mouseY, button)) return true;
+            box.mouseClicked(mouseX, mouseY, button);
             box.setFocused(true);
+            openDependencyDropdownRow = box;
+            openDropdownMenu(DropdownMenuTarget.QUEST_DEPENDENCY, box);
             return true;
         }
         return false;
@@ -3307,7 +3299,12 @@ public final class QuestEditorScreen extends QuestEditor {
     }
 
     protected boolean clickDropdownMenu(double mouseX, double mouseY) {
-        return popupMenus.clickDropdownMenu(mouseX, mouseY, this::dropdownOptions, this::applyDropdownSelection);
+        boolean handled = popupMenus.clickDropdownMenu(mouseX, mouseY, this::dropdownOptions, this::applyDropdownSelection);
+        if (!popupMenus.hasOpenMenu()) {
+            openTranslationLanguageRow = null;
+            openDependencyDropdownRow = null;
+        }
+        return handled;
     }
 
     protected void renderDropdownMenu(GuiGraphics gg, int mouseX, int mouseY) {
@@ -3323,6 +3320,16 @@ public final class QuestEditorScreen extends QuestEditor {
         if (target == DropdownMenuTarget.QUEST_NAME_LANGUAGE
                 || target == DropdownMenuTarget.QUEST_DESCRIPTION_LANGUAGE) {
             return QUEST_LANGUAGE_CODES;
+        }
+        if (target == DropdownMenuTarget.QUEST_DEPENDENCY) {
+            String prefix = multiLineSuggestionPrefix(openDependencyDropdownRow);
+            List<String> dependencies = new ArrayList<>();
+            for (String id : questPackDependencySuggestionCache) {
+                if (id == null || id.isBlank() || id.equals(questIdBox.getValue())) continue;
+                if (!prefix.isBlank() && !matchesIdPrefix(id, prefix)) continue;
+                dependencies.add(id);
+            }
+            return dependencies;
         }
         List<String> out = new ArrayList<>();
         out.add(trs("none"));
@@ -3361,6 +3368,12 @@ public final class QuestEditorScreen extends QuestEditor {
                 }
             }
             case QUEST_SUBCATEGORY -> setDropdownBoxValue(questSubCategoryBox, normalized);
+            case QUEST_DEPENDENCY -> {
+                if (openDependencyDropdownRow != null) {
+                    applyMultiLineIdSuggestion(openDependencyDropdownRow, value);
+                }
+                openDependencyDropdownRow = null;
+            }
             case QUEST_NAME_LANGUAGE, QUEST_DESCRIPTION_LANGUAGE -> {
                 if (openTranslationLanguageRow != null) {
                     openTranslationLanguageRow.locale = normalizeLanguageCode(value);
@@ -3368,6 +3381,8 @@ public final class QuestEditorScreen extends QuestEditor {
                             Component.literal(openTranslationLanguageRow.locale)));
                 }
                 openTranslationLanguageRow = null;
+            }
+            case PREFERRED_LANGUAGE -> {
             }
         }
     }
@@ -4200,8 +4215,10 @@ public final class QuestEditorScreen extends QuestEditor {
             graphics.fill(getX() + width - 1, getY(), getX() + width, getY() + height, border);
             float scale = 0.5f;
             int textWidth = Math.round(font.width(text) * scale);
+            int textHeight = Math.round(font.lineHeight * scale);
             graphics.pose().pushPose();
-            graphics.pose().translate(getX() + (width - textWidth) / 2.0f, getY() + 3, 0);
+            graphics.pose().translate(getX() + (width - textWidth) / 2.0f,
+                    getY() + (height - textHeight) / 2.0f, 0);
             graphics.pose().scale(scale, scale, 1);
             graphics.drawString(font, text, 0, 0, hovered ? 0xFFFFFFFF : 0xFFFFFF00, false);
             graphics.pose().popPose();
@@ -4230,7 +4247,8 @@ public final class QuestEditorScreen extends QuestEditor {
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             graphics.fill(getX(), getY(), getX() + width, getY() + height,
                     isMouseOver(mouseX, mouseY) ? 0xAA5A1A1A : 0xAA3A1212);
-            graphics.drawString(font, "X", getX() + 2, getY() + 2, 0xFFFF5555, false);
+            graphics.drawString(font, "X", getX() + 2,
+                    getY() + (height - font.lineHeight) / 2, 0xFFFF5555, false);
         }
 
         @Override

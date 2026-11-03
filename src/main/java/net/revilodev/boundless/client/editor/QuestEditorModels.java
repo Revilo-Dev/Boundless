@@ -602,9 +602,13 @@ public final class QuestEditorModels {
 
         QUEST_SUBCATEGORY,
 
+        QUEST_DEPENDENCY,
+
         QUEST_NAME_LANGUAGE,
 
-        QUEST_DESCRIPTION_LANGUAGE
+        QUEST_DESCRIPTION_LANGUAGE,
+
+        PREFERRED_LANGUAGE
 
     }
 

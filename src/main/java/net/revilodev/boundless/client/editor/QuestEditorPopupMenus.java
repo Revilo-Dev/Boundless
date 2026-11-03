@@ -144,6 +144,8 @@ public final class QuestEditorPopupMenus {
         if (openDropdownTarget == null || optionsProvider == null) return;
         List<String> options = filteredDropdownOptions(optionsProvider);
         openDropdownH = menuHeight(options.size());
+        openDropdownScroll = Mth.clamp(openDropdownScroll, 0,
+                Math.max(0, options.size() - visibleRows(options.size())));
         renderMenu(gg, font, mouseX, mouseY, openDropdownX, openDropdownY, openDropdownW, openDropdownH, openDropdownScroll, options);
     }
 
@@ -181,7 +183,7 @@ public final class QuestEditorPopupMenus {
             case SUBCATEGORY_PARENT -> box == subCategoryBox;
             case QUEST_CATEGORY -> box == questCategoryBox;
             case QUEST_SUBCATEGORY -> box == questSubCategoryBox;
-            case QUEST_NAME_LANGUAGE, QUEST_DESCRIPTION_LANGUAGE -> false;
+            case QUEST_DEPENDENCY, QUEST_NAME_LANGUAGE, QUEST_DESCRIPTION_LANGUAGE, PREFERRED_LANGUAGE -> false;
         };
     }
 
@@ -230,7 +232,8 @@ public final class QuestEditorPopupMenus {
 
     private boolean isLanguageDropdown() {
         return openDropdownTarget == DropdownMenuTarget.QUEST_NAME_LANGUAGE
-                || openDropdownTarget == DropdownMenuTarget.QUEST_DESCRIPTION_LANGUAGE;
+                || openDropdownTarget == DropdownMenuTarget.QUEST_DESCRIPTION_LANGUAGE
+                || openDropdownTarget == DropdownMenuTarget.PREFERRED_LANGUAGE;
     }
 
     private List<String> filteredDropdownOptions(Function<DropdownMenuTarget, List<String>> optionsProvider) {

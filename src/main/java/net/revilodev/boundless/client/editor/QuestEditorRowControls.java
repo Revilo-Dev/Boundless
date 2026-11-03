@@ -29,11 +29,12 @@ public final class QuestEditorRowControls {
     private static final int TAB_H = 27;
     private static final int ENTRY_ROW_H = 14;
     private static final int ENTRY_REMOVE_BTN_W = 10;
-    private static final int ENTRY_TYPE_BTN_W = 30;
+    private static final int ENTRY_TYPE_BTN_W = 24;
     private static final int ENTRY_ITEM_PICK_BTN_W = 12;
     private static final int ENTRY_COUNT_BTN_W = 12;
     private static final float ENTRY_COUNT_TEXT_SCALE = 0.55f;
     private static final float ENTRY_TYPE_TEXT_SCALE = 0.45f;
+    private static final float ENTRY_TYPE_MIN_TEXT_SCALE = 0.3f;
 
     private QuestEditorRowControls() {
     }
@@ -186,11 +187,14 @@ public final class QuestEditorRowControls {
             gg.fill(getX(), getY(), getX() + 1, getY() + getHeight(), border);
             gg.fill(getX() + getWidth() - 1, getY(), getX() + getWidth(), getY() + getHeight(), border);
             Font font = Minecraft.getInstance().font;
-            int textW = Math.round(font.width(text) * ENTRY_TYPE_TEXT_SCALE);
+            float availableWidth = Math.max(1, getWidth() - 3);
+            float textScale = Math.max(ENTRY_TYPE_MIN_TEXT_SCALE,
+                    Math.min(ENTRY_TYPE_TEXT_SCALE, availableWidth / Math.max(1, font.width(text))));
+            int textW = Math.round(font.width(text) * textScale);
             int tx = getX() + (getWidth() - textW) / 2;
             gg.pose().pushPose();
             gg.pose().translate(tx, getY() + 3, 0f);
-            gg.pose().scale(ENTRY_TYPE_TEXT_SCALE, ENTRY_TYPE_TEXT_SCALE, 1f);
+            gg.pose().scale(textScale, textScale, 1f);
             gg.drawString(font, text, 0, 0, 0xFFFFFF00, false);
             gg.pose().popPose();
         }

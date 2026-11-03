@@ -15,24 +15,8 @@ public final class QuestEditorEntryTypes {
     // label
     public static String label(String type) {
         return switch (safe(type)) {
-            case "collect" -> "COL";
-            case "submit" -> "SUB";
-            case "kill" -> "KIL";
-            case "achieve" -> "ADV";
-            case "effect" -> "EFF";
-            case "observe" -> "OBS";
-            case "check" -> "CHK";
-            case "biome" -> "BIO";
-            case "dimension" -> "DIM";
-            case "xp" -> "XP";
-            case "levelup" -> "LVL";
-            case "field" -> "FLD";
-            case "item" -> "ITM";
-            case "command" -> "CMD";
-            case "loot" -> "LOT";
-            case "advancement" -> "ADV";
-            case "toast" -> "TST";
-            default -> safe(type).isBlank() ? "?" : safe(type).substring(0, Math.min(3, safe(type).length())).toUpperCase(Locale.ROOT);
+            case "achieve", "advance", "advancement" -> "advance";
+            default -> safe(type).isBlank() ? "?" : safe(type).toLowerCase(Locale.ROOT);
         };
     }
 
@@ -42,7 +26,7 @@ public final class QuestEditorEntryTypes {
         return switch (safe(type)) {
             case "collect", "submit", "item" -> "minecraft:diamond";
             case "kill" -> "minecraft:zombie";
-            case "achieve", "advancement" -> "minecraft:story/mine_stone";
+            case "achieve", "advance", "advancement" -> "minecraft:story/mine_stone";
             case "check" -> "Understand";
             case "xp" -> "points 10";
             case "levelup" -> "levels 1";
@@ -77,6 +61,7 @@ public final class QuestEditorEntryTypes {
                 case "submit" -> "item";
                 case "exp" -> "xp";
                 case "loottable" -> "loot";
+                case "advancement" -> "advance";
                 default -> entryTypeOptions(kind).contains(type) ? type : "item";
             };
         }
@@ -116,8 +101,8 @@ public final class QuestEditorEntryTypes {
         }
         if (kind == EntryRowKind.REWARD) {
             return LevelUpCompat.isAvailable()
-                    ? List.of("item", "xp", "levelup", "command", "loot", "advancement", "toast")
-                    : List.of("item", "xp", "command", "loot", "advancement", "toast");
+                    ? List.of("item", "xp", "levelup", "command", "loot", "advance", "toast")
+                    : List.of("item", "xp", "command", "loot", "advance", "toast");
         }
         return List.of();
     }

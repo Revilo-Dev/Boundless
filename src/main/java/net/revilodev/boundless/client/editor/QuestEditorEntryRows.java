@@ -111,6 +111,7 @@ public final class QuestEditorEntryRows {
         if (kind == EntryRowKind.DEPENDENCY) return true;
         return QuestEditorEntryTypes.entryTypeOptions(kind).contains(prefix)
                 || ("advancement".equals(prefix) && kind == EntryRowKind.COMPLETION)
+                || ("advancement".equals(prefix) && kind == EntryRowKind.REWARD)
                 || ("entity".equals(prefix) && kind == EntryRowKind.COMPLETION)
                 || ("item".equals(prefix) && kind == EntryRowKind.COMPLETION)
                 || ("submit".equals(prefix) && kind == EntryRowKind.REWARD)
@@ -173,7 +174,7 @@ public final class QuestEditorEntryRows {
         String normalizedItemId = QuestItemSpec.stripComponents(itemId);
         if ("kill".equals(type) || "entity".equals(type)) return QuestEditorItemIcons.mobDisplayNameForMobId(normalizedItemId).getString();
         if ("effect".equals(type)) return QuestEditorItemIcons.effectDisplayName(normalizedItemId);
-        if ("achieve".equals(type) || "advancement".equals(type)) return normalizedItemId;
+        if ("achieve".equals(type) || "advance".equals(type) || "advancement".equals(type)) return normalizedItemId;
         if ("observe".equals(type) || "biome".equals(type) || "dimension".equals(type)) return normalizedItemId;
         return QuestEditorItemIcons.displayNameForItem(normalizedItemId);
     }

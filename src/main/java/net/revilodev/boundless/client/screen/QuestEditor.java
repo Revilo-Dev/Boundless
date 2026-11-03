@@ -246,7 +246,7 @@ public abstract class QuestEditor extends Screen {
     protected static final int ENTRY_ROW_GAP = 2;
     protected static final float ENTRY_INPUT_TEXT_SCALE = 0.5f;
     protected static final int ENTRY_REMOVE_BTN_W = 10;
-    protected static final int ENTRY_TYPE_BTN_W = 30;
+    protected static final int ENTRY_TYPE_BTN_W = 24;
     protected static final int ENTRY_ITEM_PICK_BTN_W = 12;
     protected static final int ENTRY_COUNT_BTN_W = 12;
     protected static final float ENTRY_COUNT_TEXT_SCALE = 0.55f;
@@ -498,6 +498,7 @@ public abstract class QuestEditor extends Screen {
     // popup menu state
     protected final QuestEditorPopupMenus popupMenus = new QuestEditorPopupMenus();
     protected QuestEditorScreen.TranslationRow openTranslationLanguageRow;
+    protected ScaledMultiLineEditBox openDependencyDropdownRow;
     // item picker state
     protected EntryRowKind itemPickerKind;
     protected int itemPickerRow = -1;
@@ -3379,6 +3380,8 @@ public abstract class QuestEditor extends Screen {
     protected void closeTransientMenus() {
         // close every popup that should not survive a mode change
         popupMenus.close();
+        openTranslationLanguageRow = null;
+        openDependencyDropdownRow = null;
         emojiPickerOpen = false;
         if (isItemPickerOpen()) {
             closeItemPicker();
@@ -3552,8 +3555,22 @@ public abstract class QuestEditor extends Screen {
     protected String nextTranslationLocale(List<QuestEditorScreen.TranslationRow> rows) {
         Set<String> used = new HashSet<>();
         for (QuestEditorScreen.TranslationRow row : rows) used.add(row.locale);
+        String preferred = preferredTranslationLocale();
+        if (!used.contains(preferred)) return preferred;
+        if (!used.contains("en_us")) return "en_us";
+        if (!used.contains("en")) return "en";
         for (String locale : QUEST_LANGUAGE_CODES) if (!used.contains(locale)) return locale;
         return "en_us";
+    }
+
+    protected String preferredTranslationLocale() {
+        String preferred = normalizeLanguageCode(Config.preferredLanguage());
+        if (!"client".equals(preferred)) return preferred;
+        try {
+            return normalizeLanguageCode(Minecraft.getInstance().getLanguageManager().getSelected());
+        } catch (Throwable ignored) {
+            return "en_us";
+        }
     }
 
     protected void ensureTrailingTranslationRow(boolean description) {
@@ -3583,6 +3600,10 @@ public abstract class QuestEditor extends Screen {
     protected void removeTranslationRow(QuestEditorScreen.TranslationRow row) {
         if (row == null) return;
         List<QuestEditorScreen.TranslationRow> rows = translationRows(row.description);
+        row.setVisible(false);
+        row.box.mouseReleased(0, 0, 0);
+        row.box.setFocused(false);
+        if (getFocused() == row.box) setFocused(null);
         row.removeWidgets();
         rows.remove(row);
         ensureTrailingTranslationRow(row.description);
@@ -3608,18 +3629,20 @@ public abstract class QuestEditor extends Screen {
         for (QuestEditorScreen.TranslationRow row : rows) {
             int height = row.height();
             boolean visible = cursorY + height > clipTop && cursorY < clipBottom;
-            int inputWidth = Math.max(10, width - 26);
-            int languageSize = Math.min(12, height);
-            row.language.setPosition(x, cursorY + Math.max(0, (height - languageSize) / 2));
-            row.language.setWidth(languageSize);
-            row.language.setHeight(languageSize);
-            row.box.setX(x + 14);
+            int languageWidth = ENTRY_ROW_H;
+            int removeWidth = ENTRY_REMOVE_BTN_W;
+            int inputX = x + languageWidth;
+            int removeX = x + width - removeWidth;
+            row.language.setPosition(x, cursorY);
+            row.language.setWidth(languageWidth);
+            row.language.setHeight(height);
+            row.box.setX(inputX);
             row.box.setY(cursorY);
-            row.box.setWidth(inputWidth);
+            row.box.setWidth(Math.max(10, removeX - inputX));
             row.box.setHeight(height);
-            row.remove.setPosition(x + width - 10, cursorY);
-            row.remove.setWidth(10);
-            row.remove.setHeight(ENTRY_ROW_H);
+            row.remove.setPosition(removeX, cursorY);
+            row.remove.setWidth(removeWidth);
+            row.remove.setHeight(height);
             row.setVisible(visible);
             cursorY += height + ENTRY_ROW_GAP;
         }
