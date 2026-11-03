@@ -2,6 +2,7 @@ package net.revilodev.boundless.client.editor;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.revilodev.boundless.Config;
@@ -80,6 +81,10 @@ public final class QuestEditorEmojis {
                 : fallback;
     }
     public static int glyphSize() { return GLYPH_SIZE; }
+    public static void render(GuiGraphics graphics, String name, int x, int y, int size) {
+        if (graphics == null || size <= 0) return;
+        graphics.blit(texture(name), x, y, size, size, 0, 0, 16, 16, 16, 16);
+    }
     public static String text(String name) { return ":" + name + ":"; }
     public static String iconId(String name) { return ICON_PREFIX + name; }
     public static String nameFromIconId(String id) { return id != null && id.startsWith(ICON_PREFIX) ? id.substring(ICON_PREFIX.length()) : null; }

@@ -464,7 +464,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
 
     private int drawEmoji(GuiGraphics guiGraphics, String name, int x, int y) {
         int size = QuestEditorEmojis.glyphSize();
-        if (guiGraphics != null) guiGraphics.blit(QuestEditorEmojis.texture(name), x, y, 0, 0, size, size, 16, 16);
+        QuestEditorEmojis.render(guiGraphics, name, x, y, size);
         return x + size;
     }
 

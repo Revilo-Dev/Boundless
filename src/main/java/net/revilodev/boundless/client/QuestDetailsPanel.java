@@ -1467,7 +1467,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
             if (drawX + charWidth > maxX) break;
             if (ch.emoji != null) {
                 int emojiSize = QuestEditorEmojis.glyphSize();
-                gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY, 0, 0, emojiSize, emojiSize, 16, 16);
+                QuestEditorEmojis.render(gg, ch.emoji, drawX, drawY, emojiSize);
             } else {
                 gg.drawString(mc.font, Component.literal(String.valueOf(ch.value)).withStyle(Style.EMPTY
                                 .withColor(ch.color)
@@ -1506,7 +1506,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
                 int color = ch.highlight ? highlightColor(ch.color, globalIndex) : ch.color;
                 if (ch.emoji != null) {
                     int emojiSize = QuestEditorEmojis.glyphSize();
-                    gg.blit(QuestEditorEmojis.texture(ch.emoji), drawX, drawY, 0, 0, emojiSize, emojiSize, 16, 16);
+                    QuestEditorEmojis.render(gg, ch.emoji, drawX, drawY, emojiSize);
                     drawX += emojiSize;
                 } else {
                     drawX = gg.drawString(mc.font,

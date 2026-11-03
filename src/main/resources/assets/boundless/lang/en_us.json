@@ -161,7 +161,7 @@
   "ui.boundless.editor.field.pack_description": "Pack description",
   "ui.boundless.editor.field.import_existing_questline": "Import existing questline",
   "ui.boundless.editor.field.category_name": "Category name",
-  "ui.boundless.editor.field.category_type": "Category type",
+  "ui.boundless.editor.field.category_type": "Category view",
   "ui.boundless.editor.field.subcategories": "Sub-categories",
   "ui.boundless.editor.field.category_icon": "Category icon",
   "ui.boundless.editor.field.category_background": "Category background",

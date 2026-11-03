@@ -780,6 +780,7 @@ public final class QuestEditorScreen extends QuestEditor {
             questTree.setTooltipSuppressed(isTreeTooltipCovered(mouseX, mouseY) || hasForegroundOverlay());
             questTree.render(gg, mouseX, mouseY, partialTick);
         }
+        if (treeExpandButton != null && treeExpandButton.visible) treeExpandButton.render(gg, mouseX, mouseY, partialTick);
         gg.pose().pushPose();
         gg.pose().translate(0, 0, 500);
         for (CategoryWorkspaceTab tab : categoryWorkspaceTabs) {
@@ -801,7 +802,6 @@ public final class QuestEditorScreen extends QuestEditor {
         if (treeMoveButton != null && treeMoveButton.visible) treeMoveButton.render(gg, mouseX, mouseY, partialTick);
         if (treeDeleteButton != null && treeDeleteButton.visible) treeDeleteButton.render(gg, mouseX, mouseY, partialTick);
         if (treeConnectorButton != null && treeConnectorButton.visible) treeConnectorButton.render(gg, mouseX, mouseY, partialTick);
-        if (treeExpandButton != null && treeExpandButton.visible) treeExpandButton.render(gg, mouseX, mouseY, partialTick);
         if (createPackButton != null && createPackButton.visible) createPackButton.render(gg, mouseX, mouseY, partialTick);
         if (importQuestPackButton != null && importQuestPackButton.visible) importQuestPackButton.render(gg, mouseX, mouseY, partialTick);
         gg.pose().popPose();
@@ -1738,10 +1738,8 @@ public final class QuestEditorScreen extends QuestEditor {
                 EditBox embeddedIcon = embeddedIconBoxForDisplayField(field.widget);
                 if (field.widget instanceof EditBox eb) {
                     if (embeddedIcon != null) {
-                        boolean titleField = field.widget == questNameBox || field.widget == catNameBox || field.widget == subNameBox;
-                        int languageSpace = titleField && Config.multiLanguageQuests() ? 16 : 0;
                         eb.setX(boxX + 22);
-                        eb.setWidth(Math.max(10, widgetWidth - 22 - languageSpace));
+                        eb.setWidth(Math.max(10, widgetWidth - 22));
                     } else if (eb instanceof IconPickerBox) {
                         eb.setWidth(20);
                     } else {
@@ -1815,8 +1813,7 @@ public final class QuestEditorScreen extends QuestEditor {
                     catBackgroundAssetButton.setPosition(modeX + modeWidth + gap, boxY);
                     catBackgroundAssetButton.setWidth(assetWidth);
                     catBackgroundAssetButton.setHeight(BOX_H);
-                    catBackgroundAssetButton.setMessage(tr(catBackgroundMode == CategoryBackgroundMode.TILEABLE
-                            ? "background.blocks" : "background.asset"));
+                    catBackgroundAssetButton.setMessage(tr("browse"));
                     catBackgroundAssetButton.visible = inside;
                     catBackgroundAssetButton.active = inside;
                 }
@@ -2399,7 +2396,9 @@ public final class QuestEditorScreen extends QuestEditor {
             return QuestEditorValidation.isDuplicateQuestId(questId, true, cachedQuestEntriesOrLoad(), editingPath);
         }
         int count = questIdCountCache.getOrDefault(questId, 0);
-        if (editingPath != null && questPathsByIdCache.getOrDefault(questId, Set.of()).contains(editingPath)) {
+        boolean editingCurrentQuest = editingPath != null && questPathsByIdCache.getOrDefault(questId, Set.of()).stream()
+                .anyMatch(path -> QuestEditorValidation.samePath(editingPath, path));
+        if (editingCurrentQuest) {
             return count > 1;
         }
         return count > 0;
@@ -2520,7 +2519,8 @@ public final class QuestEditorScreen extends QuestEditor {
         if (entry == null || entry.id == null || entry.id.isBlank()) return;
         questIdCountCache.merge(entry.id, 1, Integer::sum);
         if (entry.path != null) {
-            questPathsByIdCache.computeIfAbsent(entry.id, ignored -> new HashSet<>()).add(entry.path);
+            questPathsByIdCache.computeIfAbsent(entry.id, ignored -> new HashSet<>())
+                    .add(entry.path.toAbsolutePath().normalize());
         }
     }
 
@@ -2767,8 +2767,23 @@ public final class QuestEditorScreen extends QuestEditor {
         if (emojiPickerOpen) return clickEmojiPicker(mouseX, mouseY, button);
         if (button == 0 && clickPackBackup(mouseX, mouseY)) return true;
         if (button == 0 && clickTitleFormatterButton(mouseX, mouseY)) return true;
+        if (button == 0 && questNameLanguageButton != null && questNameLanguageButton.visible
+                && questNameLanguageButton.active && questNameLanguageButton.isMouseOver(mouseX, mouseY)) {
+            questNameLanguageButton.onPress();
+            return true;
+        }
         if (button == 0 && clickItemPicker(mouseX, mouseY)) return true;
         if (button == 0) {
+            if (catBackgroundModeButton != null && catBackgroundModeButton.visible && catBackgroundModeButton.active
+                    && catBackgroundModeButton.isMouseOver(mouseX, mouseY)) {
+                catBackgroundModeButton.onPress();
+                return true;
+            }
+            if (catBackgroundAssetButton != null && catBackgroundAssetButton.visible && catBackgroundAssetButton.active
+                    && catBackgroundAssetButton.isMouseOver(mouseX, mouseY)) {
+                catBackgroundAssetButton.onPress();
+                return true;
+            }
             EditBox clickedIconBox = clickedVisibleIconBox(mouseX, mouseY);
             if (clickedIconBox != null) {
                 openIconItemPicker(clickedIconBox);

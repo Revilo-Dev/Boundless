@@ -120,12 +120,17 @@ public final class QuestEditorValidation {
         for (NamedEntry entry : questEntries) {
             if (entry == null || entry.id == null || !questId.equals(entry.id)) continue;
             matches++;
-            if (editingPath != null && entry.path != null && editingPath.equals(entry.path)) {
+            if (samePath(editingPath, entry.path)) {
                 matchedEditingPath = true;
             }
         }
         if (editingPath != null && matchedEditingPath) return matches > 1;
         return matches > 0;
+    }
+
+    public static boolean samePath(Path first, Path second) {
+        if (first == null || second == null) return false;
+        return first.toAbsolutePath().normalize().equals(second.toAbsolutePath().normalize());
     }
 
     // is duplicate quest id across pack

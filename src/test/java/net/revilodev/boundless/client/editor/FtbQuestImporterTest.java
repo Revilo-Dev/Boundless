@@ -203,11 +203,11 @@ final class FtbQuestImporterTest {
         Files.writeString(source.resolve("chapters/text.json5"), """
                 {
                     id: "3000000000000001"
-                    title: "Text"
+                    title: "{custom.chapter.title}"
                     quests: [{
                         id: "3100000000000001"
-                        title: "custom.quest.title"
-                        description: ["custom.quest.description"]
+                        title: "{custom.quest.title}"
+                        description: ["{custom.quest.description}"]
                         x: 0
                         y: 0
                     }]
@@ -215,12 +215,14 @@ final class FtbQuestImporterTest {
                 """);
         Files.writeString(source.resolve("lang/pl_pl/chapters/text.json5"), """
                 {
+                    "custom.chapter.title": "Przetlumaczony rozdzial"
                     "custom.quest.title": "Przetlumaczone zadanie"
                     "custom.quest.description": ["Polski opis"]
                 }
                 """);
         Files.writeString(source.resolve("lang/en_us/chapters/text.json5"), """
                 {
+                    "custom.chapter.title": "Translated Chapter"
                     "custom.quest.title": "Translated Quest"
                     "quest.3100000000000001.subtitle": "Imported subtitle"
                     "custom.quest.description": [
@@ -233,7 +235,14 @@ final class FtbQuestImporterTest {
         Path packs = temporaryDirectory.resolve("translated-packs");
         FtbQuestImporter.importPack(source, packs, "Translated Import");
 
-        JsonObject quest = json(findQuest(packs.resolve("translated-import"), "translated_quest", "translated-import"));
+        Path packRoot = packs.resolve("translated-import");
+        JsonObject category = json(packRoot.resolve(
+                "data/translated-import/quests/categories/translated_chapter.json"));
+        assertEquals("Translated Chapter", category.get("name").getAsString());
+        assertEquals("Przetlumaczony rozdzial", category.getAsJsonObject("translations")
+                .getAsJsonObject("pl_pl").get("name").getAsString());
+
+        JsonObject quest = json(findQuest(packRoot, "translated_quest", "translated-import"));
         assertEquals("Imported subtitle\n\nFirst line\nSecond §aline", quest.get("description").getAsString());
         JsonObject polish = quest.getAsJsonObject("translations").getAsJsonObject("pl_pl");
         assertEquals("Przetlumaczone zadanie", polish.get("name").getAsString());

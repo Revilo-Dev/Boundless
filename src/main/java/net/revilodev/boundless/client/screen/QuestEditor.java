@@ -713,7 +713,7 @@ public abstract class QuestEditor extends Screen {
         catBackgroundModeButton.visible = false;
         catBackgroundModeButton.active = false;
         addRenderableWidget(catBackgroundModeButton);
-        catBackgroundAssetButton = Button.builder(tr("select"), button -> openCategoryBackgroundPicker())
+        catBackgroundAssetButton = Button.builder(tr("browse"), button -> openCategoryBackgroundPicker())
                 .bounds(0, 0, 38, BOX_H).build();
         catBackgroundAssetButton.visible = false;
         catBackgroundAssetButton.active = false;
@@ -2243,6 +2243,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void openCategoryBackgroundPicker() {
+        if (catBackgroundMode != CategoryBackgroundMode.TILEABLE) QuestEditorCustomIcons.reload();
         openIconItemPicker(catBackgroundBox);
         itemPickerTab = catBackgroundMode == CategoryBackgroundMode.TILEABLE
                 ? ItemPickerTab.CREATIVE : ItemPickerTab.CUSTOM;
@@ -2644,7 +2645,10 @@ public abstract class QuestEditor extends Screen {
                 catBackgroundOpacitySlider.getOpacity(),
                 this::setError
         );
-        if (category != null && catLayoutSelector.isTreeLayout()) category.addProperty("layout", "tree");
+        if (category != null) {
+            QuestEditorJsonBuilder.preserveCategoryStickers(category, QuestEditorJsonFiles.readJson(editingPath));
+            if (catLayoutSelector.isTreeLayout()) category.addProperty("layout", "tree");
+        }
         return category;
     }
 
@@ -4577,6 +4581,7 @@ public abstract class QuestEditor extends Screen {
         state.questOrderToken = questOrderToken;
         state.editorScroll = editorScroll;
         state.leftScroll = leftList.getScrollY();
+        state.treeView = questTree == null ? null : questTree.viewState();
         state.statusMessage = statusMessage;
         state.statusColor = statusColor;
         state.deleteConfirmArmed = deleteConfirmArmed;
@@ -4738,6 +4743,7 @@ public abstract class QuestEditor extends Screen {
         loadedQuestType = state.loadedQuestType == null ? "" : state.loadedQuestType;
         editingPath = state.editingPath;
         editorScroll = state.editorScroll;
+        if (questTree != null) questTree.restoreView(state.treeView);
         updateBackButtonVisibility();
     }
 

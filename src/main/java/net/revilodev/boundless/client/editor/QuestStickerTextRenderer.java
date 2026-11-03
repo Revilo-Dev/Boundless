@@ -15,11 +15,15 @@ public final class QuestStickerTextRenderer {
     }
 
     public static int width(Font font, String value) {
-        return walk(null, font, value, 0, 0, false).width;
+        return measure(font, value).width;
     }
 
     public static int height(Font font, String value) {
-        return walk(null, font, value, 0, 0, false).height;
+        return measure(font, value).height;
+    }
+
+    public static Metrics measure(Font font, String value) {
+        return walk(null, font, value, 0, 0, false);
     }
 
     private static Metrics walk(GuiGraphics graphics, Font font, String raw, int startX, int startY, boolean draw) {
@@ -44,7 +48,7 @@ public final class QuestStickerTextRenderer {
                 if (draw) {
                     String emoji = text.substring(index + 1, emojiEnd);
                     int size = QuestEditorEmojis.glyphSize();
-                    graphics.blit(QuestEditorEmojis.texture(emoji), x, y, 0, 0, size, size, 16, 16);
+                    QuestEditorEmojis.render(graphics, emoji, x, y, size);
                 }
                 x += QuestEditorEmojis.glyphSize();
                 index = emojiEnd;
@@ -159,6 +163,6 @@ public final class QuestStickerTextRenderer {
         };
     }
 
-    private record Metrics(int width, int height) {
+    public record Metrics(int width, int height) {
     }
 }

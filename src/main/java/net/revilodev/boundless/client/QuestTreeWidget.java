@@ -16,6 +16,7 @@ import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
 import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
 import net.revilodev.boundless.client.editor.QuestStickerTextRenderer;
+import net.revilodev.boundless.client.editor.QuestTreeConnectorRouting;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public final class QuestTreeWidget extends AbstractWidget {
     private final Minecraft minecraft = Minecraft.getInstance();
     private final Consumer<QuestData.Quest> onQuestSelected;
     private List<QuestData.Quest> quests = List.of();
+    private List<RenderedConnector> renderedConnectors = List.of();
     private List<QuestData.Sticker> stickers = List.of();
     private float zoom = 1f;
     private float panX;
@@ -54,6 +56,7 @@ public final class QuestTreeWidget extends AbstractWidget {
     private boolean tooltipSuppressed;
     private String viewKey = "all";
     private boolean viewInitialized;
+    private boolean centreWhenQuestsLoad;
     private final Map<String, QuestState> questStates = new HashMap<>();
     private long questStateTick = Long.MIN_VALUE;
 
@@ -65,8 +68,19 @@ public final class QuestTreeWidget extends AbstractWidget {
     // update the visible quest nodes
     public void setQuests(List<QuestData.Quest> quests) {
         List<QuestData.Quest> source = quests == null ? List.of() : quests;
-        if (this.quests.equals(source)) return;
+        if (this.quests.equals(source)) {
+            if (centreWhenQuestsLoad && !this.quests.isEmpty()) {
+                centreWhenQuestsLoad = false;
+                centreView();
+            }
+            return;
+        }
         this.quests = List.copyOf(source);
+        rebuildConnectorCache();
+        if (centreWhenQuestsLoad && !this.quests.isEmpty()) {
+            centreWhenQuestsLoad = false;
+            centreView();
+        }
         invalidateQuestStates();
     }
 
@@ -80,10 +94,12 @@ public final class QuestTreeWidget extends AbstractWidget {
             zoom = 1f;
             panX = 0f;
             panY = 0f;
+            centreWhenQuestsLoad = true;
         } else {
             zoom = saved.zoom;
             panX = saved.panX;
             panY = saved.panY;
+            centreWhenQuestsLoad = false;
         }
         viewInitialized = true;
     }
@@ -149,21 +165,39 @@ public final class QuestTreeWidget extends AbstractWidget {
     }
 
     private void renderConnectors(GuiGraphics gg) {
+        for (RenderedConnector connector : renderedConnectors) {
+            if (!isQuestShown(connector.quest) || !isQuestShown(connector.dependency)) continue;
+            boolean highlighted = selectedQuestId.equals(connector.quest.id)
+                    || selectedQuestId.equals(connector.dependency.id);
+            drawConnector(gg, connector.connector, connector.incompatible, highlighted);
+        }
+    }
+
+    private void rebuildConnectorCache() {
+        Map<String, QuestData.Quest> byId = new HashMap<>();
+        List<QuestTreeConnectorRouting.Node> nodes = new ArrayList<>();
         for (QuestData.Quest quest : quests) {
-            if (!isQuestShown(quest)) continue;
+            if (quest == null || quest.id == null || quest.id.isBlank()) continue;
+            byId.put(quest.id, quest);
+            nodes.add(new QuestTreeConnectorRouting.Node(quest.id, nodeX(quest), nodeY(quest)));
+        }
+        List<QuestTreeConnectorRouting.Edge> edges = new ArrayList<>();
+        for (QuestData.Quest quest : quests) {
+            if (quest == null || quest.id == null || quest.id.isBlank()) continue;
             for (String dependencyId : quest.dependencies) {
-                QuestData.Quest dependency = QuestData.byId(dependencyId).orElse(null);
-                if (dependency == null || !isQuestShown(dependency)) continue;
-                int x1 = nodeX(dependency) + NODE_SIZE / 2;
-                int y1 = nodeY(dependency) + NODE_SIZE / 2;
-                int x2 = nodeX(quest) + NODE_SIZE / 2;
-                int y2 = nodeY(quest) + NODE_SIZE / 2;
-                boolean highlighted = isComplete(dependency)
-                        || selectedQuestId.equals(quest.id) || selectedQuestId.equals(dependencyId);
-                drawConnector(gg, connector(x1, y1, x2, y2),
-                        quest.incompatibleDependencies.contains(dependencyId), highlighted);
+                if (byId.containsKey(dependencyId)) edges.add(new QuestTreeConnectorRouting.Edge(dependencyId, quest.id));
             }
         }
+        List<RenderedConnector> connectors = new ArrayList<>();
+        for (QuestTreeConnectorRouting.RoutedEdge routed : QuestTreeConnectorRouting.route(nodes, edges)) {
+            QuestData.Quest dependency = byId.get(routed.edge().fromId());
+            QuestData.Quest quest = byId.get(routed.edge().toId());
+            if (dependency == null || quest == null) continue;
+            List<Point> points = routed.points().stream().map(point -> new Point(point.x(), point.y())).toList();
+            connectors.add(new RenderedConnector(dependency, quest, new Connector(points),
+                    quest.incompatibleDependencies.contains(dependency.id)));
+        }
+        renderedConnectors = List.copyOf(connectors);
     }
 
     private void renderNodes(GuiGraphics gg, QuestData.Quest hovered) {
@@ -247,16 +281,6 @@ public final class QuestTreeWidget extends AbstractWidget {
         int x = getX() + width - 31;
         int y = getY() + 2;
         return mouseX >= x && mouseX <= x + 29 && mouseY >= y && mouseY <= y + 10;
-    }
-
-    private Connector connector(int x1, int y1, int x2, int y2) {
-        int dx = x2 - x1;
-        int dy = y2 - y1;
-        List<Point> points = new ArrayList<>();
-        points.add(new Point(x1, y1));
-        if (dx != 0 && dy != 0 && !isDiagonal(dx, dy)) points.add(new Point(x2, y1));
-        points.add(new Point(x2, y2));
-        return new Connector(List.copyOf(points));
     }
 
     private void drawConnector(GuiGraphics gg, Connector connector, boolean incompatible, boolean highlighted) {
@@ -417,11 +441,6 @@ public final class QuestTreeWidget extends AbstractWidget {
         return kind + " " + id;
     }
 
-    private static boolean isDiagonal(int dx, int dy) {
-        int longest = Math.max(Math.abs(dx), Math.abs(dy));
-        return Math.abs(Math.abs(dx) - Math.abs(dy)) <= Math.max(12, longest / 5);
-    }
-
     private QuestData.Quest questAt(double mouseX, double mouseY) {
         double canvasX = canvasX(mouseX);
         double canvasY = canvasY(mouseY);
@@ -447,6 +466,10 @@ public final class QuestTreeWidget extends AbstractWidget {
     }
 
     private record Connector(List<Point> points) {
+    }
+
+    private record RenderedConnector(QuestData.Quest dependency, QuestData.Quest quest, Connector connector,
+                                     boolean incompatible) {
     }
 
     private record ViewState(float zoom, float panX, float panY) {

@@ -487,6 +487,8 @@ public final class QuestEditorModels {
 
         public float leftScroll = 0f;
 
+        public QuestEditorTreeWidget.ViewState treeView;
+
         public String statusMessage = "";
 
         public int statusColor = 0xA0A0A0;

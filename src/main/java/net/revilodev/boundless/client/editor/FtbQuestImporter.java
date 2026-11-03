@@ -415,6 +415,8 @@ public final class FtbQuestImporter {
             category.addProperty("layout", "tree");
             category.addProperty("background_darkening", false);
             category.addProperty("background_darkening_opacity", DEFAULT_OPACITY_PERCENT / 100f);
+            JsonObject translations = categoryTranslations(chapter);
+            if (!translations.isEmpty()) category.add("translations", translations);
             QuestPackStorage.writeJsonAtomically(GSON, category,
                     pack.categoriesDir.resolve(chapter.categoryId + ".json"));
         }
@@ -850,6 +852,20 @@ public final class FtbQuestImporter {
             return translations;
         }
 
+        private JsonObject categoryTranslations(ChapterDraft chapter) {
+            JsonObject translations = new JsonObject();
+            String directTitleKey = stringValue(chapter.tag, "title");
+            for (String locale : languages.keySet()) {
+                String translatedName = localized(locale,
+                        List.of("chapter." + chapter.ftbId + ".title", directTitleKey));
+                if (translatedName.isBlank() || translatedName.equals(chapter.title)) continue;
+                JsonObject translation = new JsonObject();
+                translation.addProperty("name", translatedName);
+                translations.add(locale, translation);
+            }
+            return translations;
+        }
+
         private String localized(List<String> keys, String... fallbacks) {
             return localized("en_us", keys, fallbacks);
         }
@@ -894,13 +910,28 @@ public final class FtbQuestImporter {
         private List<String> localizedLinesForLocale(String locale, String... keys) {
             Map<String, List<String>> language = languages.getOrDefault(locale, Map.of());
             Map<String, List<String>> lowercaseLanguage = lowercaseLanguages.getOrDefault(locale, Map.of());
-            for (String key : keys) {
+            for (String rawKey : keys) {
+                String key = translationKey(rawKey);
+                if (key.isBlank()) continue;
                 List<String> direct = language.get(key);
                 if (direct != null) return direct;
                 direct = lowercaseLanguage.get(key.toLowerCase(Locale.ROOT));
                 if (direct != null) return direct;
             }
             return List.of();
+        }
+
+        private String translationKey(String raw) {
+            if (raw == null) return "";
+            String key = raw.trim();
+            if (key.length() > 2 && key.charAt(0) == '{' && key.charAt(key.length() - 1) == '}') {
+                String inner = key.substring(1, key.length() - 1).trim();
+                if (!inner.isBlank() && inner.chars().allMatch(character -> Character.isLetterOrDigit(character)
+                        || character == '.' || character == '_' || character == '-' || character == ':' || character == '/')) {
+                    return inner;
+                }
+            }
+            return key;
         }
 
         private String formatText(String raw) {
