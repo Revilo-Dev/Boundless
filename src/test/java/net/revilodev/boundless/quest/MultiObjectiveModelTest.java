@@ -60,4 +60,18 @@ final class MultiObjectiveModelTest {
 
         assertEquals(QuestTracker.itemProgressKey(quest, first), QuestTracker.itemProgressKey(quest, second));
     }
+
+    @Test
+    void malformedObjectivesFailClosed() {
+        assertFalse(QuestTracker.isSupportedTarget(null));
+        assertFalse(QuestTracker.isSupportedTarget(new QuestData.Target("broken", "missing:id", 1)));
+        assertTrue(QuestTracker.isSupportedTarget(new QuestData.Target("item", "minecraft:stone", 1)));
+    }
+
+    @Test
+    void storedCompletionCannotBypassDependencyLock() {
+        assertFalse(QuestTracker.isStoredCompletionRedeemable(QuestTracker.Status.COMPLETED, false));
+        assertTrue(QuestTracker.isStoredCompletionRedeemable(QuestTracker.Status.COMPLETED, true));
+        assertFalse(QuestTracker.isStoredCompletionRedeemable(QuestTracker.Status.INCOMPLETE, true));
+    }
 }

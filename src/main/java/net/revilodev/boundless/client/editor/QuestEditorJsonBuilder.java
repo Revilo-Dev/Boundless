@@ -143,6 +143,11 @@ public final class QuestEditorJsonBuilder {
         return obj;
     }
 
+    public static void preserveCategoryStickers(JsonObject category, JsonObject existing) {
+        if (category == null || existing == null || !existing.has("stickers") || !existing.get("stickers").isJsonArray()) return;
+        category.add("stickers", existing.getAsJsonArray("stickers").deepCopy());
+    }
+
     private static void addTranslations(JsonObject obj, Map<String, String> names, Map<String, String> descriptions) {
         Set<String> locales = new LinkedHashSet<>();
         if (names != null) locales.addAll(names.keySet());

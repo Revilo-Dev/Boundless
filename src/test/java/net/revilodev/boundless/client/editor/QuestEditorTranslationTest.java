@@ -1,6 +1,7 @@
 package net.revilodev.boundless.client.editor;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
 import net.revilodev.boundless.client.editor.QuestEditorJsonBuilder.QuestBuildFields;
 import net.revilodev.boundless.client.editor.QuestEditorModels.CategoryData;
 import net.revilodev.boundless.client.editor.QuestEditorModels.QuestEntryData;
@@ -15,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class QuestEditorTranslationTest {
     @TempDir
@@ -58,6 +60,26 @@ final class QuestEditorTranslationTest {
 
         assertEquals("Glowna", loadedCategory.nameTranslations.get("pl_pl"));
         assertEquals("Poczatek", loadedSubCategory.nameTranslations.get("pl_pl"));
+    }
+
+    @Test
+    void categoryRebuildPreservesStickers() {
+        JsonObject existing = new JsonObject();
+        JsonArray stickers = new JsonArray();
+        JsonObject sticker = new JsonObject();
+        sticker.addProperty("type", "text");
+        sticker.addProperty("value", "Keep me");
+        stickers.add(sticker);
+        existing.add("stickers", stickers);
+        JsonObject rebuilt = QuestEditorJsonBuilder.buildCategory("main", "Main", Map.of(),
+                "", 0, "", false, "", 0.5f, false, 0.45f,
+                message -> { throw new AssertionError(message); });
+
+        QuestEditorJsonBuilder.preserveCategoryStickers(rebuilt, existing);
+        existing.getAsJsonArray("stickers").get(0).getAsJsonObject().addProperty("value", "Changed");
+
+        assertTrue(rebuilt.has("stickers"));
+        assertEquals("Keep me", rebuilt.getAsJsonArray("stickers").get(0).getAsJsonObject().get("value").getAsString());
     }
 
     @Test

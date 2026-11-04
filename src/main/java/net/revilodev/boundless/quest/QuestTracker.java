@@ -354,12 +354,15 @@ public final class QuestTracker {
     }
 
     public static void setServerStatus(ServerPlayer player, String questId, Status st) {
+        Status previous = getServerStatus(player, questId);
         QuestProgressState data = QuestProgressState.get(player.serverLevel());
         if (st == null || st == Status.INCOMPLETE) {
             data.set(player.getUUID(), questId, null);
         } else {
             data.set(player.getUUID(), questId, st.name());
         }
+        Status current = st == null ? Status.INCOMPLETE : st;
+        if (previous != current) markServerStateDirty(player);
     }
 
     public static Status getStatus(QuestData.Quest q, Player player) {
@@ -573,7 +576,7 @@ public final class QuestTracker {
 
     private static boolean evaluateTarget(QuestData.Quest q, QuestData.Target t, Player player, boolean trackProgress) {
         // Common dispatcher for every target type in quest JSON.
-        if (t == null || player == null) return true;
+        if (player == null || !isSupportedTarget(t)) return false;
 
         if (isSubmitTarget(q, t)) {
             return getAcceptedItemCountInInventory(t, player) >= t.count;
@@ -633,7 +636,17 @@ public final class QuestTracker {
             return safeNormalizeFieldInput(value).equals(safeNormalizeFieldInput(t.id));
         }
 
-        return true;
+        return false;
+    }
+
+    public static boolean isSupportedTarget(QuestData.Target target) {
+        return target != null && (target.isItem() || target.isSubmit() || target.isEntity() || target.isEffect()
+                || target.isAdvancement() || target.isObserve() || target.isBiome() || target.isDimension()
+                || target.isCheck() || target.isXp() || target.isLevelUpLevel() || target.isFieldInput());
+    }
+
+    public static boolean isStoredCompletionRedeemable(Status status, boolean dependenciesMet) {
+        return dependenciesMet && status == Status.COMPLETED;
     }
 
     public static boolean isTargetSatisfied(QuestData.Quest q, QuestData.Target t, Player player) {
@@ -669,11 +682,12 @@ public final class QuestTracker {
 
     public static boolean isReady(QuestData.Quest q, Player player) {
         if (player == null || q == null || q.completion == null) return false;
-        if (!dependenciesMet(q, player)) return false;
-        if (getStatus(q, player) == Status.COMPLETED) return true;
+        boolean dependenciesReady = dependenciesMet(q, player);
+        if (!dependenciesReady) return false;
+        if (isStoredCompletionRedeemable(getStatus(q, player), dependenciesReady)) return true;
 
         for (QuestData.Target t : q.completion.targets) {
-            if (t == null) continue;
+            if (t == null) return false;
             if (!evaluateTarget(q, t, player, false)) return false;
         }
 
@@ -683,11 +697,12 @@ public final class QuestTracker {
     public static boolean updateProgressAndCheckReady(QuestData.Quest q, Player player) {
         // Tracking is only done when a player action may change a quest.
         if (player == null || q == null || q.completion == null) return false;
-        if (!dependenciesMet(q, player)) return false;
-        if (getStatus(q, player) == Status.COMPLETED) return true;
+        boolean dependenciesReady = dependenciesMet(q, player);
+        if (!dependenciesReady) return false;
+        if (isStoredCompletionRedeemable(getStatus(q, player), dependenciesReady)) return true;
 
         for (QuestData.Target t : q.completion.targets) {
-            if (t == null) continue;
+            if (t == null) return false;
             if (!evaluateTarget(q, t, player, true)) return false;
         }
 
