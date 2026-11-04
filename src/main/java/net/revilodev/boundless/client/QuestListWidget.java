@@ -95,6 +95,18 @@ public final class QuestListWidget extends AbstractWidget {
         invalidateRowsCache();
     }
 
+    public void beginQuestLoad() {
+        quests.clear();
+        scrollY = 0;
+        invalidateRowsCache();
+    }
+
+    public void appendQuests(List<QuestData.Quest> loadedQuests) {
+        if (loadedQuests == null || loadedQuests.isEmpty()) return;
+        quests.addAll(loadedQuests);
+        invalidateRowsCache();
+    }
+
     // filter the list to one category or all
     public void setCategory(String cat) {
         category = cat == null ? "all" : cat;

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "soulsweapons:item/moonknight_spawn_egg"
-  }
-}

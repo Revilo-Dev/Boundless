@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "melongolem:item/glistering_melon_golem_spawn_egg"
-  }
-}

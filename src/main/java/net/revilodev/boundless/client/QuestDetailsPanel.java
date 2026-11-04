@@ -57,15 +57,15 @@ public final class QuestDetailsPanel extends AbstractWidget {
     private static final Pattern ITEM_ID_PATTERN = Pattern.compile("\\b[a-z0-9_.-]+:[a-z0-9_./-]+\\b");
 
     private static final ResourceLocation TEX_PIN =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pin.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/pin.png");
     private static final ResourceLocation TEX_PIN_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pin-hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/pin-hovered.png");
     private static final ResourceLocation TEX_UNPIN =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/unpin.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/unpin.png");
     private static final ResourceLocation TEX_UNPIN_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/unpin-hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/unpin-hovered.png");
     private static final ResourceLocation TEX_SCROLL =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/scroll-icon.png");
     private static final ResourceLocation TEX_EDIT =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/edit.png");
     private static final ResourceLocation TEX_EDIT_HOVER =
@@ -1157,8 +1157,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         boolean rej = status == QuestTracker.Status.REJECTED;
         boolean done = red || rej;
         boolean canAcknowledge = depsMet && !done && QuestTracker.canAcknowledge(quest, mc.player);
-        boolean ready = depsMet && !done
-                && (status == QuestTracker.Status.COMPLETED || QuestTracker.isReady(quest, mc.player));
+        boolean ready = !done && QuestTracker.isRedeemable(quest, mc.player);
         boolean canUndoReject = rej && quest.optional;
 
         complete.setUndoReject(canUndoReject);
@@ -2336,9 +2335,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
     // return from quest details to the quest list
     private static final class BackButton extends AbstractButton {
         private static final ResourceLocation TEX_NORMAL =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_button.png");
+                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_back.png");
         private static final ResourceLocation TEX_HOVER =
-                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_back_highlighted.png");
+                ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_back_hovered.png");
 
         private final Runnable onPress;
 

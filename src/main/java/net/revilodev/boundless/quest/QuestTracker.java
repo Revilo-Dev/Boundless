@@ -124,6 +124,10 @@ public final class QuestTracker {
         SERVER_DIRTY_MASKS.merge(player.getUUID(), DIRTY_ALL, (a, b) -> a | b);
     }
 
+    public static boolean hasPendingServerEvaluation(ServerPlayer player) {
+        return player != null && SERVER_QUEST_SCAN_CURSOR.containsKey(player.getUUID());
+    }
+
     public static void clearServerRuntimeState(ServerPlayer player) {
         if (player == null) return;
         UUID playerId = player.getUUID();
@@ -425,10 +429,10 @@ public final class QuestTracker {
             }
             if (!hasEverClaimed(dep, player)) return false;
         }
-        Collection<QuestData.Quest> quests = player instanceof ServerPlayer serverPlayer
-                ? QuestData.allServer(serverPlayer.server)
-                : QuestData.all();
-        for (QuestData.Quest other : quests) {
+        List<QuestData.Quest> incompatibleQuests = player instanceof ServerPlayer serverPlayer
+                ? QuestData.incompatibleQuestsServer(serverPlayer.server, q.id)
+                : QuestData.incompatibleQuests(q.id);
+        for (QuestData.Quest other : incompatibleQuests) {
             if (other == q || !other.incompatibleDependencies.contains(q.id)) continue;
             if (isCompletedOrClaimed(other, player)) return false;
         }
@@ -472,7 +476,10 @@ public final class QuestTracker {
         QuestData.loadClient(false);
         for (QuestData.Quest q : QuestData.all()) {
             if (q == null) continue;
-            if (getStatus(q, player) == Status.COMPLETED) return true;
+            Status status = getStatus(q, player);
+            if (status != Status.COMPLETED) continue;
+            boolean dependenciesReady = dependenciesMet(q, player);
+            if (isStoredCompletionRedeemable(status, dependenciesReady)) return true;
         }
         return false;
     }
@@ -649,6 +656,10 @@ public final class QuestTracker {
         return dependenciesMet && status == Status.COMPLETED;
     }
 
+    public static boolean shouldShowCompletionToast(Status previous, boolean requirementsMet, boolean dependenciesMet) {
+        return previous == Status.INCOMPLETE && requirementsMet && dependenciesMet;
+    }
+
     public static boolean isTargetSatisfied(QuestData.Quest q, QuestData.Target t, Player player) {
         return evaluateTarget(q, t, player, false);
     }
@@ -691,6 +702,17 @@ public final class QuestTracker {
             if (!evaluateTarget(q, t, player, false)) return false;
         }
 
+        return true;
+    }
+
+    public static boolean isRedeemable(QuestData.Quest q, Player player) {
+        if (player == null || q == null || q.completion == null) return false;
+        boolean dependenciesReady = dependenciesMet(q, player);
+        if (!dependenciesReady) return false;
+        if (isStoredCompletionRedeemable(getStatus(q, player), true)) return true;
+        for (QuestData.Target target : q.completion.targets) {
+            if (target == null || !evaluateTarget(q, target, player, false)) return false;
+        }
         return true;
     }
 
@@ -1495,8 +1517,9 @@ public final class QuestTracker {
             boolean hasItemTargets = hasItemOrSubmitTargets(q);
 
             if (ready && cur == Status.INCOMPLETE) {
+                boolean showToast = shouldShowCompletionToast(cur, true, dependenciesMet(q, player));
                 clientSetStatus(q.id, Status.COMPLETED);
-                sendToastLocal(q.id);
+                if (showToast) sendToastLocal(q.id);
                 continue;
             }
 
@@ -1538,7 +1561,7 @@ public final class QuestTracker {
         }
 
         int start = Math.floorMod(SERVER_QUEST_SCAN_CURSOR.getOrDefault(sp.getUUID(), 0), total);
-        int batch = Math.min(SERVER_QUEST_SCAN_BATCH, total);
+        int batch = Math.min(SERVER_QUEST_SCAN_BATCH, total - start);
 
         EvaluationCache cache = new EvaluationCache(sp.getUUID());
         EVALUATION_CACHE.set(cache);
@@ -1551,7 +1574,7 @@ public final class QuestTracker {
                         shouldUseServerObserveDetection(sp), contextChanged, contextChanged);
             }
             for (int processed = 0; processed < batch; processed++) {
-                QuestData.Quest q = quests.get((start + processed) % total);
+                QuestData.Quest q = quests.get(start + processed);
                 if (q == null || !questNeedsEvaluationForMask(q, dirtyMask)) continue;
                 if (Config.isCategoryDisabled(q.category)) continue;
 
@@ -1581,10 +1604,10 @@ public final class QuestTracker {
         } finally {
             EVALUATION_CACHE.remove();
         }
-        int next = (start + batch) % total;
-        if (batch < total) {
-            // Keep the dirty state until every quest has been checked. The previous code
-            // defined this batch limit but accidentally scanned the full quest list anyway.
+        int next = start + batch;
+        boolean pending = next < total;
+        if (pending) {
+            // keep the dirty state until every quest has been checked
             SERVER_QUEST_SCAN_CURSOR.put(sp.getUUID(), next);
             SERVER_DIRTY_MASKS.merge(sp.getUUID(), dirtyMask, (a, b) -> a | b);
         } else {
@@ -1595,7 +1618,7 @@ public final class QuestTracker {
             long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000L;
             BoundlessDebug.rateLimited("quest-evaluation:" + sp.getUUID(), 5_000L,
                     "player={}, quests={}/{}, dirtyMask={}, elapsed={}ms, pending={}",
-                    sp.getGameProfile().getName(), batch, total, dirtyMask, elapsedMillis, batch < total);
+                    sp.getGameProfile().getName(), batch, total, dirtyMask, elapsedMillis, pending);
         }
     }
 

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "luminous_nether:item/guzzleghast_spawn_egg"
-  }
-}

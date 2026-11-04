@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "piglinproliferation:item/piglin_alchemist_spawn_egg"
-  }
-}

@@ -39,12 +39,22 @@ public final class QuestSettingsScreen extends Screen {
 
     private static final ResourceLocation ROW_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_widget.png");
-    private static final ResourceLocation BTN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
-    private static final ResourceLocation BTN_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
-    private static final ResourceLocation BTN_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
+    private static final ResourceLocation VANILLA_BUTTON_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button");
+    private static final ResourceLocation VANILLA_BUTTON_HOVER_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_highlighted");
+    private static final ResourceLocation VANILLA_BUTTON_DISABLED_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_disabled");
+    private static final ResourceLocation TOGGLE_OFF_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off.png");
+    private static final ResourceLocation TOGGLE_OFF_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off-hovered.png");
+    private static final ResourceLocation TOGGLE_ON_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on.png");
+    private static final ResourceLocation TOGGLE_ON_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on-hovered.png");
+    private static final int TOGGLE_WIDTH = 20;
+    private static final int TOGGLE_HEIGHT = 11;
     private static final ResourceLocation BACK_TAB_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
     private static final ResourceLocation BACK_TAB_HOVER_TEX =
@@ -56,13 +66,13 @@ public final class QuestSettingsScreen extends Screen {
     private static final ResourceLocation TAB_SELECTED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
     private static final ResourceLocation CONFIG_TAB_ALL_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/search.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/search.png");
     private static final ResourceLocation CONFIG_TAB_STYLE_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/style-icon.png");
     private static final ResourceLocation CONFIG_TAB_UI_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/ui-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/ui.png");
     private static final ResourceLocation CONFIG_TAB_FEATURES_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/features-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/features.png");
     private static final ResourceLocation SCOPE_TAB_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab.png");
     private static final ResourceLocation SCOPE_TAB_HOVER_TEX =
@@ -74,11 +84,11 @@ public final class QuestSettingsScreen extends Screen {
     private static final ResourceLocation SERVER_SCOPE_ICON =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/server.png");
     private static final ResourceLocation MENU_CONFIG_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/style-icon.png");
     private static final ResourceLocation MENU_EDITOR_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/editor-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/editor-icon.png");
     private static final ResourceLocation MENU_DISCORD_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/discord-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/discord.png");
     private static final ResourceLocation DEBUG_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/debug.png");
     private static final ResourceLocation UNDEBUG_TEX =
@@ -236,7 +246,10 @@ public final class QuestSettingsScreen extends Screen {
     private boolean disableQuestBook;
     private boolean spawnWithQuestBook;
     private ConfigTab configTab = ConfigTab.ALL;
-    private ConfigScope configScope = ConfigScope.ALL;
+    private boolean showClientSettings = true;
+    private boolean showServerSettings = true;
+    private boolean configDirty;
+    private boolean serverConfigDirty;
     private boolean operatorAccess;
     private final QuestEditorPopupMenus popupMenus = new QuestEditorPopupMenus();
 
@@ -281,7 +294,13 @@ public final class QuestSettingsScreen extends Screen {
         if (operatorAccess == nextOperatorAccess) return;
         operatorAccess = nextOperatorAccess;
         if (menuList != null) menuList.setQuests(buildMenuQuests());
-        if (!operatorAccess) configScope = ConfigScope.CLIENT;
+        if (operatorAccess) {
+            showClientSettings = true;
+            showServerSettings = true;
+        } else {
+            showClientSettings = true;
+            showServerSettings = false;
+        }
         setPage(page);
     }
 
@@ -560,6 +579,7 @@ public final class QuestSettingsScreen extends Screen {
         field.setResponder(value -> {
             if (widgetColor) questWidgetTextColor = value;
             else descriptionTextColor = value;
+            if (field.isFocused()) configDirty = true;
             updateColorFieldText(field, value, widgetColor ? "FFFFFF" : "CFCFCF");
         });
     }
@@ -659,7 +679,10 @@ public final class QuestSettingsScreen extends Screen {
             button.active = config;
         }
         boolean showScopeFilters = config && canManageServerSettings();
-        if (!showScopeFilters) configScope = ConfigScope.CLIENT;
+        if (!canManageServerSettings()) {
+            showClientSettings = true;
+            showServerSettings = false;
+        }
         for (ConfigScopeButton button : configScopeButtons) {
             button.visible = showScopeFilters;
             button.active = showScopeFilters;
@@ -806,6 +829,7 @@ public final class QuestSettingsScreen extends Screen {
         control.field.setFilter(value -> value.matches("#?[0-9a-fA-F]{0,6}"));
         control.field.setResponder(value -> {
             control.value = value;
+            if (control.field.isFocused()) configDirty = true;
             updateColorFieldText(control.field, value, control.fallback);
         });
         detailColorControls.add(control);
@@ -882,6 +906,7 @@ public final class QuestSettingsScreen extends Screen {
     private void applyPreferredLanguage(DropdownMenuTarget target, String language) {
         if (target != DropdownMenuTarget.PREFERRED_LANGUAGE) return;
         preferredLanguage = normalizePreferredLanguage(language);
+        configDirty = true;
         saveConfig(false);
         applyConfigScrollLayout();
     }
@@ -891,6 +916,14 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private void saveConfig(boolean close) {
+        if (!configDirty) {
+            if (close) Minecraft.getInstance().setScreen(parent);
+            return;
+        }
+        boolean languageChanged = Config.multiLanguageQuests() != multiLanguageQuests
+                || !Config.preferredLanguage().equals(normalizePreferredLanguage(preferredLanguage));
+        boolean syncServer = serverConfigDirty && canManageServerSettings();
+
         // These two options would otherwise hide every inventory way to open the book.
         if (disableQuestBook && hideQuestBookInInventory) {
             hideQuestBookInInventory = false;
@@ -934,10 +967,12 @@ public final class QuestSettingsScreen extends Screen {
             Config.DISABLE_QUEST_BOOK.set(disableQuestBook);
             Config.SPAWN_WITH_QUEST_BOOK.set(spawnWithQuestBook);
         }
-        Config.SPEC.save();
-        if (canManageServerSettings()) sendConfigToServer();
-        QuestData.relocalizeClientTranslations();
+        Config.saveLater();
+        if (syncServer) sendConfigToServer();
+        if (languageChanged) QuestData.relocalizeClientTranslations();
         QuestPanelClient.applyConfigChanges();
+        configDirty = false;
+        serverConfigDirty = false;
         if (close) {
             Minecraft.getInstance().setScreen(parent);
         }
@@ -980,6 +1015,8 @@ public final class QuestSettingsScreen extends Screen {
 
     private void resetCurrentConfigTab() {
         resetConfigTab(configTab);
+        configDirty = true;
+        serverConfigDirty = canManageServerSettings();
         saveConfig(false);
         refreshConfigFields();
         applyConfigScrollLayout();
@@ -1315,8 +1352,8 @@ public final class QuestSettingsScreen extends Screen {
         List<ConfigRow> out = new ArrayList<>();
         for (ConfigRow row : configRows) {
             if (row.serverOnly && !canManageServerSettings()) continue;
-            if (configScope == ConfigScope.CLIENT && row.serverOnly) continue;
-            if (configScope == ConfigScope.SERVER && !row.serverOnly) continue;
+            if (row.serverOnly && !showServerSettings) continue;
+            if (!row.serverOnly && !showClientSettings) continue;
             if (configTab != ConfigTab.ALL && row.group != configTab) continue;
             if (configTab == ConfigTab.ALL && !configSearchQuery.isBlank() && !row.matches(configSearchQuery)) continue;
             out.add(row);
@@ -1524,7 +1561,6 @@ public final class QuestSettingsScreen extends Screen {
     }
 
     private enum ConfigScope {
-        ALL,
         CLIENT,
         SERVER
     }
@@ -1543,14 +1579,20 @@ public final class QuestSettingsScreen extends Screen {
 
         @Override
         public void onPress() {
-            configScope = configScope == scope ? ConfigScope.ALL : scope;
+            if (scope == ConfigScope.CLIENT) {
+                if (showClientSettings && !showServerSettings) return;
+                showClientSettings = !showClientSettings;
+            } else {
+                if (showServerSettings && !showClientSettings) return;
+                showServerSettings = !showServerSettings;
+            }
             configScrollY = 0f;
             applyConfigScrollLayout();
         }
 
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-            boolean selected = configScope == scope;
+            boolean selected = scope == ConfigScope.CLIENT ? showClientSettings : showServerSettings;
             boolean hovered = isMouseOver(mouseX, mouseY);
             ResourceLocation texture = selected ? SCOPE_TAB_SELECTED_TEX
                     : hovered ? SCOPE_TAB_HOVER_TEX : SCOPE_TAB_TEX;
@@ -1633,6 +1675,8 @@ public final class QuestSettingsScreen extends Screen {
             // Most rows save straight away; text fields save through their responder.
             if (onPress != null) {
                 onPress.run();
+                configDirty = true;
+                if (serverOnly) serverConfigDirty = true;
                 saveConfig(false);
                 applyConfigScrollLayout();
             }
@@ -1649,10 +1693,11 @@ public final class QuestSettingsScreen extends Screen {
             var font = Minecraft.getInstance().font;
             String valueText = value == null ? "" : value.get();
             if (valueText == null) valueText = "";
+            Boolean toggleState = toggleState(valueText);
 
             int labelX = getX() + 7;
             float valueScale = 0.72f;
-            int valueW = (int) (font.width(valueText) * valueScale);
+            int valueW = toggleState == null ? (int) (font.width(valueText) * valueScale) : TOGGLE_WIDTH;
             int valueX = getX() + this.width - valueW - 5;
 
             String labelText = label;
@@ -1664,7 +1709,16 @@ public final class QuestSettingsScreen extends Screen {
             }
 
             drawScaledString(gg, labelText, 0.82f, labelX, getY() + 5, 0xFFFFFF);
-            drawScaledString(gg, valueText, valueScale, valueX, getY() + 7, 0xA0C8FF);
+            if (toggleState == null) {
+                drawScaledString(gg, valueText, valueScale, valueX, getY() + 7, 0xA0C8FF);
+            } else {
+                ResourceLocation texture = toggleState
+                        ? hovered ? TOGGLE_ON_HOVER_TEX : TOGGLE_ON_TEX
+                        : hovered ? TOGGLE_OFF_HOVER_TEX : TOGGLE_OFF_TEX;
+                int toggleY = getY() + (height - TOGGLE_HEIGHT) / 2;
+                gg.blit(texture, valueX, toggleY, 0, 0,
+                        TOGGLE_WIDTH, TOGGLE_HEIGHT, TOGGLE_WIDTH, TOGGLE_HEIGHT);
+            }
 
             if (hovered) {
                 List<Component> tooltip = new ArrayList<>();
@@ -1683,6 +1737,12 @@ public final class QuestSettingsScreen extends Screen {
             float inv = 1f / scale;
             gg.drawString(Minecraft.getInstance().font, text, (int) (x * inv), (int) (y * inv), color, false);
             gg.pose().popPose();
+        }
+
+        private Boolean toggleState(String valueText) {
+            if (valueText.equals(trs("state.on")) || valueText.equals(trs("state.enabled"))) return true;
+            if (valueText.equals(trs("state.off")) || valueText.equals(trs("state.disabled"))) return false;
+            return null;
         }
 
         @Override
@@ -1778,7 +1838,7 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         public void onPress() {
             Config.DEV_MODE.set(!Config.devMode());
-            Config.SPEC.save();
+            Config.saveLater();
         }
 
         @Override
@@ -1828,8 +1888,9 @@ public final class QuestSettingsScreen extends Screen {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
-            ResourceLocation tex = !this.active ? BTN_TEX_DISABLED : (hovered ? BTN_TEX_HOVER : BTN_TEX);
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            ResourceLocation sprite = !this.active ? VANILLA_BUTTON_DISABLED_SPRITE
+                    : hovered ? VANILLA_BUTTON_HOVER_SPRITE : VANILLA_BUTTON_SPRITE;
+            gg.blitSprite(sprite, getX(), getY(), this.width, this.height);
 
             var font = Minecraft.getInstance().font;
             int textW = font.width(getMessage());

@@ -142,9 +142,9 @@ public abstract class QuestEditor extends Screen {
     protected static final ResourceLocation DUPLICATE_TEX_HOVER =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/duplicate_button-hovered.png");
     protected static final ResourceLocation DELETE_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject.png");
     protected static final ResourceLocation DELETE_ENABLED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject_hovered.png");
     protected static final ResourceLocation MOVE_NODE_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/move.png");
     protected static final ResourceLocation CONNECT_NODE_TEX =
@@ -161,9 +161,9 @@ public abstract class QuestEditor extends Screen {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/icon/exclamation.png");
     protected static final ResourceLocation FTB_IMPORT_WARNING_TEX = UNSAVED_EXCLAMATION_TEX;
     protected static final ResourceLocation BUILTIN_PACK_ENABLED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_confirmation.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on.png");
     protected static final ResourceLocation BUILTIN_PACK_DISABLED_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_reject.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off.png");
     protected static final ResourceLocation ORIGIN_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/origin.png");
     protected static final ResourceLocation ORIGIN_HOVER_TEX =
@@ -732,7 +732,8 @@ public abstract class QuestEditor extends Screen {
         catLayoutSelector.active = false;
         addRenderableWidget(catLayoutSelector);
         categorySubCategorySection = new QuestEditorScreen.CategorySubCategorySection(
-                font, this::openCategorySubCategory, this::createCategorySubCategory);
+                font, this::saveCategorySubCategory, this::deleteCategorySubCategory,
+                this::moveCategorySubCategory);
         categorySubCategorySection.visible = false;
         categorySubCategorySection.active = false;
         addRenderableWidget(categorySubCategorySection);
@@ -1078,24 +1079,76 @@ public abstract class QuestEditor extends Screen {
         return questListIndex().subCategoriesByCategory.getOrDefault(safe(categoryId).trim(), List.of());
     }
 
-    protected void openCategorySubCategory(SubCategoryData subCategory) {
-        if (subCategory == null) return;
-        if (hasUnsavedEditorChanges()) {
-            setError(trs("error.save_before_navigation"));
+    protected void saveCategorySubCategory(SubCategoryData subCategory) {
+        if (!ensureEditorAccess() || currentPack == null || subCategory == null) return;
+        String categoryId = safe(catIdBox.getValue()).trim();
+        if (editingPath == null || categoryId.isBlank()) {
+            setError(trs("error.save_category_before_subcategories"));
             return;
         }
-        selectedEntryId = subCategory.id;
-        showSubCategoryEditor(subCategory, subCategory.path);
+        String id = safe(subCategory.id).trim();
+        if (id.isBlank()) {
+            id = QuestEditorNaming.idFromDisplayName(subCategory.name);
+            if (id.isBlank()) {
+                setError(trs("error.subcategory_name_required"));
+                return;
+            }
+            id = nextAvailableSubCategoryId(id);
+        }
+        int order = subCategory.path == null
+                ? nextSubCategoryOrder(categoryId)
+                : QuestEditorJsonFiles.readOrderFromPath(subCategory.path, 0);
+        JsonObject json = QuestEditorJsonBuilder.buildSubCategory(
+                id, categoryId, subCategory.name, subCategory.nameTranslations,
+                subCategory.icon, order, parseBool(subCategory.defaultOpen, true), this::setError);
+        if (json == null) return;
+        Path target = currentPack.subCategoriesDir.resolve(id + ".json");
+        try {
+            QuestPackStorage.writeJsonAtomically(gson, json, target);
+            subCategory.id = id;
+            subCategory.path = target;
+            stageCurrentPackChange(trs("status.saved_to_staging"));
+            QuestEditorPackFiles.queueBackupPack(currentPack, "saved");
+            categorySubCategorySection.setEntries(categorySubCategories(categoryId));
+            refreshLeftList(true, false);
+        } catch (IOException exception) {
+            setError(trs("error.save_failed", safe(exception.getMessage())));
+        }
     }
 
-    protected void createCategorySubCategory() {
-        if (hasUnsavedEditorChanges()) {
-            setError(trs("error.save_before_navigation"));
-            return;
+    protected void deleteCategorySubCategory(SubCategoryData subCategory) {
+        if (!ensureEditorAccess() || currentPack == null || subCategory == null || subCategory.path == null) return;
+        try {
+            if (Files.deleteIfExists(subCategory.path)) {
+                stageCurrentPackChange(trs("status.deletion_staged"));
+                categorySubCategorySection.setEntries(categorySubCategories(catIdBox.getValue()));
+                refreshLeftList(true, false);
+            }
+        } catch (IOException exception) {
+            setError(trs("error.delete_failed"));
         }
-        SubCategoryData subCategory = new SubCategoryData();
-        subCategory.category = treeCategoryId;
-        showSubCategoryEditor(subCategory, null);
+    }
+
+    protected void moveCategorySubCategory(SubCategoryData subCategory, MoveDirection direction) {
+        if (!ensureEditorAccess() || currentPack == null || subCategory == null || direction == null) return;
+        try {
+            QuestEditorQuestOrdering.moveSubCategoryByOrder(currentPack, gson, subCategory.id, direction);
+            invalidateQuestListIndex();
+            categorySubCategorySection.setEntries(categorySubCategories(catIdBox.getValue()));
+            statusMessage = trs(direction == MoveDirection.UP
+                    ? "status.subcategory_moved_up" : "status.subcategory_moved_down");
+            statusColor = 0xA0FFA0;
+        } catch (IOException exception) {
+            setError(trs("error.reorder_subcategory_failed"));
+        }
+    }
+
+    protected int nextSubCategoryOrder(String categoryId) {
+        int max = -1;
+        for (SubCategoryData entry : categorySubCategories(categoryId)) {
+            max = Math.max(max, parseInt(entry.order, -1));
+        }
+        return max + 1;
     }
 
     // build the pack selection list
@@ -1131,7 +1184,6 @@ public abstract class QuestEditor extends Screen {
     protected List<EditorEntry> buildPackMenuEntries() {
         List<EditorEntry> out = new ArrayList<>();
         out.add(new EditorEntry(ENTRY_CATEGORIES, trs("categories"), "", ""));
-        out.add(new EditorEntry(ENTRY_SUBCATEGORIES, trs("subcategories"), "", ""));
         out.add(new EditorEntry(ENTRY_QUESTS, trs("quests"), "", ""));
         return out;
     }
@@ -1397,7 +1449,7 @@ public abstract class QuestEditor extends Screen {
             boolean next = !Config.enableBuiltinQuestPack();
             if (isSingleplayerAuthoritySession()) {
                 Config.ENABLE_BUILTIN_QUEST_PACK.set(next);
-                Config.SPEC.save();
+                Config.saveLater();
                 QuestEditorPackFiles.reloadLater();
             } else if (!QuestEditorPackFiles.sendPackEnabled("", next, true)) {
                 setError(trs("error.update_questpack_failed"));
@@ -2019,7 +2071,7 @@ public abstract class QuestEditor extends Screen {
             return;
         }
         if (ENTRY_SUBCATEGORIES.equals(entry.id)) {
-            setMode(Mode.SUBCATEGORY_LIST);
+            setMode(Mode.CATEGORY_LIST);
             return;
         }
         if (ENTRY_QUESTS.equals(entry.id)) {
@@ -2269,7 +2321,6 @@ public abstract class QuestEditor extends Screen {
         subDefaultOpenToggle.setState(parseBool(data.defaultOpen, true));
 
         List<FormField> fields = new ArrayList<>();
-        if (Config.showIdField()) fields.add(field(trs("field.id"), subIdBox));
         fields.add(field(trs("field.category_id"), subCategoryBox));
         fields.add(field(trs("field.display"), subNameBox));
         fields.add(field(trs("field.default_open") + " (" + trs("tooltip.default_open") + ")", subDefaultOpenToggle));
@@ -2616,7 +2667,9 @@ public abstract class QuestEditor extends Screen {
     protected void saveSubCategory() {
         // keep subcategory placement stable across edits
         if (!ensureEditorAccess()) return;
-        String id = savedEntryId(editingPath, subIdBox, subNameBox);
+        String id = editingPath == null
+                ? nextAvailableSubCategoryId(QuestEditorNaming.idFromDisplayName(subNameBox.getValue()))
+                : safe(subIdBox.getValue()).trim();
         subIdBox.setValue(id);
         if (id.isBlank()) {
             setError(trs("error.subcategory_id_required"));

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "eidolon:item/spawn_wraith"
-  }
-}

@@ -1,7 +1,11 @@
 package net.revilodev.boundless;
 
-import java.util.List;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.fml.loading.FMLPaths;
@@ -10,6 +14,13 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public final class Config {
     // questPackBackupLimit keeps backup history per pack
     private static final int QUEST_PACK_BACKUP_LIMIT = 5;
+    private static final long CONFIG_SAVE_DELAY_MILLIS = 250L;
+    private static final AtomicLong CONFIG_SAVE_GENERATION = new AtomicLong();
+    private static final ScheduledExecutorService CONFIG_WRITER = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "Boundless Config Writer");
+        thread.setDaemon(true);
+        return thread;
+    });
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     // disabledQuestCategories hides matching category ids everywhere
@@ -343,7 +354,19 @@ public final class Config {
     // write the enabled state for one quest pack id
     public static void setQuestPackApplied(String id, boolean enabled) {
         setQuestPackAppliedValue(id, enabled);
-        SPEC.save();
+        saveLater();
+    }
+
+    public static void saveLater() {
+        long generation = CONFIG_SAVE_GENERATION.incrementAndGet();
+        CONFIG_WRITER.schedule(() -> {
+            if (generation != CONFIG_SAVE_GENERATION.get()) return;
+            try {
+                SPEC.save();
+            } catch (Throwable error) {
+                BoundlessMod.LOGGER.error("could not save boundless config", error);
+            }
+        }, CONFIG_SAVE_DELAY_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     public static void setSyncedQuestPackApplied(String id, boolean enabled) {

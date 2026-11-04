@@ -218,9 +218,22 @@ public final class QuestEditorQuestOrdering {
 
     // move sub category by order
     public static void moveSubCategoryByOrder(QuestPack pack, Gson gson, String subCategoryId, MoveDirection direction) throws IOException {
-        if (pack == null || subCategoryId == null || subCategoryId.isBlank()) return;
+        List<NamedEntry> subCategories = reorderedSubCategories(pack, subCategoryId, direction);
+        if (subCategories.isEmpty()) return;
+        applyExplicitOrder(pack, gson, subCategories, "order");
+    }
+
+    static List<NamedEntry> reorderedSubCategories(QuestPack pack, String subCategoryId, MoveDirection direction) {
+        if (pack == null || subCategoryId == null || subCategoryId.isBlank()) return List.of();
         List<NamedEntry> subCategories = QuestEditorJsonFiles.listSubCategoryEntries(pack);
-        moveOrderedEntry(pack, gson, subCategories, subCategoryId, direction, "order");
+        QuestEditorModels.SubCategoryData selected = QuestEditorJsonFiles.loadSubCategory(pack, subCategoryId);
+        if (selected == null) return List.of();
+        subCategories.removeIf(entry -> {
+            QuestEditorModels.SubCategoryData data = QuestEditorJsonFiles.loadSubCategory(entry.path, entry.id);
+            return data == null || !safe(selected.category).equals(safe(data.category));
+        });
+        if (!moveEntry(subCategories, subCategoryId, direction)) return List.of();
+        return List.copyOf(subCategories);
     }
 
     // quest file base name
@@ -267,7 +280,12 @@ public final class QuestEditorQuestOrdering {
 
     // move list entries by saved order
     private static void moveOrderedEntry(QuestPack pack, Gson gson, List<NamedEntry> entries, String id, MoveDirection direction, String key) throws IOException {
-        if (entries == null || entries.size() < 2 || id == null || id.isBlank()) return;
+        if (!moveEntry(entries, id, direction)) return;
+        applyExplicitOrder(pack, gson, entries, key);
+    }
+
+    private static boolean moveEntry(List<NamedEntry> entries, String id, MoveDirection direction) {
+        if (entries == null || entries.size() < 2 || id == null || id.isBlank() || direction == null) return false;
         int index = -1;
         for (int i = 0; i < entries.size(); i++) {
             if (id.equals(entries.get(i).id)) {
@@ -275,13 +293,13 @@ public final class QuestEditorQuestOrdering {
                 break;
             }
         }
-        if (index < 0) return;
+        if (index < 0) return false;
         int targetIndex = direction == MoveDirection.UP ? index - 1 : index + 1;
-        if (targetIndex < 0 || targetIndex >= entries.size()) return;
+        if (targetIndex < 0 || targetIndex >= entries.size()) return false;
 
         NamedEntry moving = entries.remove(index);
         entries.add(targetIndex, moving);
-        applyExplicitOrder(pack, gson, entries, key);
+        return true;
     }
 
     // write explicit order values back to disk

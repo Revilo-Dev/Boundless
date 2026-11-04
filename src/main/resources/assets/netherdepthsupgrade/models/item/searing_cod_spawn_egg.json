@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "netherdepthsupgrade:item/searing_cod_spawn_egg"
-  }
-}

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "enchantwithmob:item/enchanter_spawn_egg"
-  }
-}

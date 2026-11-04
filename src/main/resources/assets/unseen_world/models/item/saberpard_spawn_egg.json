@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "unseen_world:item/saberpard_spawn_egg"
-  }
-}

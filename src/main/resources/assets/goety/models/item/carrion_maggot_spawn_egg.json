@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "goety:item/carrion_maggot_spawn_egg"
-  }
-}

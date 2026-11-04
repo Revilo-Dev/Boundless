@@ -337,59 +337,103 @@ public final class QuestEditorScreen extends QuestEditor {
 
     // category settings reuse one compact sub-category list
     static final class CategorySubCategorySection extends AbstractWidget {
-        private static final int ROW_HEIGHT = 20;
+        private static final int ROW_HEIGHT = 28;
         private static final int ROW_GAP = 2;
-        private static final int COLLAPSED_ROWS = 3;
+        private static final int EDITOR_HEIGHT = 70;
+        private static final int MOVE_SIZE = 14;
+        private static final ResourceLocation MOVE_UP = ResourceLocation.fromNamespaceAndPath(
+                "boundless", "textures/gui/sprites/editor/move_up.png");
+        private static final ResourceLocation MOVE_UP_HOVER = ResourceLocation.fromNamespaceAndPath(
+                "boundless", "textures/gui/sprites/editor/move_up_highlighted.png");
+        private static final ResourceLocation MOVE_DOWN = ResourceLocation.fromNamespaceAndPath(
+                "boundless", "textures/gui/sprites/editor/move_down.png");
+        private static final ResourceLocation MOVE_DOWN_HOVER = ResourceLocation.fromNamespaceAndPath(
+                "boundless", "textures/gui/sprites/editor/move_down_highlighted.png");
         private final Font font;
-        private final Consumer<SubCategoryData> onSelect;
-        private final Runnable onCreate;
+        private final Consumer<SubCategoryData> onSave;
+        private final Consumer<SubCategoryData> onDelete;
+        private final BiConsumer<SubCategoryData, MoveDirection> onMove;
+        private final EditBox nameBox;
+        private final ToggleButton defaultOpenToggle;
         private List<SubCategoryData> entries = List.of();
-        private boolean expanded;
+        private SubCategoryData editing;
 
-        CategorySubCategorySection(Font font, Consumer<SubCategoryData> onSelect, Runnable onCreate) {
+        CategorySubCategorySection(Font font, Consumer<SubCategoryData> onSave,
+                                  Consumer<SubCategoryData> onDelete,
+                                  BiConsumer<SubCategoryData, MoveDirection> onMove) {
             super(0, 0, 1, ROW_HEIGHT, Component.empty());
             this.font = font;
-            this.onSelect = onSelect;
-            this.onCreate = onCreate;
+            this.onSave = onSave;
+            this.onDelete = onDelete;
+            this.onMove = onMove;
+            this.nameBox = new EditBox(font, 0, 0, 1, 18,
+                    Component.translatable("ui.boundless.editor.field.display"));
+            this.nameBox.setMaxLength(128);
+            this.defaultOpenToggle = new ToggleButton(0, 0, 20, 20, true);
         }
 
         void setEntries(List<SubCategoryData> entries) {
+            String editingId = editing == null ? "" : value(editing.id);
+            boolean newEntry = editing != null && editing.path == null;
             this.entries = entries == null ? List.of() : List.copyOf(entries);
-            if (this.entries.size() <= COLLAPSED_ROWS) expanded = false;
+            if (!editingId.isBlank()) {
+                this.editing = this.entries.stream().filter(entry -> editingId.equals(entry.id)).findFirst().orElse(null);
+                if (this.editing != null) loadEditor(this.editing);
+            } else if (!newEntry) {
+                this.editing = null;
+            }
             updateHeight();
         }
 
         @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
             if (!active || !visible || button != 0 || !isMouseOver(mouseX, mouseY)) return false;
-            int row = (int) ((mouseY - getY()) / (ROW_HEIGHT + ROW_GAP));
-            int visibleEntries = visibleEntryCount();
-            if (row < visibleEntries) {
-                onSelect.accept(entries.get(row));
-                return true;
+            int y = getY();
+            for (SubCategoryData entry : entries) {
+                if (mouseY >= y && mouseY <= y + ROW_HEIGHT) {
+                    int moveX = getX() + getWidth() - MOVE_SIZE - 3;
+                    if (mouseX >= moveX && mouseX <= moveX + MOVE_SIZE) {
+                        if (mouseY < y + ROW_HEIGHT / 2.0) onMove.accept(entry, MoveDirection.UP);
+                        else onMove.accept(entry, MoveDirection.DOWN);
+                        return true;
+                    }
+                    if (editing != null && value(editing.id).equals(value(entry.id))) editing = null;
+                    else loadEditor(entry);
+                    updateHeight();
+                    return true;
+                }
+                y += ROW_HEIGHT + ROW_GAP;
+                if (isEditing(entry)) {
+                    if (handleEditorClick(mouseX, mouseY, y)) return true;
+                    y += EDITOR_HEIGHT + ROW_GAP;
+                }
             }
-            if (entries.size() > COLLAPSED_ROWS && row == visibleEntries) {
-                expanded = !expanded;
-                updateHeight();
-                return true;
+            if (editing != null && editing.path == null) {
+                if (handleEditorClick(mouseX, mouseY, y)) return true;
+                y += EDITOR_HEIGHT + ROW_GAP;
             }
-            onCreate.run();
+            if (mouseY < y || mouseY > y + ROW_HEIGHT) return false;
+            SubCategoryData created = new SubCategoryData();
+            created.defaultOpen = "true";
+            loadEditor(created);
+            updateHeight();
             return true;
         }
 
         @Override
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
             int y = getY();
-            int visibleEntries = visibleEntryCount();
-            for (int index = 0; index < visibleEntries; index++) {
-                SubCategoryData entry = entries.get(index);
+            for (SubCategoryData entry : entries) {
                 renderButton(graphics, mouseX, mouseY, y, safeLabel(entry.name, entry.id));
                 y += ROW_HEIGHT + ROW_GAP;
+                if (isEditing(entry)) {
+                    renderEditor(graphics, mouseX, mouseY, y);
+                    y += EDITOR_HEIGHT + ROW_GAP;
+                }
             }
-            if (entries.size() > COLLAPSED_ROWS) {
-                renderButton(graphics, mouseX, mouseY, y, Component.translatable(expanded
-                        ? "ui.boundless.editor.show_less" : "ui.boundless.editor.show_more").getString());
-                y += ROW_HEIGHT + ROW_GAP;
+            if (editing != null && editing.path == null) {
+                renderEditor(graphics, mouseX, mouseY, y);
+                y += EDITOR_HEIGHT + ROW_GAP;
             }
             renderButton(graphics, mouseX, mouseY, y,
                     Component.translatable("ui.boundless.editor.create_new_subcategory").getString());
@@ -400,17 +444,118 @@ public final class QuestEditorScreen extends QuestEditor {
                     && mouseY >= y && mouseY <= y + ROW_HEIGHT;
             graphics.blitSprite(ResourceLocation.withDefaultNamespace(hovered
                     ? "widget/button_highlighted" : "widget/button"), getX(), y, getWidth(), ROW_HEIGHT);
-            Component clipped = QuestTextFormatting.componentByWidth(label, 0xFFFFFF, font, Math.max(1, getWidth() - 8));
-            graphics.drawString(font, clipped, getX() + 4, y + 6, 0xFFFFFFFF, false);
+            Component clipped = QuestTextFormatting.componentByWidth(label, 0xFFFFFF, font,
+                    Math.max(1, getWidth() - MOVE_SIZE - 10));
+            graphics.drawString(font, clipped, getX() + 4, y + 10, 0xFFFFFFFF, false);
+            if (!Component.translatable("ui.boundless.editor.create_new_subcategory").getString().equals(label)) {
+                int moveX = getX() + getWidth() - MOVE_SIZE - 3;
+                boolean hoverUp = mouseX >= moveX && mouseX <= moveX + MOVE_SIZE
+                        && mouseY >= y && mouseY <= y + MOVE_SIZE;
+                boolean hoverDown = mouseX >= moveX && mouseX <= moveX + MOVE_SIZE
+                        && mouseY >= y + ROW_HEIGHT / 2 && mouseY <= y + ROW_HEIGHT;
+                graphics.blit(hoverUp ? MOVE_UP_HOVER : MOVE_UP, moveX, y, 0, 0,
+                        MOVE_SIZE, MOVE_SIZE, MOVE_SIZE, MOVE_SIZE);
+                graphics.blit(hoverDown ? MOVE_DOWN_HOVER : MOVE_DOWN, moveX, y + ROW_HEIGHT / 2, 0, 0,
+                        MOVE_SIZE, MOVE_SIZE, MOVE_SIZE, MOVE_SIZE);
+            }
         }
 
-        private int visibleEntryCount() {
-            return expanded ? entries.size() : Math.min(COLLAPSED_ROWS, entries.size());
+        private void renderEditor(GuiGraphics graphics, int mouseX, int mouseY, int y) {
+            nameBox.setX(getX());
+            nameBox.setY(y + 10);
+            nameBox.setWidth(getWidth());
+            nameBox.render(graphics, mouseX, mouseY, 0f);
+            graphics.drawString(font, Component.translatable("ui.boundless.editor.field.display"),
+                    getX(), y, 0xFFD0D0D0, false);
+
+            int toggleY = y + 31;
+            graphics.drawString(font, Component.translatable("ui.boundless.editor.field.default_open"),
+                    getX(), toggleY + 6, 0xFFD0D0D0, false);
+            defaultOpenToggle.setX(getX() + getWidth() - 20);
+            defaultOpenToggle.setY(toggleY);
+            defaultOpenToggle.render(graphics, mouseX, mouseY, 0f);
+
+            int buttonY = y + 51;
+            int buttonWidth = Math.max(1, (getWidth() - 2) / 2);
+            renderSmallButton(graphics, mouseX, mouseY, getX(), buttonY, buttonWidth,
+                    Component.translatable("ui.boundless.editor.save").getString());
+            renderSmallButton(graphics, mouseX, mouseY, getX() + buttonWidth + 2, buttonY, buttonWidth,
+                    Component.translatable("ui.boundless.editor.tooltip.delete").getString());
+        }
+
+        private void renderSmallButton(GuiGraphics graphics, int mouseX, int mouseY,
+                                       int x, int y, int width, String label) {
+            boolean hovered = mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 18;
+            graphics.blitSprite(ResourceLocation.withDefaultNamespace(hovered
+                    ? "widget/button_highlighted" : "widget/button"), x, y, width, 18);
+            graphics.drawCenteredString(font, label, x + width / 2, y + 5, 0xFFFFFFFF);
+        }
+
+        private boolean handleEditorClick(double mouseX, double mouseY, int y) {
+            if (mouseY < y || mouseY > y + EDITOR_HEIGHT) return false;
+            if (nameBox.mouseClicked(mouseX, mouseY, 0)) return true;
+            if (defaultOpenToggle.isMouseOver(mouseX, mouseY)) {
+                defaultOpenToggle.onPress();
+                return true;
+            }
+            int buttonY = y + 51;
+            if (mouseY >= buttonY && mouseY <= buttonY + 18) {
+                int buttonWidth = Math.max(1, (getWidth() - 2) / 2);
+                editing.name = nameBox.getValue();
+                editing.defaultOpen = Boolean.toString(defaultOpenToggle.isOn());
+                if (mouseX <= getX() + buttonWidth) onSave.accept(editing);
+                else if (editing.path == null) {
+                    editing = null;
+                    updateHeight();
+                } else {
+                    onDelete.accept(editing);
+                }
+                return true;
+            }
+            return true;
+        }
+
+        private void loadEditor(SubCategoryData entry) {
+            editing = copy(entry);
+            nameBox.setValue(value(editing.name));
+            defaultOpenToggle.setState(!"false".equalsIgnoreCase(value(editing.defaultOpen)));
+        }
+
+        private boolean isEditing(SubCategoryData entry) {
+            return editing != null && editing.path != null && Objects.equals(editing.path, entry.path);
         }
 
         private void updateHeight() {
-            int rows = visibleEntryCount() + 1 + (entries.size() > COLLAPSED_ROWS ? 1 : 0);
-            setHeight(rows * ROW_HEIGHT + Math.max(0, rows - 1) * ROW_GAP);
+            int rowsHeight = entries.size() * (ROW_HEIGHT + ROW_GAP);
+            int editorHeight = editing == null ? 0 : EDITOR_HEIGHT + ROW_GAP;
+            setHeight(rowsHeight + editorHeight + ROW_HEIGHT);
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return editing != null && nameBox.isFocused() && nameBox.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        public boolean charTyped(char codePoint, int modifiers) {
+            return editing != null && nameBox.isFocused() && nameBox.charTyped(codePoint, modifiers);
+        }
+
+        private static SubCategoryData copy(SubCategoryData source) {
+            SubCategoryData copy = new SubCategoryData();
+            copy.path = source.path;
+            copy.id = value(source.id);
+            copy.category = value(source.category);
+            copy.name = value(source.name);
+            copy.nameTranslations = source.nameTranslations == null ? Map.of() : Map.copyOf(source.nameTranslations);
+            copy.icon = value(source.icon);
+            copy.order = value(source.order);
+            copy.defaultOpen = value(source.defaultOpen);
+            return copy;
+        }
+
+        private static String value(String raw) {
+            return raw == null ? "" : raw;
         }
 
         private static String safeLabel(String name, String id) {
@@ -793,7 +938,6 @@ public final class QuestEditorScreen extends QuestEditor {
             categoryWorkspaceDownButton.render(gg, mouseX, mouseY, partialTick);
         }
         if (backButton != null && backButton.visible) backButton.render(gg, mouseX, mouseY, partialTick);
-        if (saveButton != null && saveButton.visible) saveButton.render(gg, mouseX, mouseY, partialTick);
         if (duplicateButton != null && duplicateButton.visible) duplicateButton.render(gg, mouseX, mouseY, partialTick);
         if (deleteQuestButton != null && deleteQuestButton.visible) deleteQuestButton.render(gg, mouseX, mouseY, partialTick);
         renderDeleteHoldProgress(gg);
@@ -804,6 +948,7 @@ public final class QuestEditorScreen extends QuestEditor {
         if (treeConnectorButton != null && treeConnectorButton.visible) treeConnectorButton.render(gg, mouseX, mouseY, partialTick);
         if (createPackButton != null && createPackButton.visible) createPackButton.render(gg, mouseX, mouseY, partialTick);
         if (importQuestPackButton != null && importQuestPackButton.visible) importQuestPackButton.render(gg, mouseX, mouseY, partialTick);
+        if (saveButton != null && saveButton.visible) saveButton.render(gg, mouseX, mouseY, partialTick);
         gg.pose().popPose();
         renderIconOverlays(gg);
         renderTypeMenu(gg, mouseX, mouseY);
@@ -2773,6 +2918,11 @@ public final class QuestEditorScreen extends QuestEditor {
             return true;
         }
         if (button == 0 && clickItemPicker(mouseX, mouseY)) return true;
+        if (button == 0 && saveButton != null && saveButton.visible && saveButton.active
+                && saveButton.isMouseOver(mouseX, mouseY)) {
+            saveButton.onPress();
+            return true;
+        }
         if (button == 0) {
             if (catBackgroundModeButton != null && catBackgroundModeButton.visible && catBackgroundModeButton.active
                     && catBackgroundModeButton.isMouseOver(mouseX, mouseY)) {
@@ -3160,10 +3310,6 @@ public final class QuestEditorScreen extends QuestEditor {
         }
         if (questsTabButton != null && questsTabButton.visible && questsTabButton.active && questsTabButton.isMouseOver(mouseX, mouseY)) {
             questsTabButton.onPress();
-            return true;
-        }
-        if (saveButton != null && saveButton.visible && saveButton.active && saveButton.isMouseOver(mouseX, mouseY)) {
-            saveButton.onPress();
             return true;
         }
         if (exportPackButton != null && exportPackButton.visible && exportPackButton.active && exportPackButton.isMouseOver(mouseX, mouseY)) {

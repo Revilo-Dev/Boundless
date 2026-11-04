@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "unusual_prehistory:item/praepusa_spawn_egg"
-  }
-}

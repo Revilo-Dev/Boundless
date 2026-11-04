@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "mischief_illagers:item/photographer_spawn_egg"
-  }
-}

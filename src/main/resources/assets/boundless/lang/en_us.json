@@ -280,6 +280,8 @@
   "ui.boundless.editor.error.save_pack_options_failed": "Failed to save pack options",
   "ui.boundless.editor.error.category_id_required": "Category id required",
   "ui.boundless.editor.error.subcategory_id_required": "Sub-category id required",
+  "ui.boundless.editor.error.subcategory_name_required": "Sub-category name required",
+  "ui.boundless.editor.error.save_category_before_subcategories": "Save the category before adding sub-categories",
   "ui.boundless.editor.error.quest_id_required": "Quest id required",
   "ui.boundless.editor.error.quest_id_exists": "Quest ID already exists",
   "ui.boundless.editor.error.quest_name_required": "Quest name required",

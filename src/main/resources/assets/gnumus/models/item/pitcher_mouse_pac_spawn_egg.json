@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "gnumus:item/pitcher_mouse_pac_spawn_egg"
-  }
-}

@@ -17,12 +17,14 @@ import net.revilodev.boundless.quest.QuestTracker;
 import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
 import net.revilodev.boundless.client.editor.QuestStickerTextRenderer;
 import net.revilodev.boundless.client.editor.QuestTreeConnectorRouting;
+import net.revilodev.boundless.client.editor.QuestTreeConnectorRenderer;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 // shared quest tree canvas
@@ -35,14 +37,13 @@ public final class QuestTreeWidget extends AbstractWidget {
     private static final ResourceLocation ICON_COMPLETE = texture("icon-complete");
     private static final ResourceLocation ICON_ATTENTION = texture("icon-attention");
     private static final int NODE_SIZE = 32;
-    private static final int CONNECTOR_OUTER_WIDTH = 5;
-    private static final int CONNECTOR_INNER_WIDTH = 3;
     private static final Map<String, ViewState> SAVED_VIEWS = new HashMap<>();
 
     private final Minecraft minecraft = Minecraft.getInstance();
     private final Consumer<QuestData.Quest> onQuestSelected;
     private List<QuestData.Quest> quests = List.of();
     private List<RenderedConnector> renderedConnectors = List.of();
+    private final Map<String, Integer> questIndexes = new HashMap<>();
     private List<QuestData.Sticker> stickers = List.of();
     private float zoom = 1f;
     private float panX;
@@ -59,6 +60,8 @@ public final class QuestTreeWidget extends AbstractWidget {
     private boolean centreWhenQuestsLoad;
     private final Map<String, QuestState> questStates = new HashMap<>();
     private long questStateTick = Long.MIN_VALUE;
+    private long connectorGeneration;
+    private boolean connectorLayoutRequested;
 
     public QuestTreeWidget(int x, int y, int width, int height, Consumer<QuestData.Quest> onQuestSelected) {
         super(x, y, width, height, Component.empty());
@@ -67,8 +70,13 @@ public final class QuestTreeWidget extends AbstractWidget {
 
     // update the visible quest nodes
     public void setQuests(List<QuestData.Quest> quests) {
+        setQuests(quests, true);
+    }
+
+    public void setQuests(List<QuestData.Quest> quests, boolean categoryLoaded) {
         List<QuestData.Quest> source = quests == null ? List.of() : quests;
         if (this.quests.equals(source)) {
+            if (categoryLoaded && !connectorLayoutRequested) rebuildConnectorCacheAsync();
             if (centreWhenQuestsLoad && !this.quests.isEmpty()) {
                 centreWhenQuestsLoad = false;
                 centreView();
@@ -76,7 +84,15 @@ public final class QuestTreeWidget extends AbstractWidget {
             return;
         }
         this.quests = List.copyOf(source);
-        rebuildConnectorCache();
+        questIndexes.clear();
+        for (int index = 0; index < this.quests.size(); index++) {
+            QuestData.Quest quest = this.quests.get(index);
+            if (quest != null && quest.id != null) questIndexes.put(quest.id, index);
+        }
+        connectorGeneration++;
+        connectorLayoutRequested = false;
+        renderedConnectors = List.of();
+        if (categoryLoaded) rebuildConnectorCacheAsync();
         if (centreWhenQuestsLoad && !this.quests.isEmpty()) {
             centreWhenQuestsLoad = false;
             centreView();
@@ -169,27 +185,45 @@ public final class QuestTreeWidget extends AbstractWidget {
             if (!isQuestShown(connector.quest) || !isQuestShown(connector.dependency)) continue;
             boolean highlighted = selectedQuestId.equals(connector.quest.id)
                     || selectedQuestId.equals(connector.dependency.id);
-            drawConnector(gg, connector.connector, connector.incompatible, highlighted);
+            QuestTracker.Status dependencyStatus = questState(connector.dependency).status;
+            boolean completed = dependencyStatus == QuestTracker.Status.COMPLETED
+                    || dependencyStatus == QuestTracker.Status.REDEEMED;
+            drawConnector(gg, connector.connector, connector.incompatible, completed, highlighted);
         }
     }
 
-    private void rebuildConnectorCache() {
-        Map<String, QuestData.Quest> byId = new HashMap<>();
+    private void rebuildConnectorCacheAsync() {
+        long generation = ++connectorGeneration;
+        connectorLayoutRequested = true;
         List<QuestTreeConnectorRouting.Node> nodes = new ArrayList<>();
         for (QuestData.Quest quest : quests) {
             if (quest == null || quest.id == null || quest.id.isBlank()) continue;
-            byId.put(quest.id, quest);
             nodes.add(new QuestTreeConnectorRouting.Node(quest.id, nodeX(quest), nodeY(quest)));
         }
         List<QuestTreeConnectorRouting.Edge> edges = new ArrayList<>();
         for (QuestData.Quest quest : quests) {
             if (quest == null || quest.id == null || quest.id.isBlank()) continue;
             for (String dependencyId : quest.dependencies) {
-                if (byId.containsKey(dependencyId)) edges.add(new QuestTreeConnectorRouting.Edge(dependencyId, quest.id));
+                if (questIndexes.containsKey(dependencyId)) {
+                    edges.add(new QuestTreeConnectorRouting.Edge(dependencyId, quest.id));
+                }
             }
         }
+        List<QuestTreeConnectorRouting.Node> nodeSnapshot = List.copyOf(nodes);
+        List<QuestTreeConnectorRouting.Edge> edgeSnapshot = List.copyOf(edges);
+        CompletableFuture.supplyAsync(() -> QuestTreeConnectorRouting.route(nodeSnapshot, edgeSnapshot))
+                .exceptionally(ignored -> List.of())
+                .thenAccept(routed -> minecraft.execute(() -> applyConnectorRoutes(generation, routed)));
+    }
+
+    private void applyConnectorRoutes(long generation, List<QuestTreeConnectorRouting.RoutedEdge> routedEdges) {
+        if (generation != connectorGeneration) return;
+        Map<String, QuestData.Quest> byId = new HashMap<>();
+        for (QuestData.Quest quest : quests) {
+            if (quest != null && quest.id != null) byId.put(quest.id, quest);
+        }
         List<RenderedConnector> connectors = new ArrayList<>();
-        for (QuestTreeConnectorRouting.RoutedEdge routed : QuestTreeConnectorRouting.route(nodes, edges)) {
+        for (QuestTreeConnectorRouting.RoutedEdge routed : routedEdges) {
             QuestData.Quest dependency = byId.get(routed.edge().fromId());
             QuestData.Quest quest = byId.get(routed.edge().toId());
             if (dependency == null || quest == null) continue;
@@ -205,6 +239,7 @@ public final class QuestTreeWidget extends AbstractWidget {
             if (!isQuestShown(quest)) continue;
             int x = nodeX(quest);
             int y = nodeY(quest);
+            QuestState state = questState(quest);
             boolean complete = isComplete(quest);
             boolean selected = selectedQuestId.equals(quest.id);
             gg.blit(nodeTexture(quest.treeBackground, complete, selected || quest == hovered),
@@ -212,7 +247,7 @@ public final class QuestTreeWidget extends AbstractWidget {
             quest.iconItem().ifPresent(item -> gg.renderItem(new net.minecraft.world.item.ItemStack(item), x + 8, y + 8));
             if (complete) {
                 gg.blit(ICON_COMPLETE, x + 18, y + 18, 0, 0, 11, 11, 11, 11);
-            } else if (!questState(quest).dependenciesMet) {
+            } else if (state.redeemable) {
                 gg.blit(ICON_ATTENTION, x + 23, y + 10, 0, 0, 6, 13, 6, 13);
             }
         }
@@ -252,13 +287,13 @@ public final class QuestTreeWidget extends AbstractWidget {
     }
 
     private int nodeX(QuestData.Quest quest) {
-        int index = quests.indexOf(quest);
+        int index = questIndexes.getOrDefault(quest.id, 0);
         int baseX = quest.treeX != -1 ? quest.treeX : (index % 4 - 2) * 48;
         return baseX - NODE_SIZE / 2;
     }
 
     private int nodeY(QuestData.Quest quest) {
-        int index = quests.indexOf(quest);
+        int index = questIndexes.getOrDefault(quest.id, 0);
         int baseY = quest.treeY != -1 ? quest.treeY : (index / 4) * 48;
         return baseY - NODE_SIZE / 2;
     }
@@ -283,27 +318,16 @@ public final class QuestTreeWidget extends AbstractWidget {
         return mouseX >= x && mouseX <= x + 29 && mouseY >= y && mouseY <= y + 10;
     }
 
-    private void drawConnector(GuiGraphics gg, Connector connector, boolean incompatible, boolean highlighted) {
-        int color = highlighted ? 0xFFFFFFFF : (incompatible ? 0xFF681C1C : 0xFF686868);
+    private void drawConnector(GuiGraphics gg, Connector connector, boolean incompatible, boolean completed, boolean highlighted) {
+        int color = highlighted ? QuestTreeConnectorRenderer.HIGHLIGHTED_COLOR
+                : incompatible ? QuestTreeConnectorRenderer.INCOMPATIBLE_COLOR
+                : completed ? QuestTreeConnectorRenderer.COMPLETED_COLOR
+                : QuestTreeConnectorRenderer.NORMAL_COLOR;
         for (int index = 1; index < connector.points.size(); index++) {
             Point start = connector.points.get(index - 1);
             Point end = connector.points.get(index);
-            drawConnectorSegment(gg, start, end, CONNECTOR_OUTER_WIDTH, 0xFF000000);
-            drawConnectorSegment(gg, start, end, CONNECTOR_INNER_WIDTH, color);
+            QuestTreeConnectorRenderer.drawSegment(gg, start.x, start.y, end.x, end.y, color);
         }
-    }
-
-    private static void drawConnectorSegment(GuiGraphics gg, Point start, Point end, int thickness, int color) {
-        int dx = end.x - start.x;
-        int dy = end.y - start.y;
-        int length = Math.max(1, (int) Math.ceil(Math.hypot(dx, dy)));
-        float angle = (float) Math.toDegrees(Math.atan2(dy, dx));
-        int half = thickness / 2;
-        gg.pose().pushPose();
-        gg.pose().translate(start.x, start.y, 0);
-        gg.pose().mulPose(Axis.ZP.rotationDegrees(angle));
-        gg.fill(0, -half, length + 1, thickness - half, color);
-        gg.pose().popPose();
     }
 
     @Override
@@ -395,7 +419,7 @@ public final class QuestTreeWidget extends AbstractWidget {
 
     private QuestState questState(QuestData.Quest quest) {
         if (quest == null || minecraft.player == null) {
-            return new QuestState(QuestTracker.Status.INCOMPLETE, true);
+            return new QuestState(QuestTracker.Status.INCOMPLETE, true, false);
         }
         long tick = minecraft.level == null ? Long.MIN_VALUE : minecraft.level.getGameTime();
         if (questStateTick != tick) {
@@ -404,7 +428,8 @@ public final class QuestTreeWidget extends AbstractWidget {
         }
         return questStates.computeIfAbsent(quest.id, ignored -> new QuestState(
                 QuestTracker.getStatus(quest, minecraft.player),
-                QuestTracker.dependenciesMet(quest, minecraft.player)
+                QuestTracker.dependenciesMet(quest, minecraft.player),
+                QuestTracker.isRedeemable(quest, minecraft.player)
         ));
     }
 
@@ -475,7 +500,7 @@ public final class QuestTreeWidget extends AbstractWidget {
     private record ViewState(float zoom, float panX, float panY) {
     }
 
-    private record QuestState(QuestTracker.Status status, boolean dependenciesMet) {
+    private record QuestState(QuestTracker.Status status, boolean dependenciesMet, boolean redeemable) {
     }
 
     @Override

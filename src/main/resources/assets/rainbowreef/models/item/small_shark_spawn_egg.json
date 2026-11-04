@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "rainbowreef:item/small_shark_spawn_egg"
-  }
-}

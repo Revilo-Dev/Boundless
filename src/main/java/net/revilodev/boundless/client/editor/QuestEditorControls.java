@@ -25,40 +25,41 @@ import net.revilodev.boundless.client.editor.QuestEditorModels.MoveDirection;
 
 // shared editor button controls
 public final class QuestEditorControls {
-    private static final ResourceLocation BTN_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button.png");
-    private static final ResourceLocation BTN_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_highlighted.png");
-    private static final ResourceLocation BTN_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_complete_button_disabled.png");
+    private static final ResourceLocation VANILLA_BUTTON_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button");
+    private static final ResourceLocation VANILLA_BUTTON_HOVER_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_highlighted");
+    private static final ResourceLocation VANILLA_BUTTON_DISABLED_SPRITE =
+            ResourceLocation.withDefaultNamespace("widget/button_disabled");
+    private static final ResourceLocation COMPLETE_ICON =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/complete.png");
     private static final ResourceLocation CREATE_BTN_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button.png");
     private static final int CREATE_BTN_TEX_W = 130;
     private static final int CREATE_BTN_TEX_H = 20;
     private static final ResourceLocation TOGGLE_TEX_OFF =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/x_button.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off.png");
     private static final ResourceLocation TOGGLE_TEX_OFF_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/x_button-hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_off-hovered.png");
     private static final ResourceLocation TOGGLE_TEX_ON =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on.png");
+    private static final ResourceLocation TOGGLE_TEX_ON_HOVER =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/toggle_on-hovered.png");
     private static final ResourceLocation LOCK_TEX_ENABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked.png");
     private static final ResourceLocation LOCK_TEX_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_disabled.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked_disabled.png");
     private static final ResourceLocation LOCK_TEX_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked_hovered.png");
     private static final ResourceLocation BACK_TAB_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab.png");
     private static final ResourceLocation BACK_TAB_HOVER_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/back_tab-hovered.png");
-    private static final int TOGGLE_SIZE = 20;
+    private static final int TOGGLE_WIDTH = 20;
+    private static final int TOGGLE_HEIGHT = 11;
     private static final int BACK_TAB_W = 27;
     private static final int BACK_TAB_H = 17;
     private static final int FORMAT_BAR_H = 9;
-    private static final ResourceLocation VANILLA_BUTTON_SPRITE =
-            ResourceLocation.withDefaultNamespace("widget/button");
-    private static final ResourceLocation VANILLA_BUTTON_HIGHLIGHTED_SPRITE =
-            ResourceLocation.withDefaultNamespace("widget/button_highlighted");
     private static final ResourceLocation MOVE_UP_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/move_up.png");
     private static final ResourceLocation MOVE_DOWN_TEX =
@@ -105,14 +106,17 @@ public final class QuestEditorControls {
         @Override
         public void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             boolean hovered = this.active && this.isMouseOver(mouseX, mouseY);
-            ResourceLocation tex = !this.active ? BTN_TEX_DISABLED : (hovered ? BTN_TEX_HOVER : BTN_TEX);
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            ResourceLocation sprite = !this.active ? VANILLA_BUTTON_DISABLED_SPRITE
+                    : hovered ? VANILLA_BUTTON_HOVER_SPRITE : VANILLA_BUTTON_SPRITE;
+            gg.blitSprite(sprite, getX(), getY(), this.width, this.height);
 
             var font = Minecraft.getInstance().font;
             int textW = font.width(getMessage());
-            int textX = getX() + (this.width - textW) / 2 + 2;
+            int textX = getX() + (this.width - textW) / 2;
+            int iconX = textX - 15;
             int textY = getY() + (this.height - font.lineHeight) / 2 + 1;
             int color = this.active ? 0xFFFFFF : 0x808080;
+            gg.blit(COMPLETE_ICON, iconX, getY() + (this.height - 9) / 2, 0, 0, 9, 9, 9, 9);
             gg.drawString(font, getMessage(), textX, textY, color, false);
             if (hovered && !tooltip.isEmpty()) {
                 QuestEditorTooltips.renderComponents(gg, font, tooltip, mouseX, mouseY);
@@ -331,8 +335,13 @@ public final class QuestEditorControls {
 
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-            ResourceLocation tex = on ? TOGGLE_TEX_ON : (this.isMouseOver(mouseX, mouseY) ? TOGGLE_TEX_OFF_HOVER : TOGGLE_TEX_OFF);
-            gg.blit(tex, getX(), getY(), 0, 0, TOGGLE_SIZE, TOGGLE_SIZE, TOGGLE_SIZE, TOGGLE_SIZE);
+            boolean hovered = this.isMouseOver(mouseX, mouseY);
+            ResourceLocation tex = on
+                    ? hovered ? TOGGLE_TEX_ON_HOVER : TOGGLE_TEX_ON
+                    : hovered ? TOGGLE_TEX_OFF_HOVER : TOGGLE_TEX_OFF;
+            int renderX = getX() + (width - TOGGLE_WIDTH) / 2;
+            int renderY = getY() + (height - TOGGLE_HEIGHT) / 2;
+            gg.blit(tex, renderX, renderY, 0, 0, TOGGLE_WIDTH, TOGGLE_HEIGHT, TOGGLE_WIDTH, TOGGLE_HEIGHT);
         }
 
         @Override
@@ -525,7 +534,7 @@ public final class QuestEditorControls {
                     int buttonY = top + (rowH - buttonHeight) / 2;
                     boolean hovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth
                             && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
-                    gg.blitSprite(hovered ? VANILLA_BUTTON_HIGHLIGHTED_SPRITE : VANILLA_BUTTON_SPRITE, buttonX, buttonY, buttonWidth, buttonHeight);
+                    gg.blitSprite(hovered ? VANILLA_BUTTON_HOVER_SPRITE : VANILLA_BUTTON_SPRITE, buttonX, buttonY, buttonWidth, buttonHeight);
                     Font font = Minecraft.getInstance().font;
                     gg.drawCenteredString(font, entry.label, buttonX + buttonWidth / 2, buttonY + (buttonHeight - font.lineHeight) / 2 + 1, 0xFFFFFF);
                 } else {
@@ -616,15 +625,17 @@ public final class QuestEditorControls {
                     }
 
                     if (entry.actionIcon != null) {
+                        int actionWidth = actionIconWidth(entry);
+                        int actionHeight = actionIconHeight(entry);
                         int actionRightInset = entry.showMoveArrows
                                 ? MOVE_ICON_SIZE + MOVE_ICON_INSET_RIGHT + 4 : 8;
-                        int iconX = getX() + width - entry.actionIconWidth - actionRightInset;
-                        int iconY = top + (ROW_H - entry.actionIconHeight) / 2;
-                        gg.blit(entry.actionIcon, iconX, iconY, 0, 0,
-                                entry.actionIconWidth, entry.actionIconHeight,
-                                entry.actionIconWidth, entry.actionIconHeight);
-                        boolean hoverAction = mouseX >= iconX && mouseX <= iconX + entry.actionIconWidth
-                                && mouseY >= iconY && mouseY <= iconY + entry.actionIconHeight;
+                        int iconX = getX() + width - actionWidth - actionRightInset;
+                        int iconY = top + (ROW_H - actionHeight) / 2;
+                        boolean hoverAction = mouseX >= iconX && mouseX <= iconX + actionWidth
+                                && mouseY >= iconY && mouseY <= iconY + actionHeight;
+                        ResourceLocation actionTexture = actionIconTexture(entry.actionIcon, hoverAction);
+                        gg.blit(actionTexture, iconX, iconY, 0, 0,
+                                actionWidth, actionHeight, actionWidth, actionHeight);
                         if (hoverAction && entry.actionTooltip != null && !entry.actionTooltip.isBlank()) {
                             pendingTooltip = List.of(Component.literal(entry.actionTooltip));
                             pendingTooltipX = mouseX;
@@ -691,12 +702,14 @@ public final class QuestEditorControls {
                     }
                 }
                 if (entry.actionIcon != null) {
+                    int actionWidth = actionIconWidth(entry);
+                    int actionHeight = actionIconHeight(entry);
                     int actionRightInset = entry.showMoveArrows
                             ? MOVE_ICON_SIZE + MOVE_ICON_INSET_RIGHT + 4 : 8;
-                    int iconX = getX() + width - entry.actionIconWidth - actionRightInset;
-                    int iconY = top + (ROW_H - entry.actionIconHeight) / 2;
-                    if (button == 0 && mouseX >= iconX && mouseX <= iconX + entry.actionIconWidth
-                            && mouseY >= iconY && mouseY <= iconY + entry.actionIconHeight) {
+                    int iconX = getX() + width - actionWidth - actionRightInset;
+                    int iconY = top + (ROW_H - actionHeight) / 2;
+                    if (button == 0 && mouseX >= iconX && mouseX <= iconX + actionWidth
+                            && mouseY >= iconY && mouseY <= iconY + actionHeight) {
                         if (onActionClick != null) onActionClick.accept(entry);
                         return true;
                     }
@@ -733,6 +746,25 @@ public final class QuestEditorControls {
                 else high = middle - 1;
             }
             return Math.max(0, high);
+        }
+
+        private int actionIconWidth(EditorEntry entry) {
+            return isToggleTexture(entry.actionIcon) ? TOGGLE_WIDTH : entry.actionIconWidth;
+        }
+
+        private int actionIconHeight(EditorEntry entry) {
+            return isToggleTexture(entry.actionIcon) ? TOGGLE_HEIGHT : entry.actionIconHeight;
+        }
+
+        private boolean isToggleTexture(ResourceLocation texture) {
+            return TOGGLE_TEX_ON.equals(texture) || TOGGLE_TEX_OFF.equals(texture);
+        }
+
+        private ResourceLocation actionIconTexture(ResourceLocation texture, boolean hovered) {
+            if (!hovered) return texture;
+            if (TOGGLE_TEX_ON.equals(texture)) return TOGGLE_TEX_ON_HOVER;
+            if (TOGGLE_TEX_OFF.equals(texture)) return TOGGLE_TEX_OFF_HOVER;
+            return texture;
         }
 
         @Override

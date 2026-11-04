@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "terramity:item/echo_bug_spawn_egg"
-  }
-}

@@ -33,11 +33,9 @@ public final class QuestEditorItemPickerRenderer {
     private static final ResourceLocation BROWSER_TAB_INVENTORY_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/inventory.png");
     private static final ResourceLocation BROWSER_TAB_SEARCH_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/search.png");
-    private static final ResourceLocation X_BUTTON_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/popup_reject.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/search.png");
     private static final ResourceLocation QUEST_TAB_SCROLL_ICON_TEX =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/scroll-icon.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/scroll-icon.png");
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
     private static final int TAB_GAP = 3;
@@ -113,7 +111,15 @@ public final class QuestEditorItemPickerRenderer {
             default -> request.itemPickerTab == ItemPickerTab.TAGS ? "Item groups" : "Item Browser";
         };
         gg.drawString(font, title, x + (ITEM_PICKER_W - font.width(title)) / 2, y + 4, 0xFF000000, false);
-        gg.blit(X_BUTTON_TEX, closeX(x), closeY(y), 0, 0, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE);
+        int closeX = closeX(x);
+        int closeY = closeY(y);
+        String closeText = "X";
+        int closeColor = isPointWithin(request.mouseX, request.mouseY, closeX, closeY,
+                ITEM_PICKER_CLOSE_SIZE, ITEM_PICKER_CLOSE_SIZE) ? 0xFFFF7777 : 0xFFFF3030;
+        gg.drawString(font, closeText,
+                closeX + (ITEM_PICKER_CLOSE_SIZE - font.width(closeText)) / 2,
+                closeY + (ITEM_PICKER_CLOSE_SIZE - font.lineHeight) / 2,
+                closeColor, false);
         if (request.blockTexturePicker) {
             renderSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, false);
         } else if (request.backgroundAssetPicker) {
@@ -307,7 +313,7 @@ public final class QuestEditorItemPickerRenderer {
         gg.pose().popPose();
     }
 
-    // render request
+    // captures one immutable picker frame so layout and hover checks use the same state
     public static final class RenderRequest {
         public final GuiGraphics gg;
         public final Font font;

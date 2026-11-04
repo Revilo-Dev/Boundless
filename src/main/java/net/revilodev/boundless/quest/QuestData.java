@@ -47,15 +47,47 @@ public final class QuestData {
         final Map<String, Quest> quests = new LinkedHashMap<>();
         final Map<String, Category> categories = new LinkedHashMap<>();
         final Map<String, SubCategory> subCategories = new LinkedHashMap<>();
+        final Map<String, List<Quest>> questsByCategory = new HashMap<>();
+        final Map<String, List<Quest>> incompatibleByQuestId = new HashMap<>();
         final Collection<Quest> questView = Collections.unmodifiableCollection(quests.values());
+        List<Quest> orderedQuests = List.of();
         boolean loaded;
         boolean networkAuthoritative;
         String worldId;
+        long revision;
 
         void clear() {
             quests.clear();
             categories.clear();
             subCategories.clear();
+            questsByCategory.clear();
+            incompatibleByQuestId.clear();
+            orderedQuests = List.of();
+        }
+
+        void rebuildQuestIndex() {
+            List<Quest> ordered = new ArrayList<>(quests.values());
+            ordered.sort(Comparator.comparing(Quest::sourceSortKey));
+            orderedQuests = List.copyOf(ordered);
+
+            Map<String, List<Quest>> grouped = new HashMap<>();
+            Map<String, List<Quest>> incompatible = new HashMap<>();
+            for (Quest quest : ordered) {
+                if (quest == null) continue;
+                grouped.computeIfAbsent(categoryKey(quest.category), ignored -> new ArrayList<>()).add(quest);
+                for (String questId : quest.incompatibleDependencies) {
+                    incompatible.computeIfAbsent(questId, ignored -> new ArrayList<>()).add(quest);
+                }
+            }
+            questsByCategory.clear();
+            for (var entry : grouped.entrySet()) {
+                questsByCategory.put(entry.getKey(), List.copyOf(entry.getValue()));
+            }
+            incompatibleByQuestId.clear();
+            for (var entry : incompatible.entrySet()) {
+                incompatibleByQuestId.put(entry.getKey(), List.copyOf(entry.getValue()));
+            }
+            revision++;
         }
     }
 
@@ -741,6 +773,7 @@ public final class QuestData {
             data.categories.put("all", new Category("all", "minecraft:book", "All",
                     Integer.MIN_VALUE, false, "", false));
         }
+        data.rebuildQuestIndex();
     }
 
     private static void loadModQuestPacksFromInstance(DataStore data) {
@@ -1083,9 +1116,32 @@ public final class QuestData {
         return CLIENT_DATA.questView;
     }
 
+    public static synchronized List<Quest> questsForCategory(String categoryId) {
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        if (categoryId == null || categoryId.isBlank() || "all".equalsIgnoreCase(categoryId)) {
+            return CLIENT_DATA.orderedQuests;
+        }
+        return CLIENT_DATA.questsByCategory.getOrDefault(categoryKey(categoryId), List.of());
+    }
+
+    public static synchronized long clientRevision() {
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        return CLIENT_DATA.revision;
+    }
+
     public static synchronized Collection<Quest> allServer(MinecraftServer server) {
         loadServer(server, false);
         return SERVER_DATA.questView;
+    }
+
+    public static synchronized List<Quest> incompatibleQuests(String questId) {
+        if (!CLIENT_DATA.loaded) loadClient(false);
+        return CLIENT_DATA.incompatibleByQuestId.getOrDefault(questId, List.of());
+    }
+
+    public static synchronized List<Quest> incompatibleQuestsServer(MinecraftServer server, String questId) {
+        loadServer(server, false);
+        return SERVER_DATA.incompatibleByQuestId.getOrDefault(questId, List.of());
     }
 
     public static synchronized Optional<Quest> byId(String id) {
@@ -1289,6 +1345,7 @@ public final class QuestData {
         for (Category category : CLIENT_DATA.categories.values()) category.relocalize();
         for (SubCategory subCategory : CLIENT_DATA.subCategories.values()) subCategory.relocalize();
         for (Quest quest : CLIENT_DATA.quests.values()) quest.relocalize();
+        CLIENT_DATA.revision++;
     }
 
     private static Map<String, String> parseTranslations(JsonObject obj, String field) {
@@ -2143,6 +2200,7 @@ public final class QuestData {
         CLIENT_DATA.quests.putAll(snapshot.quests());
         CLIENT_DATA.categories.putAll(snapshot.categories());
         CLIENT_DATA.subCategories.putAll(snapshot.subCategories());
+        CLIENT_DATA.rebuildQuestIndex();
         // remote snapshots use the multiplayer cache key
         CLIENT_DATA.worldId = null;
         CLIENT_DATA.networkAuthoritative = true;
@@ -2157,6 +2215,7 @@ public final class QuestData {
         // Leave client loading available for the next server or world.
         if (FMLEnvironment.dist != Dist.CLIENT) return;
         CLIENT_DATA.clear();
+        CLIENT_DATA.rebuildQuestIndex();
         CLIENT_DATA.networkAuthoritative = false;
         CLIENT_DATA.worldId = null;
         CLIENT_DATA.loaded = true;
@@ -2180,6 +2239,10 @@ public final class QuestData {
         if (p == null) return def;
         if (p.isBoolean()) return p.getAsBoolean();
         try { return Boolean.parseBoolean(p.getAsString()); } catch (Exception ignored) { return def; }
+    }
+
+    private static String categoryKey(String categoryId) {
+        return categoryId == null ? "" : categoryId.trim().toLowerCase(Locale.ROOT);
     }
 
     private static float parseFloatFlexible(JsonObject o, String key, float def) {

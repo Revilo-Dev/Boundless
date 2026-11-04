@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "soulsweapons:item/accursed_lord_boss_spawn_egg"
-  }
-}

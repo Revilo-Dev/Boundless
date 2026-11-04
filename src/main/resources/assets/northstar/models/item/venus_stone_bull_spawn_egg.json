@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "northstar:item/venus_stone_bull_spawn_egg"
-  }
-}

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "goety:item/quick_growing_vine_spawn_egg"
-  }
-}

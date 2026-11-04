@@ -1,6 +1,5 @@
 package net.revilodev.boundless.client.editor;
 
-import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -21,7 +20,6 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,14 +31,9 @@ import java.util.function.Consumer;
 @OnlyIn(Dist.CLIENT)
 // edits quest positions, links, and stickers in the tree workspace
 public final class QuestEditorTreeWidget extends AbstractWidget {
-    private static final int MAX_CONNECTOR_RASTER_STEPS = 4096;
     private static final int DETAILED_ROUTING_MAX_QUESTS = 128;
-    private static final int DETAILED_ROUTING_MAX_CONNECTORS = 256;
     private static final int SPATIAL_CELL_SIZE = 64;
     private static final int NODE_SIZE = 32;
-    private static final int GRID_SIZE = 16;
-    private static final int CONNECTOR_OUTER_WIDTH = 5;
-    private static final int CONNECTOR_INNER_WIDTH = 3;
     private static final int CONNECTOR_HIT_RADIUS = 4;
     private static final long SHIFT_DOUBLE_CLICK_MS = 350L;
     private static final long STICKER_DOUBLE_CLICK_MS = 350L;
@@ -629,7 +622,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
                 draggedQuest.treeY = Integer.toString(nextY);
                 updateQuestPosition(draggedQuest, nextX, nextY);
                 draggedQuestMoved = true;
-                rebuildConnectorCache();
+                updateConnectorPreview(draggedQuest);
             }
             return true;
         }
@@ -642,6 +635,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         if (draggedQuest != null && draggedQuestMoved && onMoved != null) {
             onMoved.accept(draggedQuest, parse(draggedQuest.treeX, 0), parse(draggedQuest.treeY, 0));
         }
+        if (draggedQuest != null && draggedQuestMoved) rebuildConnectorCache();
         if (draggedStickerMoved && draggedStickerPreview != null) {
             int changedIndex = draggedStickerIndex >= 0 ? draggedStickerIndex : resizingStickerIndex;
             if (changedIndex >= 0 && changedIndex < stickers.size()) {
@@ -882,178 +876,19 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         panY = (float) ((mouseY - centerY) / zoom - canvasY);
     }
 
-    private Connector connector(QuestEntryData dependency, QuestEntryData quest, List<RoutedConnector> routed) {
-        int x1 = nodeX(dependency) + NODE_SIZE / 2;
-        int y1 = nodeY(dependency) + NODE_SIZE / 2;
-        int x2 = nodeX(quest) + NODE_SIZE / 2;
-        int y2 = nodeY(quest) + NODE_SIZE / 2;
-        List<Connector> candidates = new ArrayList<>();
-        candidates.add(route(new Point(x1, y1), new Point(x2, y2)));
-        candidates.add(route(new Point(x1, y1), new Point(x2, y1), new Point(x2, y2)));
-        candidates.add(route(new Point(x1, y1), new Point(x1, y2), new Point(x2, y2)));
-
-        int middleX = Math.round((x1 + x2) / 2f / GRID_SIZE) * GRID_SIZE;
-        int middleY = Math.round((y1 + y2) / 2f / GRID_SIZE) * GRID_SIZE;
-        int[] offsets = {0, GRID_SIZE, -GRID_SIZE, GRID_SIZE * 2, -GRID_SIZE * 2,
-                GRID_SIZE * 3, -GRID_SIZE * 3, GRID_SIZE * 4, -GRID_SIZE * 4};
-        for (int offset : offsets) {
-            int bendX = middleX + offset;
-            candidates.add(route(new Point(x1, y1), new Point(bendX, y1),
-                    new Point(bendX, y2), new Point(x2, y2)));
-            int bendY = middleY + offset;
-            candidates.add(route(new Point(x1, y1), new Point(x1, bendY),
-                    new Point(x2, bendY), new Point(x2, y2)));
-        }
-
-        Connector best = candidates.get(0);
-        long bestScore = Long.MAX_VALUE;
-        for (Connector candidate : candidates) {
-            long score = routeScore(candidate, dependency, quest, routed);
-            if (score < bestScore) {
-                best = candidate;
-                bestScore = score;
-            }
-        }
-        return best;
-    }
-
-    private Connector simpleConnector(QuestEntryData dependency, QuestEntryData quest) {
-        int x1 = nodeX(dependency) + NODE_SIZE / 2;
-        int y1 = nodeY(dependency) + NODE_SIZE / 2;
-        int x2 = nodeX(quest) + NODE_SIZE / 2;
-        int y2 = nodeY(quest) + NODE_SIZE / 2;
-        int middleX = Math.round((x1 + x2) / 2f / GRID_SIZE) * GRID_SIZE;
-        return route(new Point(x1, y1), new Point(middleX, y1), new Point(middleX, y2), new Point(x2, y2));
-    }
-
-    private Connector route(Point... rawPoints) {
-        List<Point> points = new ArrayList<>();
-        for (Point point : rawPoints) {
-            if (point == null) continue;
-            if (!points.isEmpty() && points.get(points.size() - 1).equals(point)) continue;
-            points.add(point);
-        }
-        return new Connector(List.copyOf(points));
-    }
-
-    private long routeScore(Connector candidate, QuestEntryData dependency, QuestEntryData quest,
-                            List<RoutedConnector> routed) {
-        Set<Long> pixels = routePixels(candidate);
-        long score = Math.max(0, candidate.points.size() - 2) * 12L;
-        for (int index = 1; index < candidate.points.size(); index++) {
-            Point start = candidate.points.get(index - 1);
-            Point end = candidate.points.get(index);
-            score += Math.abs(end.x - start.x) + Math.abs(end.y - start.y);
-        }
-
-        for (QuestEntryData other : quests) {
-            if (other == dependency || other == quest) continue;
-            int left = nodeX(other) - 4;
-            int top = nodeY(other) - 4;
-            int right = left + NODE_SIZE + 8;
-            int bottom = top + NODE_SIZE + 8;
-            for (long packed : pixels) {
-                int x = (int) (packed >> 32);
-                int y = (int) packed;
-                if (x >= left && x <= right && y >= top && y <= bottom) score += 8_000L;
-            }
-        }
-
-        for (RoutedConnector existing : routed) {
-            Set<Long> existingPixels = existing.pixels;
-            for (long packed : pixels) {
-                int x = (int) (packed >> 32);
-                int y = (int) packed;
-                if (nearEndpoint(x, y, candidate) || nearEndpoint(x, y, existing.connector)) continue;
-                if (existingPixels.contains(packed)) {
-                    score += 2_000L;
-                    continue;
-                }
-                for (int offsetX = -2; offsetX <= 2; offsetX++) {
-                    for (int offsetY = -2; offsetY <= 2; offsetY++) {
-                        if (existingPixels.contains(packPoint(x + offsetX, y + offsetY))) score += 20L;
-                    }
-                }
-            }
-        }
-        return score;
-    }
-
-    private boolean nearEndpoint(int x, int y, Connector connector) {
-        if (connector.points.isEmpty()) return false;
-        Point first = connector.points.get(0);
-        Point last = connector.points.get(connector.points.size() - 1);
-        int radius = NODE_SIZE / 2 + 4;
-        return Math.abs(x - first.x) <= radius && Math.abs(y - first.y) <= radius
-                || Math.abs(x - last.x) <= radius && Math.abs(y - last.y) <= radius;
-    }
-
-    private Set<Long> routePixels(Connector connector) {
-        Set<Long> pixels = new HashSet<>();
-        for (int index = 1; index < connector.points.size(); index++) {
-            Point start = connector.points.get(index - 1);
-            Point end = connector.points.get(index);
-            rasterRouteLine(start.x, start.y, end.x, end.y, pixels);
-        }
-        return pixels;
-    }
-
-    private void rasterRouteLine(int x1, int y1, int x2, int y2, Set<Long> pixels) {
-        int distance = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
-        if (distance > MAX_CONNECTOR_RASTER_STEPS) {
-            for (int step = 0; step <= MAX_CONNECTOR_RASTER_STEPS; step++) {
-                double progress = step / (double) MAX_CONNECTOR_RASTER_STEPS;
-                int x = (int) Math.round(x1 + (x2 - x1) * progress);
-                int y = (int) Math.round(y1 + (y2 - y1) * progress);
-                pixels.add(packPoint(x, y));
-            }
-            return;
-        }
-        int dx = Math.abs(x2 - x1);
-        int sx = x1 < x2 ? 1 : -1;
-        int dy = -Math.abs(y2 - y1);
-        int sy = y1 < y2 ? 1 : -1;
-        int error = dx + dy;
-        while (true) {
-            pixels.add(packPoint(x1, y1));
-            if (x1 == x2 && y1 == y2) return;
-            int twice = error * 2;
-            if (twice >= dy) { error += dy; x1 += sx; }
-            if (twice <= dx) { error += dx; y1 += sy; }
-        }
-    }
-
     private long packPoint(int x, int y) {
         return ((long) x << 32) | (y & 0xFFFFFFFFL);
     }
 
     private void drawConnector(GuiGraphics gg, RenderedConnector connector) {
-        int color = connector.incompatible ? 0xFFFF3030 : 0xFF686868;
+        int color = connector.incompatible
+                ? QuestTreeConnectorRenderer.INCOMPATIBLE_COLOR
+                : QuestTreeConnectorRenderer.NORMAL_COLOR;
         for (int index = 1; index < connector.connector.points.size(); index++) {
             Point start = connector.connector.points.get(index - 1);
             Point end = connector.connector.points.get(index);
-            drawConnectorSegment(gg, start, end, CONNECTOR_OUTER_WIDTH, 0xFF000000);
-            drawConnectorSegment(gg, start, end, CONNECTOR_INNER_WIDTH, color);
+            QuestTreeConnectorRenderer.drawSegment(gg, start.x, start.y, end.x, end.y, color);
         }
-    }
-
-    private static void drawConnectorSegment(GuiGraphics gg, Point start, Point end, int thickness, int color) {
-        int dx = end.x - start.x;
-        int dy = end.y - start.y;
-        int length = Math.max(1, (int) Math.ceil(Math.hypot(dx, dy)));
-        float angle = (float) Math.toDegrees(Math.atan2(dy, dx));
-        int half = thickness / 2;
-        gg.pose().pushPose();
-        gg.pose().translate(start.x, start.y, 0);
-        gg.pose().mulPose(Axis.ZP.rotationDegrees(angle));
-        gg.fill(0, -half, length + 1, thickness - half, color);
-        gg.pose().popPose();
-    }
-
-    private RenderedConnector renderedConnector(QuestEntryData dependency, QuestEntryData quest, boolean incompatible,
-                                                List<RoutedConnector> routed) {
-        Connector connector = connector(dependency, quest, routed);
-        return new RenderedConnector(dependency, quest, connector, incompatible);
     }
 
     private void rebuildCaches() {
@@ -1100,6 +935,28 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
                     incompatibleDependencies(quest).contains(dependency.id)));
         }
         renderedConnectors = List.copyOf(connectors);
+    }
+
+    // keep existing bends during drag and calculate collision-aware routes only on release
+    private void updateConnectorPreview(QuestEntryData moved) {
+        if (moved == null || renderedConnectors.isEmpty()) return;
+        List<RenderedConnector> updated = new ArrayList<>(renderedConnectors.size());
+        for (RenderedConnector connector : renderedConnectors) {
+            boolean movedStart = connector.dependency == moved;
+            boolean movedEnd = connector.quest == moved;
+            if (!movedStart && !movedEnd) {
+                updated.add(connector);
+                continue;
+            }
+            List<Point> points = new ArrayList<>(connector.connector.points);
+            if (points.isEmpty()) continue;
+            if (movedStart) points.set(0, new Point(nodeX(moved) + NODE_SIZE / 2, nodeY(moved) + NODE_SIZE / 2));
+            if (movedEnd) points.set(points.size() - 1,
+                    new Point(nodeX(moved) + NODE_SIZE / 2, nodeY(moved) + NODE_SIZE / 2));
+            updated.add(new RenderedConnector(connector.dependency, connector.quest,
+                    new Connector(List.copyOf(points)), connector.incompatible));
+        }
+        renderedConnectors = List.copyOf(updated);
     }
 
     private void rebuildSpatialIndex() {
@@ -1263,9 +1120,6 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private record Connector(List<Point> points) {
-    }
-
-    private record RoutedConnector(Connector connector, Set<Long> pixels) {
     }
 
     private record DependencyEdge(QuestEntryData dependency, QuestEntryData quest) {

@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "netherdepthsupgrade:item/fortress_grouper_spawn_egg"
-  }
-}

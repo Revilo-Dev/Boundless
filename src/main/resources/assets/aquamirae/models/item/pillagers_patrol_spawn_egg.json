@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "aquamirae:item/pillagers_patrol_spawn_egg"
-  }
-}

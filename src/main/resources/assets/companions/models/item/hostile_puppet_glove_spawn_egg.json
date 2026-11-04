@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "companions:item/hostile_puppet_glove_spawn_egg"
-  }
-}

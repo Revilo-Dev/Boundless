@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "species:item/cliff_hanger_spawn_egg"
-  }
-}

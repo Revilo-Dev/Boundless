@@ -25,6 +25,7 @@ import net.revilodev.boundless.quest.QuestData;
 import net.revilodev.boundless.quest.QuestTracker;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -41,9 +42,9 @@ public final class QuestPanelClient {
     private static final ResourceLocation BTN_TEX_TOAST_HOVER =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/quest_book_toast_highlighted.png");
     private static final ResourceLocation BTN_SETTINGS =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_settings.png");
     private static final ResourceLocation BTN_SETTINGS_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_settings_hovered.png");
     private static final ResourceLocation PANEL_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
     private static final int PANEL_W = 147;
@@ -52,6 +53,7 @@ public final class QuestPanelClient {
     private static final int BTN_Y_BESIDE_RECIPE = 61;
     private static final int BTN_X_ABOVE_OFFHAND = 76;
     private static final int BTN_Y_ABOVE_OFFHAND = 43;
+    private static final int QUEST_LOAD_BATCH = 64;
 
     // live quest panel state per inventory screen
     private static final Map<Screen, State> STATES = new WeakHashMap<>();
@@ -107,12 +109,11 @@ public final class QuestPanelClient {
         e.addListener(st.detailsBg);
 
         st.list = new QuestListWidget(0, 0, st.panelWidth - 20, st.panelHeight - 20, q -> openDetails(st, q));
-        st.list.setQuests(QuestData.all());
         st.list.setCategory(st.selectedCategory);
         e.addListener(st.list);
 
         st.tree = new QuestTreeWidget(0, 0, st.panelWidth - 17, st.panelHeight - 17, q -> openDetails(st, q));
-        st.tree.setQuests(new java.util.ArrayList<>(QuestData.all()));
+        st.tree.setQuests(List.of(), false);
         e.addListener(st.tree);
 
         st.searchBox = new EditBox(Minecraft.getInstance().font, 0, 0, 127, 16, Component.translatable("ui.boundless.questbook.search_quests"));
@@ -137,8 +138,7 @@ public final class QuestPanelClient {
             if (Config.disableCategories()) return;
             st.selectedCategory = id;
             lastSelectedCategory = id;
-            if (st.list != null) st.list.setCategory(id);
-            refreshTree(st);
+            startCategoryLoad(st);
             st.showingDetails = false;
             if (!usesTreeView(st)) st.expanded = false;
             relayoutPanel(inv, st);
@@ -174,7 +174,9 @@ public final class QuestPanelClient {
         });
         e.addListener(st.expandButton);
 
-        refreshTree(st);
+        startCategoryLoad(st);
+        st.questBookDataRevision = QuestData.clientRevision();
+        st.disabledCategoriesSignature = Config.disabledCategories().hashCode();
         reposition(inv, st);
 
         if (lastQuestOpen && isQuestBookEnabled()) {
@@ -246,6 +248,7 @@ public final class QuestPanelClient {
             st.originalLeft = null;
         }
         refreshQuestBookData(st);
+        if (st.open) advanceCategoryLoad(st);
         reposition(inv, st);
         updateVisibility(st);
         if (st.tree != null) {
@@ -333,11 +336,6 @@ public final class QuestPanelClient {
     public static void applyConfigChanges() {
         for (State st : STATES.values()) {
             if (st == null) continue;
-            if (st.list != null) {
-                st.list.setQuests(QuestData.all());
-                st.list.setCategory(st.selectedCategory);
-                st.list.setSearchQuery(st.searchQuery);
-            }
             if (st.tabs != null) {
                 if (!Config.disableCategories()) {
                     st.tabs.setSelected(st.selectedCategory);
@@ -361,7 +359,7 @@ public final class QuestPanelClient {
                 st.btn.visible = show;
                 st.btn.active = show;
             }
-            refreshTree(st);
+            startCategoryLoad(st);
             if (collapseExpandedTree) relayoutPanel(st.inv, st);
             else {
                 reposition(st.inv, st);
@@ -607,56 +605,82 @@ public final class QuestPanelClient {
     }
 
     private static void refreshQuestBookData(State st) {
-        int signature = 31 * QuestData.all().hashCode() + QuestData.categoriesOrdered().hashCode();
-        signature = 31 * signature + Config.disabledCategories().hashCode();
-        if (signature == st.questBookDataSignature) return;
-        st.questBookDataSignature = signature;
-        if (st.list != null) {
-            st.list.setQuests(QuestData.all());
-            st.list.setCategory(st.selectedCategory);
-        }
+        long revision = QuestData.clientRevision();
+        int disabledSignature = Config.disabledCategories().hashCode();
+        if (revision == st.questBookDataRevision && disabledSignature == st.disabledCategoriesSignature) return;
+        st.questBookDataRevision = revision;
+        st.disabledCategoriesSignature = disabledSignature;
         if (st.tabs != null && !Config.disableCategories()) {
             st.tabs.setSelected(st.selectedCategory);
             st.tabs.setCategories(QuestData.categoriesOrdered());
             st.selectedCategory = st.tabs.getSelectedId();
             if (st.selectedCategory == null || st.selectedCategory.isBlank()) st.selectedCategory = st.tabs.selectFirstCategory();
             lastSelectedCategory = st.selectedCategory;
-            if (st.list != null) st.list.setCategory(st.selectedCategory);
         }
-        refreshTree(st);
+        startCategoryLoad(st);
     }
 
-    private static void refreshTree(State st) {
-        if (st == null || st.tree == null) return;
-        st.tree.setViewKey(st.selectedCategory);
-        java.util.List<QuestData.Quest> quests = new java.util.ArrayList<>();
-        for (QuestData.Quest quest : QuestData.all()) {
-            if ("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category)) quests.add(quest);
+    private static void startCategoryLoad(State st) {
+        if (st == null) return;
+        List<QuestData.Quest> categoryQuests = QuestData.questsForCategory(st.selectedCategory);
+        st.categoryQuests = categoryQuests;
+        st.loadedCategoryQuests.clear();
+        st.loadedQuestCount = 0;
+        st.categoryLoadComplete = false;
+
+        if (st.list != null) {
+            st.list.setCategory(st.selectedCategory);
+            st.list.setSearchQuery(st.searchQuery);
+            st.list.beginQuestLoad();
         }
-        st.tree.setQuests(quests);
+        if (st.tree == null) return;
+        st.tree.setViewKey(st.selectedCategory);
+        st.tree.setQuests(List.of(), false);
         QuestData.Category category = QuestData.categoryById(st.selectedCategory).orElse(null);
         st.tree.setBackground(category == null ? "" : category.background,
                 category != null && category.backgroundDarkening,
                 category == null ? 0.45f : category.backgroundDarkeningOpacity,
                 category == null ? 0.5f : category.backgroundTileScale);
         st.tree.setStickers(category == null ? java.util.List.of() : category.stickers);
+        st.treeView = category != null && category.treeLayout;
+        if ("all".equalsIgnoreCase(st.selectedCategory)) {
+            for (QuestData.Category current : QuestData.categoriesOrdered()) {
+                if (current.treeLayout) {
+                    st.treeView = true;
+                    break;
+                }
+            }
+        }
+        if (!st.treeView) {
+            for (QuestData.Quest quest : categoryQuests) {
+                if (quest.treeX != -1 || quest.treeY != -1) {
+                    st.treeView = true;
+                    break;
+                }
+            }
+        }
+        advanceCategoryLoad(st);
+    }
+
+    private static void advanceCategoryLoad(State st) {
+        if (st == null || st.categoryLoadComplete) return;
+        int total = st.categoryQuests.size();
+        int end = Math.min(total, st.loadedQuestCount + QUEST_LOAD_BATCH);
+        if (end > st.loadedQuestCount) {
+            List<QuestData.Quest> batch = st.categoryQuests.subList(st.loadedQuestCount, end);
+            st.loadedCategoryQuests.addAll(batch);
+            if (st.list != null && !st.treeView) st.list.appendQuests(batch);
+            st.loadedQuestCount = end;
+        }
+        boolean complete = st.loadedQuestCount >= total;
+        if (st.tree != null && st.treeView) {
+            st.tree.setQuests(st.loadedCategoryQuests, complete);
+        }
+        st.categoryLoadComplete = complete;
     }
 
     private static boolean usesTreeView(State st) {
-        if (st == null) return false;
-        if ("all".equalsIgnoreCase(st.selectedCategory)) {
-            for (QuestData.Category category : QuestData.categoriesOrdered()) {
-                if (category.treeLayout) return true;
-            }
-        } else {
-            QuestData.Category category = QuestData.categoryById(st.selectedCategory).orElse(null);
-            if (category != null && category.treeLayout) return true;
-        }
-        for (QuestData.Quest quest : QuestData.all()) {
-            if (("all".equalsIgnoreCase(st.selectedCategory) || st.selectedCategory.equalsIgnoreCase(quest.category))
-                    && (quest.treeX != -1 || quest.treeY != -1)) return true;
-        }
-        return false;
+        return st != null && st.treeView;
     }
 
     private static boolean detailsDocked(State st) {
@@ -873,9 +897,15 @@ public final class QuestPanelClient {
         int recipeOffsetX;
         int recipeOffsetY;
         boolean hasRecipeOffset;
-        int questBookDataSignature = Integer.MIN_VALUE;
+        long questBookDataRevision = Long.MIN_VALUE;
+        int disabledCategoriesSignature = Integer.MIN_VALUE;
         long questButtonStatusTick = Long.MIN_VALUE;
         boolean questButtonHasCompleted;
+        List<QuestData.Quest> categoryQuests = List.of();
+        final List<QuestData.Quest> loadedCategoryQuests = new ArrayList<>();
+        int loadedQuestCount;
+        boolean categoryLoadComplete;
+        boolean treeView;
 
         State(InventoryScreen inv) {
             this.inv = inv;

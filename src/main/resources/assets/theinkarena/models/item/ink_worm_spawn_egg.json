@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "theinkarena:item/ink_worm_spawn_egg"
-  }
-}

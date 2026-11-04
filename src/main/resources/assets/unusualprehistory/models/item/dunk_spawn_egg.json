@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "unusualprehistory:item/dunk_spawn_egg"
-  }
-}

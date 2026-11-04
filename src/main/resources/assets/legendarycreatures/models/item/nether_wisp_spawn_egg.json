@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",
-  "textures": {
-    "egg": "legendarycreatures:item/nether_wisp_spawn_egg"
-  }
-}

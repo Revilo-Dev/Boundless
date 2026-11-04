@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "whatareyouvotingfor:item/penguin_spawn_egg"
-  }
-}

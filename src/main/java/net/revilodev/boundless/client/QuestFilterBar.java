@@ -49,23 +49,23 @@ public final class QuestFilterBar extends AbstractWidget {
     private static final ResourceLocation TEX_SETTINGS_HOVER =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/pull-tab-settings-pulled.png");
     private static final ResourceLocation BTN_COMPLETE =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_complete.png");
     private static final ResourceLocation BTN_COMPLETE_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_complete_hovered.png");
     private static final ResourceLocation BTN_COMPLETE_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/complete_filter_disabled.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_complete_disabled.png");
     private static final ResourceLocation BTN_REJECT =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject.png");
     private static final ResourceLocation BTN_REJECT_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject_hovered.png");
     private static final ResourceLocation BTN_REJECT_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/reject_filter_disabled.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject_disabled.png");
     private static final ResourceLocation BTN_LOCKED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked.png");
     private static final ResourceLocation BTN_LOCKED_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked_hovered.png");
     private static final ResourceLocation BTN_LOCKED_DISABLED =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/locked_filter_disabled.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_locked_disabled.png");
 
     // shared filter state
     private static boolean showCompleted = false;

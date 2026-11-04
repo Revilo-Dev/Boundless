@@ -1,6 +1,0 @@
-{
-  "parent": "minecraft:item/spawn_egg",  
-  "textures": {
-    "egg": "enderzoology:item/wither_witch_spawn_egg"
-  }
-}

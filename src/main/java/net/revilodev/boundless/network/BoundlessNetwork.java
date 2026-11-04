@@ -936,6 +936,7 @@ public final class BoundlessNetwork {
                 stickerJson.addProperty("value", sticker.value());
                 stickerJson.addProperty("x", sticker.x());
                 stickerJson.addProperty("y", sticker.y());
+                stickerJson.addProperty("scale", sticker.scale());
                 stickers.add(stickerJson);
             }
             o.add("stickers", stickers);
@@ -1278,7 +1279,7 @@ public final class BoundlessNetwork {
 
             if (p.builtin()) {
                 Config.ENABLE_BUILTIN_QUEST_PACK.set(p.enabled());
-                Config.SPEC.save();
+                Config.saveLater();
             } else {
                 String id = p.id() == null ? "" : p.id().trim();
                 if (id.isBlank()) return;
@@ -1307,7 +1308,7 @@ public final class BoundlessNetwork {
             Config.QUICK_EDIT.set(p.quickEdit());
             Config.DISABLE_QUEST_BOOK.set(p.disableQuestBook());
             Config.SPAWN_WITH_QUEST_BOOK.set(p.spawnWithQuestBook());
-            Config.SPEC.save();
+            Config.saveLater();
 
             for (ServerPlayer player : sp.server.getPlayerList().getPlayers()) {
                 sendConfig(player);

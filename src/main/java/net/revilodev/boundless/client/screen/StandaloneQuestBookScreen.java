@@ -26,9 +26,9 @@ public final class StandaloneQuestBookScreen extends Screen {
     private static final ResourceLocation PANEL_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/quest_panel.png");
     private static final ResourceLocation BTN_SETTINGS =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_settings.png");
     private static final ResourceLocation BTN_SETTINGS_HOVER =
-            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/settings_button_hovered.png");
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_settings_hovered.png");
     private static String lastSelectedCategory = "all";
 
     private int panelWidth = 147;
