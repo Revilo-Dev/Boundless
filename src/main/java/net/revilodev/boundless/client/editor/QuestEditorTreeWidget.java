@@ -950,13 +950,25 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             }
             List<Point> points = new ArrayList<>(connector.connector.points);
             if (points.isEmpty()) continue;
-            if (movedStart) points.set(0, new Point(nodeX(moved) + NODE_SIZE / 2, nodeY(moved) + NODE_SIZE / 2));
-            if (movedEnd) points.set(points.size() - 1,
-                    new Point(nodeX(moved) + NODE_SIZE / 2, nodeY(moved) + NODE_SIZE / 2));
+            Point movedCenter = new Point(nodeX(moved) + NODE_SIZE / 2, nodeY(moved) + NODE_SIZE / 2);
+            if (movedStart) moveConnectorEnd(points, 0, 1, movedCenter);
+            if (movedEnd) moveConnectorEnd(points, points.size() - 1, points.size() - 2, movedCenter);
             updated.add(new RenderedConnector(connector.dependency, connector.quest,
                     new Connector(List.copyOf(points)), connector.incompatible));
         }
         renderedConnectors = List.copyOf(updated);
+    }
+
+    private void moveConnectorEnd(List<Point> points, int endIndex, int bendIndex, Point movedEnd) {
+        Point oldEnd = points.get(endIndex);
+        points.set(endIndex, movedEnd);
+        if (points.size() <= 2) return;
+        Point bend = points.get(bendIndex);
+        if (oldEnd.x == bend.x) {
+            points.set(bendIndex, new Point(movedEnd.x, bend.y));
+        } else if (oldEnd.y == bend.y) {
+            points.set(bendIndex, new Point(bend.x, movedEnd.y));
+        }
     }
 
     private void rebuildSpatialIndex() {

@@ -2910,6 +2910,16 @@ public final class QuestEditorScreen extends QuestEditor {
             return handleUnsavedChangesPopupClick(mouseX, mouseY, button);
         }
         if (emojiPickerOpen) return clickEmojiPicker(mouseX, mouseY, button);
+        if (isItemPickerOpen()) {
+            if (button == 0) clickItemPicker(mouseX, mouseY);
+            return true;
+        }
+        if (popupMenus.hasOpenMenu()) {
+            if (button == 0) {
+                if (!clickTypeMenu(mouseX, mouseY)) clickDropdownMenu(mouseX, mouseY);
+            }
+            return true;
+        }
         if (button == 0 && clickPackBackup(mouseX, mouseY)) return true;
         if (button == 0 && clickTitleFormatterButton(mouseX, mouseY)) return true;
         if (button == 0 && questNameLanguageButton != null && questNameLanguageButton.visible
@@ -2917,7 +2927,6 @@ public final class QuestEditorScreen extends QuestEditor {
             questNameLanguageButton.onPress();
             return true;
         }
-        if (button == 0 && clickItemPicker(mouseX, mouseY)) return true;
         if (button == 0 && saveButton != null && saveButton.visible && saveButton.active
                 && saveButton.isMouseOver(mouseX, mouseY)) {
             saveButton.onPress();
@@ -2940,8 +2949,6 @@ public final class QuestEditorScreen extends QuestEditor {
                 return true;
             }
         }
-        if (button == 0 && clickTypeMenu(mouseX, mouseY)) return true;
-        if (button == 0 && clickDropdownMenu(mouseX, mouseY)) return true;
         if (button == 0) {
             if (!isInsideSuggestionBox(mouseX, mouseY) && !isInsideSuggestionTargetField(mouseX, mouseY)) {
                 suppressIdSuggestions = true;

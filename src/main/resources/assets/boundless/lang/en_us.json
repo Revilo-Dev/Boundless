@@ -17,6 +17,7 @@
   "ui.boundless.questbook.kill": "Kill:",
   "ui.boundless.questbook.have_effect": "Have effect:",
   "ui.boundless.questbook.achieve": "Achieve:",
+  "ui.boundless.questbook.advance": "Advance:",
   "ui.boundless.questbook.stat": "Stat:",
   "ui.boundless.questbook.reward": "Reward:",
   "ui.boundless.questbook.unlocks_category": "Unlocks: %s",

@@ -2,17 +2,24 @@ package net.revilodev.boundless.client;
 
 import com.mojang.math.Axis;
 
+import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import net.revilodev.boundless.Config;
 import net.revilodev.boundless.quest.QuestData;
+import net.revilodev.boundless.quest.QuestItemSpec;
 import net.revilodev.boundless.quest.QuestTracker;
 import net.revilodev.boundless.client.editor.QuestEditorItemIcons;
 import net.revilodev.boundless.client.editor.QuestStickerTextRenderer;
@@ -186,8 +193,7 @@ public final class QuestTreeWidget extends AbstractWidget {
             boolean highlighted = selectedQuestId.equals(connector.quest.id)
                     || selectedQuestId.equals(connector.dependency.id);
             QuestTracker.Status dependencyStatus = questState(connector.dependency).status;
-            boolean completed = dependencyStatus == QuestTracker.Status.COMPLETED
-                    || dependencyStatus == QuestTracker.Status.REDEEMED;
+            boolean completed = dependencyStatus == QuestTracker.Status.REDEEMED;
             drawConnector(gg, connector.connector, connector.incompatible, completed, highlighted);
         }
     }
@@ -449,21 +455,87 @@ public final class QuestTreeWidget extends AbstractWidget {
         List<Component> lines = new ArrayList<>();
         lines.add(Component.literal(quest.name));
         if (quest.completion == null || quest.completion.targets.isEmpty()) return lines;
-        lines.add(Component.literal("Requirements").withStyle(ChatFormatting.GRAY));
         for (QuestData.Target target : quest.completion.targets) {
-            lines.add(Component.literal("• " + requirementText(target)).withStyle(ChatFormatting.GRAY));
+            lines.add(requirementLine(quest, target));
         }
         return lines;
     }
 
-    private String requirementText(QuestData.Target target) {
-        if (target == null) return "Unknown";
+    private Component requirementLine(QuestData.Quest quest, QuestData.Target target) {
+        if (target == null) return Component.translatable("ui.boundless.questbook.unknown");
+        boolean complete = minecraft.player != null && QuestTracker.isTargetSatisfied(quest, target, minecraft.player);
+        MutableComponent line = objectiveLabel(target).withStyle(style -> style.withColor(objectiveLabelColor(target)));
+        return line.append(Component.literal(" " + objectiveText(quest, target))
+                .withStyle(style -> style.withColor(complete ? Config.completedTextColor() : Config.incompleteTextColor())));
+    }
+
+    private MutableComponent objectiveLabel(QuestData.Target target) {
+        if (target.isAdvancement()) return Component.translatable("ui.boundless.questbook.advance");
+        if (target.isItem()) return Component.translatable("ui.boundless.questbook.collect");
+        if (target.isSubmit() || target.isXp() || target.isLevelUpLevel()) return Component.translatable("ui.boundless.questbook.submit");
+        if (target.isEntity()) return Component.translatable("ui.boundless.questbook.kill");
+        if (target.isEffect()) return Component.translatable("ui.boundless.questbook.have_effect");
+        if (target.isObserve()) return Component.translatable("ui.boundless.questbook.observe");
+        if (target.isBiome()) return Component.translatable("ui.boundless.questbook.biome");
+        if (target.isDimension()) return Component.translatable("ui.boundless.questbook.dimension");
+        return Component.translatable("quest.boundless.complete").append(":");
+    }
+
+    private int objectiveLabelColor(QuestData.Target target) {
+        if (target.isItem()) return Config.collectTextColor();
+        if (target.isSubmit() || target.isXp() || target.isLevelUpLevel() || target.isFieldInput()) return Config.submitTextColor();
+        if (target.isEntity()) return Config.killTextColor();
+        if (target.isEffect()) return Config.effectTextColor();
+        if (target.isAdvancement()) return Config.achieveTextColor();
+        if (target.isObserve()) return Config.observeTextColor();
+        if (target.isBiome()) return Config.biomeTextColor();
+        if (target.isDimension()) return Config.dimensionTextColor();
+        return Config.requiresTextColor();
+    }
+
+    private String objectiveText(QuestData.Quest quest, QuestData.Target target) {
+        String name = objectiveName(target);
+        if (minecraft.player == null) return name;
+        if (target.isItem() || target.isSubmit()) {
+            int have = Math.min(QuestTracker.getTrackedItemProgress(quest, target, minecraft.player), target.count);
+            return name + " " + have + "/" + target.count;
+        }
+        if (target.isEntity()) {
+            int have = Math.min(QuestTracker.getAcceptedKillCount(target, minecraft.player), target.count);
+            return name + " " + have + "/" + target.count;
+        }
+        if (target.isXp()) {
+            int have = Math.min(QuestTracker.getXpAmount(minecraft.player, target.id), target.count);
+            return name + " " + have + "/" + target.count;
+        }
+        return name;
+    }
+
+    private String objectiveName(QuestData.Target target) {
         if (target.hint != null && !target.hint.isBlank()) return target.hint;
-        String kind = target.kind == null || target.kind.isBlank() ? "Complete" : target.kind.replace('_', ' ');
-        kind = Character.toUpperCase(kind.charAt(0)) + kind.substring(1);
-        String id = target.id == null || target.id.isBlank() ? "objective" : target.id;
-        if ((target.isItem() || target.isSubmit()) && target.count > 1) return kind + " " + target.count + "× " + id;
-        return kind + " " + id;
+        if (target.isAdvancement()) {
+            ResourceLocation id = ResourceLocation.tryParse(target.id);
+            AdvancementHolder holder = id == null || minecraft.getConnection() == null
+                    ? null : minecraft.getConnection().getAdvancements().get(id);
+            if (holder != null) {
+                DisplayInfo display = holder.value().display().orElse(null);
+                if (display != null) return display.getTitle().getString();
+            }
+        }
+        if (target.isItem() || target.isSubmit()) {
+            QuestItemSpec spec = QuestItemSpec.parse(target.id);
+            Item item = spec.item();
+            if (item != null) return new ItemStack(item).getHoverName().getString();
+        }
+        if (target.isEntity()) {
+            ResourceLocation id = ResourceLocation.tryParse(target.id);
+            if (id != null) {
+                var entity = BuiltInRegistries.ENTITY_TYPE.getOptional(id).orElse(null);
+                if (entity != null) return entity.getDescription().getString();
+            }
+        }
+        return target.id == null || target.id.isBlank()
+                ? Component.translatable("ui.boundless.questbook.unknown").getString() : target.id;
     }
 
     private QuestData.Quest questAt(double mouseX, double mouseY) {
