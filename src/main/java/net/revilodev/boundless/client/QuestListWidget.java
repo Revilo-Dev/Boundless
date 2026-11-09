@@ -524,7 +524,7 @@ public final class QuestListWidget extends AbstractWidget {
 
                 int textX = getX() + 23;
                 if (!hideIcons) {
-                    renderQuestIcon(gg, q, getX() + 6, top + 7);
+                    renderQuestIcon(gg, q, getX() + 6, top + 5);
                 } else {
                     textX = getX() + 6;
                 }
@@ -552,13 +552,6 @@ public final class QuestListWidget extends AbstractWidget {
         }
         gg.pose().popPose();
 
-        if (Config.stickySubCategoryHeaders() && scrollY > 0f) {
-            gg.pose().pushPose();
-            gg.pose().translate(0, 0, 500);
-            renderStickySubCategoryHeader(gg, rows, contentTop, hideIcons, widgetTextColor);
-            gg.pose().popPose();
-        }
-
         gg.disableScissor();
 
         int content = contentHeight(rows);
@@ -570,20 +563,6 @@ public final class QuestListWidget extends AbstractWidget {
             int barY = contentTop + (int) ((viewportHeight - barH) * scrollRatio);
             gg.fill(getX() + width + 4, barY, getX() + width + 6, barY + barH, 0xFF808080);
         }
-    }
-
-    private void renderStickySubCategoryHeader(GuiGraphics gg, List<RowEntry> rows, int contentTop,
-                                               boolean hideIcons, int widgetTextColor) {
-        int offset = 0;
-        QuestData.SubCategory activeHeader = null;
-        for (RowEntry row : rows) {
-            if (row.isHeader() && offset <= scrollY) activeHeader = row.subCategory;
-            if (offset > scrollY) break;
-            offset += rowHeight(row);
-        }
-        if (activeHeader == null) return;
-
-        renderSubCategoryHeader(gg, activeHeader, contentTop, hideIcons, widgetTextColor);
     }
 
     private void renderSubCategoryHeader(GuiGraphics gg, QuestData.SubCategory activeHeader, int contentTop,
@@ -662,7 +641,7 @@ public final class QuestListWidget extends AbstractWidget {
             renderScaledTextureIcon(gg, texture, x, y);
             return;
         }
-        quest.iconItem().ifPresent(item -> renderScaledItem(gg, new ItemStack(item), x, y));
+        renderScaledItem(gg, QuestEditorItemIcons.iconStackFromId(quest.icon), x, y);
     }
 
     // treat texture paths as direct icon sources

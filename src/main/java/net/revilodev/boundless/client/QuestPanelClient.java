@@ -140,6 +140,7 @@ public final class QuestPanelClient {
             lastSelectedCategory = id;
             startCategoryLoad(st);
             st.showingDetails = false;
+            st.selectedQuestId = "";
             if (!usesTreeView(st)) st.expanded = false;
             relayoutPanel(inv, st);
         });
@@ -322,6 +323,38 @@ public final class QuestPanelClient {
         relayoutPanel(inv, st);
     }
 
+    public static void onMouseDragged(ScreenEvent.MouseDragged.Pre e) {
+        Screen screen = e.getScreen();
+        State state = STATES.get(screen);
+        if (state == null || !(screen instanceof InventoryScreen) || !state.open
+                || state.tree == null || !state.tree.visible || !state.tree.isDragging()) return;
+        if (state.tree.mouseDragged(e.getMouseX(), e.getMouseY(), e.getMouseButton(),
+                e.getDragX(), e.getDragY())) {
+            e.setCanceled(true);
+        }
+    }
+
+    public static void onMouseButtonReleased(ScreenEvent.MouseButtonReleased.Pre e) {
+        Screen screen = e.getScreen();
+        State state = STATES.get(screen);
+        if (state == null || !(screen instanceof InventoryScreen) || !state.open
+                || state.tree == null || !state.tree.visible || !state.tree.isDragging()) return;
+        if (state.tree.mouseReleased(e.getMouseX(), e.getMouseY(), e.getButton())) {
+            e.setCanceled(true);
+        }
+    }
+
+    public static void onKeyPressed(ScreenEvent.KeyPressed.Pre e) {
+        Screen screen = e.getScreen();
+        State state = STATES.get(screen);
+        if (state == null || !(screen instanceof InventoryScreen) || !state.open
+                || state.tree == null || !state.tree.visible) return;
+        if (state.searchBox != null && state.searchBox.isFocused()) return;
+        if (state.tree.keyPressed(e.getKeyCode(), e.getScanCode(), e.getModifiers())) {
+            e.setCanceled(true);
+        }
+    }
+
     // close every open quest panel for another inventory panel
     public static void closeAllOpenPanels() {
         for (State st : STATES.values()) {
@@ -387,6 +420,7 @@ public final class QuestPanelClient {
             }
             applySelectedCategory(st);
             st.showingDetails = false;
+            st.selectedQuestId = "";
         } else if (st.originalLeft != null) {
             setLeft(st.inv, st.originalLeft);
         }
@@ -599,6 +633,7 @@ public final class QuestPanelClient {
     private static void openDetails(State st, QuestData.Quest quest) {
         if (st.details == null) return;
         st.details.setQuest(quest);
+        st.selectedQuestId = quest == null ? "" : quest.id;
         st.showingDetails = true;
         if (!usesTreeView(st)) st.expanded = false;
         relayoutPanel(st.inv, st);
@@ -616,6 +651,9 @@ public final class QuestPanelClient {
             st.selectedCategory = st.tabs.getSelectedId();
             if (st.selectedCategory == null || st.selectedCategory.isBlank()) st.selectedCategory = st.tabs.selectFirstCategory();
             lastSelectedCategory = st.selectedCategory;
+        }
+        if (st.showingDetails && st.details != null && !st.selectedQuestId.isBlank()) {
+            QuestData.byId(st.selectedQuestId).ifPresent(st.details::setQuest);
         }
         startCategoryLoad(st);
     }
@@ -690,6 +728,7 @@ public final class QuestPanelClient {
     // return from quest details to the quest list
     private static void closeDetails(State st) {
         st.showingDetails = false;
+        st.selectedQuestId = "";
         relayoutPanel(st.inv, st);
     }
 
@@ -893,6 +932,7 @@ public final class QuestPanelClient {
         boolean open;
         Integer originalLeft;
         String selectedCategory = "all";
+        String selectedQuestId = "";
         String searchQuery = "";
         int recipeOffsetX;
         int recipeOffsetY;

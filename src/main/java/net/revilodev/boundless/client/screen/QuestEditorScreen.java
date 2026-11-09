@@ -138,6 +138,8 @@ import org.lwjgl.util.tinyfd.TinyFileDialogs;
 public final class QuestEditorScreen extends QuestEditor {
     private static final ResourceLocation LANGUAGE_ICON = ResourceLocation.fromNamespaceAndPath(
             "boundless", "textures/gui/sprites/icons/language.png");
+    private static final ResourceLocation REMOVE_ICON = ResourceLocation.fromNamespaceAndPath(
+            "boundless", "textures/gui/sprites/icons/reject.png");
     public QuestEditorScreen(Screen parent) {
         super(parent);
     }
@@ -162,8 +164,10 @@ public final class QuestEditorScreen extends QuestEditor {
         return new TranslationRow(description, locale);
     }
 
-    // media selector keeps browsing and clearing behind one compact control
+    // media selector previews the selected image and exposes a clear button
     static final class MediaSelector extends AbstractWidget {
+        private static final int BUTTON_HEIGHT = 20;
+        private static final int BUTTON_GAP = 2;
         private final Font font;
         private final Runnable onBrowse;
         private final Runnable onClear;
@@ -182,30 +186,56 @@ public final class QuestEditorScreen extends QuestEditor {
 
         void setValue(String value) {
             this.value = value == null ? "" : value;
+            updatePreviewHeight();
+        }
+
+        void updatePreviewHeight() {
+            int previewHeight = value.isBlank() ? 0
+                    : net.revilodev.boundless.client.QuestMediaRenderer.preferredHeight(value, getWidth());
+            setHeight(BUTTON_HEIGHT + (previewHeight > 0 ? BUTTON_GAP + previewHeight : 0));
         }
 
         @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
             if (!visible || !active || !isMouseOver(mouseX, mouseY)) return false;
-            if (button == 1) {
+            if (button != 0) return false;
+            int removeX = getX() + getWidth() - BUTTON_HEIGHT;
+            if (!value.isBlank() && mouseY < getY() + BUTTON_HEIGHT && mouseX >= removeX) {
                 setValue("");
                 onClear.run();
                 return true;
             }
-            if (button != 0) return false;
-            onBrowse.run();
-            return true;
+            if (mouseY < getY() + BUTTON_HEIGHT) {
+                onBrowse.run();
+                return true;
+            }
+            return false;
         }
 
         @Override
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-            ResourceLocation sprite = isMouseOver(mouseX, mouseY)
+            int browseWidth = value.isBlank() ? getWidth() : Math.max(1, getWidth() - BUTTON_HEIGHT - BUTTON_GAP);
+            boolean browseHovered = mouseX >= getX() && mouseX < getX() + browseWidth
+                    && mouseY >= getY() && mouseY < getY() + BUTTON_HEIGHT;
+            ResourceLocation sprite = browseHovered
                     ? ResourceLocation.withDefaultNamespace("widget/button_highlighted")
                     : ResourceLocation.withDefaultNamespace("widget/button");
-            graphics.blitSprite(sprite, getX(), getY(), getWidth(), getHeight());
+            graphics.blitSprite(sprite, getX(), getY(), browseWidth, BUTTON_HEIGHT);
             String label = Component.translatable("ui.boundless.editor.browse").getString();
-            String clipped = font.plainSubstrByWidth(label, Math.max(1, getWidth() - 8));
+            String clipped = font.plainSubstrByWidth(label, Math.max(1, browseWidth - 8));
             graphics.drawString(font, clipped, getX() + 4, getY() + 6, 0xFFFFFFFF, false);
+            if (!value.isBlank()) {
+                int removeX = getX() + getWidth() - BUTTON_HEIGHT;
+                boolean removeHovered = mouseX >= removeX && mouseX < removeX + BUTTON_HEIGHT
+                        && mouseY >= getY() && mouseY < getY() + BUTTON_HEIGHT;
+                graphics.blitSprite(ResourceLocation.withDefaultNamespace(removeHovered
+                        ? "widget/button_highlighted" : "widget/button"),
+                        removeX, getY(), BUTTON_HEIGHT, BUTTON_HEIGHT);
+                graphics.blit(REMOVE_ICON, removeX + (BUTTON_HEIGHT - 9) / 2,
+                        getY() + (BUTTON_HEIGHT - 9) / 2, 0, 0, 9, 9, 9, 9);
+                net.revilodev.boundless.client.QuestMediaRenderer.render(
+                        graphics, value, getX(), getY() + BUTTON_HEIGHT + BUTTON_GAP, getWidth());
+            }
         }
 
         @Override
@@ -353,22 +383,28 @@ public final class QuestEditorScreen extends QuestEditor {
         private final Consumer<SubCategoryData> onSave;
         private final Consumer<SubCategoryData> onDelete;
         private final BiConsumer<SubCategoryData, MoveDirection> onMove;
+        private final Consumer<EditBox> onIconBrowse;
         private final EditBox nameBox;
+        private final IconPickerBox iconBox;
         private final ToggleButton defaultOpenToggle;
         private List<SubCategoryData> entries = List.of();
         private SubCategoryData editing;
 
         CategorySubCategorySection(Font font, Consumer<SubCategoryData> onSave,
                                   Consumer<SubCategoryData> onDelete,
-                                  BiConsumer<SubCategoryData, MoveDirection> onMove) {
+                                  BiConsumer<SubCategoryData, MoveDirection> onMove,
+                                  Consumer<EditBox> onIconBrowse) {
             super(0, 0, 1, ROW_HEIGHT, Component.empty());
             this.font = font;
             this.onSave = onSave;
             this.onDelete = onDelete;
             this.onMove = onMove;
+            this.onIconBrowse = onIconBrowse;
             this.nameBox = new EditBox(font, 0, 0, 1, 18,
                     Component.translatable("ui.boundless.editor.field.display"));
             this.nameBox.setMaxLength(128);
+            this.iconBox = new IconPickerBox(font,
+                    Component.translatable("ui.boundless.editor.field.subcategory_icon"));
             this.defaultOpenToggle = new ToggleButton(0, 0, 20, 20, true);
         }
 
@@ -461,9 +497,16 @@ public final class QuestEditorScreen extends QuestEditor {
         }
 
         private void renderEditor(GuiGraphics graphics, int mouseX, int mouseY, int y) {
-            nameBox.setX(getX());
+            iconBox.setX(getX());
+            iconBox.setY(y + 10);
+            iconBox.setWidth(20);
+            graphics.fill(iconBox.getX(), iconBox.getY(), iconBox.getX() + 20, iconBox.getY() + 18, 0xFF808080);
+            graphics.fill(iconBox.getX() + 1, iconBox.getY() + 1,
+                    iconBox.getX() + 19, iconBox.getY() + 17, 0xFF000000);
+            QuestEditorItemIcons.renderIcon(graphics, iconBox.getValue(), iconBox.getX() + 2, iconBox.getY() + 1);
+            nameBox.setX(getX() + 22);
             nameBox.setY(y + 10);
-            nameBox.setWidth(getWidth());
+            nameBox.setWidth(Math.max(1, getWidth() - 22));
             nameBox.render(graphics, mouseX, mouseY, 0f);
             graphics.drawString(font, Component.translatable("ui.boundless.editor.field.display"),
                     getX(), y, 0xFFD0D0D0, false);
@@ -493,6 +536,11 @@ public final class QuestEditorScreen extends QuestEditor {
 
         private boolean handleEditorClick(double mouseX, double mouseY, int y) {
             if (mouseY < y || mouseY > y + EDITOR_HEIGHT) return false;
+            if (mouseX >= iconBox.getX() && mouseX <= iconBox.getX() + iconBox.getWidth()
+                    && mouseY >= iconBox.getY() && mouseY <= iconBox.getY() + iconBox.getHeight()) {
+                if (onIconBrowse != null) onIconBrowse.accept(iconBox);
+                return true;
+            }
             if (nameBox.mouseClicked(mouseX, mouseY, 0)) return true;
             if (defaultOpenToggle.isMouseOver(mouseX, mouseY)) {
                 defaultOpenToggle.onPress();
@@ -502,6 +550,7 @@ public final class QuestEditorScreen extends QuestEditor {
             if (mouseY >= buttonY && mouseY <= buttonY + 18) {
                 int buttonWidth = Math.max(1, (getWidth() - 2) / 2);
                 editing.name = nameBox.getValue();
+                editing.icon = iconBox.getValue();
                 editing.defaultOpen = Boolean.toString(defaultOpenToggle.isOn());
                 if (mouseX <= getX() + buttonWidth) onSave.accept(editing);
                 else if (editing.path == null) {
@@ -518,6 +567,7 @@ public final class QuestEditorScreen extends QuestEditor {
         private void loadEditor(SubCategoryData entry) {
             editing = copy(entry);
             nameBox.setValue(value(editing.name));
+            iconBox.setValue(value(editing.icon));
             defaultOpenToggle.setState(!"false".equalsIgnoreCase(value(editing.defaultOpen)));
         }
 
@@ -1908,6 +1958,7 @@ public final class QuestEditorScreen extends QuestEditor {
                     section.setWidth(widgetWidth);
                 } else if (field.widget instanceof QuestEditorScreen.MediaSelector selector) {
                     selector.setWidth(widgetWidth);
+                    selector.updatePreviewHeight();
                 }
             }
 
@@ -2857,6 +2908,7 @@ public final class QuestEditorScreen extends QuestEditor {
         if (closingEditor) return;
         if (!ensureEditorAccess()) return;
         flushCategoryBackgroundAutosave();
+        saveEditorTreeView();
         closingEditor = true;
         clearPendingInitState();
         applyStagedChangesOnClose();
@@ -3851,12 +3903,14 @@ public final class QuestEditorScreen extends QuestEditor {
                 if (overTab) itemPickerTab = allowedTab;
                 return overTab;
             }
-            if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE, false)) {
+            if (QuestEditorItemPickerRenderer.isMouseOverIconSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CREATIVE)) {
                 itemPickerTab = ItemPickerTab.CREATIVE;
-            } else if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS, false)) {
+            } else if (QuestEditorItemPickerRenderer.isMouseOverIconSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.EFFECTS)) {
                 itemPickerTab = ItemPickerTab.EFFECTS;
-            } else if (QuestEditorItemPickerRenderer.isMouseOverSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM, false)) {
+            } else if (QuestEditorItemPickerRenderer.isMouseOverIconSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.CUSTOM)) {
                 itemPickerTab = ItemPickerTab.CUSTOM;
+            } else if (QuestEditorItemPickerRenderer.isMouseOverIconSideTab(mouseX, mouseY, pickerX, pickerY, ItemPickerTab.INVENTORY)) {
+                itemPickerTab = ItemPickerTab.INVENTORY;
             } else return false;
             itemPickerPage = 0;
             itemPickerSearchQuery = "";
@@ -3995,13 +4049,15 @@ public final class QuestEditorScreen extends QuestEditor {
                 if (questTree != null) questTree.addIconSticker(pendingStickerIconX, pendingStickerIconY, id.toString());
                 return;
             }
-            itemPickerIconTarget.setValue(id.toString());
-            itemPickerIconTarget.setCursorPosition(id.toString().length());
+            String iconValue = itemPickerTab == ItemPickerTab.INVENTORY
+                    ? pickerSelectionId(picked) : id.toString();
+            itemPickerIconTarget.setValue(iconValue);
+            itemPickerIconTarget.setCursorPosition(iconValue.length());
             if (itemPickerIconTarget == catBackgroundBox) {
                 applyCategoryEditorFields();
                 queueCategoryBackgroundAutosave(true);
             }
-            else markCurrentEditorUnsaved();
+            else if (!isCategorySubCategoryIconTarget()) markCurrentEditorUnsaved();
             return;
         }
         List<ScaledMultiLineEditBox> rows = entryRows(itemPickerKind);
@@ -4064,7 +4120,12 @@ public final class QuestEditorScreen extends QuestEditor {
         }
         itemPickerIconTarget.setValue(id);
         itemPickerIconTarget.setCursorPosition(id.length());
-        markCurrentEditorUnsaved();
+        if (!isCategorySubCategoryIconTarget()) markCurrentEditorUnsaved();
+    }
+
+    protected boolean isCategorySubCategoryIconTarget() {
+        return categorySubCategorySection != null
+                && itemPickerIconTarget == categorySubCategorySection.iconBox;
     }
 
     protected void openCustomAssetsDirectory() {

@@ -273,6 +273,7 @@ public abstract class QuestEditor extends Screen {
     protected static final String ENTRY_SUBCATEGORIES = "__subcategories__";
     protected static final String ENTRY_QUESTS = "__quests__";
     protected static final long PENDING_INIT_TTL_MS = 15000L;
+    protected static final Map<String, QuestEditorTreeWidget.ViewState> SAVED_TREE_VIEWS = new HashMap<>();
     protected static ScreenState pendingInitState;
     protected static long pendingInitUntil = 0L;
 
@@ -324,6 +325,7 @@ public abstract class QuestEditor extends Screen {
     protected QuestEditorScreen.CategoryScrollButton categoryWorkspaceDownButton;
     protected int categoryWorkspaceFirstVisibleIndex;
     protected String treeCategoryId = "";
+    protected String activeTreeViewKey = "";
     protected ActionButton saveButton;
     protected Button exportPackButton;
     protected IconButton duplicateButton;
@@ -733,7 +735,7 @@ public abstract class QuestEditor extends Screen {
         addRenderableWidget(catLayoutSelector);
         categorySubCategorySection = new QuestEditorScreen.CategorySubCategorySection(
                 font, this::saveCategorySubCategory, this::deleteCategorySubCategory,
-                this::moveCategorySubCategory);
+                this::moveCategorySubCategory, this::openIconItemPicker);
         categorySubCategorySection.visible = false;
         categorySubCategorySection.active = false;
         addRenderableWidget(categorySubCategorySection);
@@ -870,6 +872,7 @@ public abstract class QuestEditor extends Screen {
     // switch the active editor mode
     protected void setMode(Mode next) {
         if (next != mode) flushCategoryBackgroundAutosave();
+        if (next != Mode.QUEST_LIST) saveEditorTreeView();
         if (next != Mode.QUEST_LIST) setTreeTool(Tool.NONE);
         if (next == Mode.QUEST_LIST && mode != Mode.QUEST_LIST) {
             restoreQuestListCollapseState();
@@ -948,6 +951,8 @@ public abstract class QuestEditor extends Screen {
     protected void refreshQuestTree() {
         if (questTree == null) return;
         if (mode != Mode.QUEST_LIST || !isTreePack()) {
+            saveEditorTreeView();
+            activeTreeViewKey = "";
             questTree.setQuests(List.of());
             questTree.setBackground("", false, 0.45f);
             return;
@@ -956,6 +961,9 @@ public abstract class QuestEditor extends Screen {
         for (QuestListItem item : questListIndex().questsByCategory.getOrDefault(treeCategoryId, List.of())) {
             if (item.data != null) quests.add(item.data);
         }
+        String nextViewKey = editorTreeViewKey();
+        boolean changedView = !nextViewKey.equals(activeTreeViewKey);
+        if (changedView) saveEditorTreeView();
         questTree.setQuests(quests);
         CategoryData category = categoryData(treeCategoryId);
         questTree.setBackground(category == null ? "" : category.background,
@@ -963,6 +971,22 @@ public abstract class QuestEditor extends Screen {
                 category == null ? 0.45f : parseFloat(category.backgroundDarkeningOpacity, 0.45f),
                 category == null ? 0.5f : parseFloat(category.backgroundTileScale, 0.5f));
         questTree.setStickers(readCategoryStickers(category == null ? null : category.path));
+        if (changedView) {
+            QuestEditorTreeWidget.ViewState savedView = SAVED_TREE_VIEWS.get(nextViewKey);
+            if (savedView == null) questTree.centreView();
+            else questTree.restoreView(savedView);
+            activeTreeViewKey = nextViewKey;
+        }
+    }
+
+    protected String editorTreeViewKey() {
+        if (currentPack == null || currentPack.root == null || treeCategoryId.isBlank()) return "";
+        return currentPack.root.toAbsolutePath().normalize() + "::" + treeCategoryId;
+    }
+
+    protected void saveEditorTreeView() {
+        if (questTree == null || activeTreeViewKey.isBlank()) return;
+        SAVED_TREE_VIEWS.put(activeTreeViewKey, questTree.viewState());
     }
 
     protected void refreshCategoryWorkspaceTabs() {
@@ -1054,6 +1078,7 @@ public abstract class QuestEditor extends Screen {
             setError(trs("error.save_before_navigation"));
             return;
         }
+        saveEditorTreeView();
         treeCategoryId = entry.id;
         selectedEntryId = "";
         refreshLeftList(false);
@@ -1184,6 +1209,7 @@ public abstract class QuestEditor extends Screen {
     protected List<EditorEntry> buildPackMenuEntries() {
         List<EditorEntry> out = new ArrayList<>();
         out.add(new EditorEntry(ENTRY_CATEGORIES, trs("categories"), "", ""));
+        out.add(new EditorEntry(ENTRY_SUBCATEGORIES, trs("subcategories"), "", ""));
         out.add(new EditorEntry(ENTRY_QUESTS, trs("quests"), "", ""));
         return out;
     }
@@ -2071,7 +2097,7 @@ public abstract class QuestEditor extends Screen {
             return;
         }
         if (ENTRY_SUBCATEGORIES.equals(entry.id)) {
-            setMode(Mode.CATEGORY_LIST);
+            setMode(Mode.SUBCATEGORY_LIST);
             return;
         }
         if (ENTRY_QUESTS.equals(entry.id)) {
@@ -2098,7 +2124,15 @@ public abstract class QuestEditor extends Screen {
     // open the selected sub category form
     protected void handleSubCategoryEntry(EditorEntry entry) {
         if (ENTRY_NEW.equals(entry.id)) {
-            showSubCategoryEditor(new SubCategoryData(), null);
+            SubCategoryData data = new SubCategoryData();
+            data.defaultOpen = "true";
+            List<NamedEntry> categories = categoryEntries();
+            if (!treeCategoryId.isBlank() && categories.stream().anyMatch(category -> treeCategoryId.equals(category.id))) {
+                data.category = treeCategoryId;
+            } else if (!categories.isEmpty()) {
+                data.category = categories.getFirst().id;
+            }
+            showSubCategoryEditor(data, null);
             return;
         }
         if (currentPack == null) return;
@@ -3310,8 +3344,11 @@ public abstract class QuestEditor extends Screen {
         // edited packs may already be applied but still need a data reload
         if (singleplayerAuthority) {
             QuestEditorPackFiles.reloadLater();
+            QuestData.loadClient(true);
+            QuestPanelClient.applyConfigChanges();
+        } else {
+            mc.execute(() -> QuestData.loadClient(true));
         }
-        mc.execute(() -> QuestData.loadClient(true));
     }
 
     protected boolean isSingleplayerAuthoritySession() {

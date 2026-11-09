@@ -146,7 +146,6 @@ public final class QuestSettingsScreen extends Screen {
     private ConfigRow uiExpandTreeToggleRow;
     private ConfigRow uiCustomBackgroundsRow;
     private ConfigRow uiBackgroundThemesRow;
-    private ConfigRow uiStickySubCategoryHeadersRow;
     private ConfigRow uiStickyDescriptionHeadersRow;
     private ConfigRow uiEnableDescriptionColorsRow;
     private ConfigRow uiQuestWidgetTextColorRow;
@@ -227,7 +226,6 @@ public final class QuestSettingsScreen extends Screen {
     private boolean expandTreeToggle;
     private boolean customBackgrounds;
     private boolean enableBackgroundThemes;
-    private boolean stickySubCategoryHeaders;
     private boolean stickyDescriptionHeaders;
     private boolean enableDescriptionColors;
     private String questWidgetTextColor;
@@ -415,10 +413,6 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.background_themes"), trs("row.background_themes.subtitle"),
                 () -> trs(enableBackgroundThemes ? "state.on" : "state.off"),
                 () -> enableBackgroundThemes = !enableBackgroundThemes);
-        uiStickySubCategoryHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Sticky sub-category headers",
-                "Keep the active sub-category heading visible while scrolling.",
-                () -> trs(stickySubCategoryHeaders ? "state.on" : "state.off"),
-                () -> stickySubCategoryHeaders = !stickySubCategoryHeaders);
         uiStickyDescriptionHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Sticky description headers",
                 "Keep the quest title visible above long descriptions.",
                 () -> trs(stickyDescriptionHeaders ? "state.on" : "state.off"),
@@ -523,7 +517,6 @@ public final class QuestSettingsScreen extends Screen {
         addConfigRow(uiShowIdFieldRow, ConfigTab.UI);
         addConfigRow(uiEnableSearchBoxRow, ConfigTab.UI);
         addConfigRow(uiExpandTreeToggleRow, ConfigTab.UI);
-        addConfigRow(uiStickySubCategoryHeadersRow, ConfigTab.STYLE);
         addConfigRow(uiStickyDescriptionHeadersRow, ConfigTab.STYLE);
 
         addConfigRow(uiEnableQuestToastsRow, ConfigTab.FEATURES);
@@ -722,7 +715,6 @@ public final class QuestSettingsScreen extends Screen {
         expandTreeToggle = Config.expandTreeToggle();
         customBackgrounds = Config.customBackgrounds();
         enableBackgroundThemes = Config.enableBackgroundThemes();
-        stickySubCategoryHeaders = Config.stickySubCategoryHeaders();
         stickyDescriptionHeaders = Config.stickyDescriptionHeaders();
         enableDescriptionColors = Config.enableDescriptionColors();
         questWidgetTextColor = String.format(java.util.Locale.ROOT, "%06X", Config.questWidgetTextColor());
@@ -942,7 +934,6 @@ public final class QuestSettingsScreen extends Screen {
         Config.ENABLE_QUEST_SEARCH_BOX.set(enableQuestSearchBox);
         Config.EXPAND_TREE_TOGGLE.set(expandTreeToggle);
         Config.ENABLE_BACKGROUND_THEMES.set(enableBackgroundThemes);
-        Config.STICKY_SUBCATEGORY_HEADERS.set(stickySubCategoryHeaders);
         Config.STICKY_DESCRIPTION_HEADERS.set(stickyDescriptionHeaders);
         Config.ENABLE_DESCRIPTION_COLORS.set(enableDescriptionColors);
         Config.QUEST_WIDGET_TEXT_COLOR.set(normalizeThemeColor(questWidgetTextColor, "FFFFFF"));
@@ -1046,7 +1037,6 @@ public final class QuestSettingsScreen extends Screen {
             enableDescriptionTextWrapping = true;
             descriptionTextAlignment = "left";
             hideCategoryHeader = false;
-            stickySubCategoryHeaders = true;
             stickyDescriptionHeaders = true;
             customBackgrounds = true;
             enableBackgroundThemes = true;

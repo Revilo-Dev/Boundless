@@ -10,7 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.Util;
-import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.revilodev.boundless.client.QuestCategoryBackgroundRenderer;
@@ -68,7 +67,6 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private List<QuestEntryData> quests = List.of();
     private Map<String, QuestEntryData> questsById = Map.of();
     private Map<QuestEntryData, Point> questPositions = new IdentityHashMap<>();
-    private Map<QuestEntryData, ItemStack> questIcons = new IdentityHashMap<>();
     private Map<Long, List<QuestEntryData>> questSpatialIndex = Map.of();
     private Set<QuestEntryData> originQuests = Set.of();
     private List<RenderedConnector> renderedConnectors = List.of();
@@ -329,8 +327,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             String textureKey = normalizeBackground(quest.treeBackground) + (selected ? "-selected" : "");
             gg.blit(NODE_TEXTURES.getOrDefault(textureKey, NODE_TEXTURES.get("square")),
                     x, y, 0, 0, NODE_SIZE, NODE_SIZE, NODE_SIZE, NODE_SIZE);
-            ItemStack icon = questIcons.computeIfAbsent(quest, value -> QuestEditorItemIcons.iconStackFromId(value.icon));
-            if (!icon.isEmpty()) gg.renderItem(icon, x + 8, y + 8);
+            QuestEditorItemIcons.renderIcon(gg, quest.icon, x + 8, y + 8);
             if (quest == connectorSource) drawNodeSelection(gg, x, y, 0xFFFFFFFF);
             if (originQuests.contains(quest)) {
                 gg.blit(ORIGIN_STAR, x + NODE_SIZE - 8, y - 2, 0, 0, 10, 10, 10, 10);
@@ -698,7 +695,8 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
                 return true;
             }
         }
-        if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
+        if (keyCode == GLFW.GLFW_KEY_KP_ADD
+                || keyCode == GLFW.GLFW_KEY_EQUAL && Screen.hasShiftDown()) {
             zoomAt(centerX, centerY, zoom + .1f);
             return true;
         }
@@ -706,7 +704,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             zoomAt(centerX, centerY, zoom - .1f);
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_SPACE) {
+        if (keyCode == GLFW.GLFW_KEY_EQUAL) {
             centreView();
             return true;
         }
@@ -906,7 +904,6 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         }
         questsById = byId;
         questPositions = positions;
-        questIcons = new IdentityHashMap<>();
         rebuildSpatialIndex();
         originQuests = origins;
         rebuildConnectorCache();

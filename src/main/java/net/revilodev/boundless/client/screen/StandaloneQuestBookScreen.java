@@ -72,6 +72,10 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
 
         selectedCategory = lastSelectedCategory;
+        if (selectedQuest != null) {
+            selectedQuest = QuestData.byId(selectedQuest.id).orElse(null);
+            showingDetails = selectedQuest != null;
+        }
         if (!Config.expandTreeToggle()) expanded = false;
         boolean expandTree = expanded && usesTreeView();
         detailsPanelWidth = Math.min(147, Math.max(96, (this.width - 49) / 2));
@@ -258,6 +262,8 @@ public final class StandaloneQuestBookScreen extends Screen {
             return;
         }
 
+        String selectedQuestId = selectedQuest == null ? null : selectedQuest.id;
+
         if (list != null) {
             list.setTopInset(Config.enableQuestSearchBox() ? 18 : 0);
             list.setQuests(QuestData.all());
@@ -285,7 +291,9 @@ public final class StandaloneQuestBookScreen extends Screen {
             }
         }
 
-        showingDetails = false;
+        selectedQuest = selectedQuestId == null ? null : QuestData.byId(selectedQuestId).orElse(null);
+        showingDetails = selectedQuest != null;
+        if (showingDetails && details != null) details.setQuest(selectedQuest);
         if (expanded && !usesTreeView()) {
             expanded = false;
             resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
@@ -360,6 +368,16 @@ public final class StandaloneQuestBookScreen extends Screen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         return super.mouseDragged(mouseX / uiScale, mouseY / uiScale, button, dragX / uiScale, dragY / uiScale);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (tree != null && tree.visible && tree.active
+                && (searchBox == null || !searchBox.isFocused())
+                && tree.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

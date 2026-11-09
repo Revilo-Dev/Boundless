@@ -1,7 +1,10 @@
 package net.revilodev.boundless.client.editor;
 
+import com.mojang.brigadier.StringReader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.commands.arguments.item.ItemInput;
+import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -23,8 +26,20 @@ public final class QuestEditorItemIcons {
     // icon stack from id
     public static ItemStack iconStackFromId(String raw) {
         if (raw == null || raw.isBlank()) return ItemStack.EMPTY;
+        QuestItemSpec spec = QuestItemSpec.parse(raw);
+        if (spec.id.isBlank() || spec.tag) return ItemStack.EMPTY;
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!spec.components.isBlank() && minecraft.level != null) {
+            try {
+                ItemParser.ItemResult parsed = new ItemParser(minecraft.level.registryAccess())
+                        .parse(new StringReader(spec.commandSyntax()));
+                return new ItemInput(parsed.item(), parsed.components()).createItemStack(1, false);
+            } catch (Exception ignored) {
+            }
+        }
         try {
-            return new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(raw)));
+            Item item = spec.item();
+            return item == null ? ItemStack.EMPTY : new ItemStack(item);
         } catch (Exception ignored) {
             return ItemStack.EMPTY;
         }

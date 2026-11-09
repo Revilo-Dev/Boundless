@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -152,6 +153,10 @@ public final class QuestTreeWidget extends AbstractWidget {
         this.tooltipSuppressed = tooltipSuppressed;
     }
 
+    public boolean isDragging() {
+        return dragging;
+    }
+
     // reset view to the canvas centre
     public void centreView() {
         zoom = 1f;
@@ -250,7 +255,7 @@ public final class QuestTreeWidget extends AbstractWidget {
             boolean selected = selectedQuestId.equals(quest.id);
             gg.blit(nodeTexture(quest.treeBackground, complete, selected || quest == hovered),
                     x, y, 0, 0, NODE_SIZE, NODE_SIZE, NODE_SIZE, NODE_SIZE);
-            quest.iconItem().ifPresent(item -> gg.renderItem(new net.minecraft.world.item.ItemStack(item), x + 8, y + 8));
+            QuestEditorItemIcons.renderIcon(gg, quest.icon, x + 8, y + 8);
             if (complete) {
                 gg.blit(ICON_COMPLETE, x + 18, y + 18, 0, 0, 11, 11, 11, 11);
             } else if (state.redeemable) {
@@ -387,7 +392,8 @@ public final class QuestTreeWidget extends AbstractWidget {
         if (!visible || !active) return false;
         double centerX = getX() + width / 2D;
         double centerY = getY() + height / 2D;
-        if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
+        if (keyCode == GLFW.GLFW_KEY_KP_ADD
+                || keyCode == GLFW.GLFW_KEY_EQUAL && Screen.hasShiftDown()) {
             zoomAt(centerX, centerY, zoom + .1f);
             return true;
         }
@@ -395,7 +401,7 @@ public final class QuestTreeWidget extends AbstractWidget {
             zoomAt(centerX, centerY, zoom - .1f);
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_SPACE) {
+        if (keyCode == GLFW.GLFW_KEY_EQUAL) {
             centreView();
             return true;
         }

@@ -115,9 +115,6 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<Boolean> ENABLE_BACKGROUND_THEMES =
             BUILDER.comment("If true, allows category background themes on this client.")
                     .define("enableBackgroundThemes", true);
-    public static final ModConfigSpec.ConfigValue<Boolean> STICKY_SUBCATEGORY_HEADERS =
-            BUILDER.comment("If true, keeps the current sub-category header visible while scrolling quest lists.")
-                    .define("stickySubCategoryHeaders", true);
     public static final ModConfigSpec.ConfigValue<Boolean> STICKY_DESCRIPTION_HEADERS =
             BUILDER.comment("If true, keeps the quest details header fixed above the description.")
                     .define("stickyDescriptionHeaders", true);
@@ -570,10 +567,6 @@ public final class Config {
 
     public static boolean enableDescriptionColors() {
         return ENABLE_DESCRIPTION_COLORS.get();
-    }
-
-    public static boolean stickySubCategoryHeaders() {
-        return STICKY_SUBCATEGORY_HEADERS.get();
     }
 
     public static boolean stickyDescriptionHeaders() {
