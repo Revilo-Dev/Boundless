@@ -52,6 +52,7 @@ public final class StandaloneQuestBookScreen extends Screen {
     private boolean showingDetails = false;
     private boolean expanded = false;
     private QuestData.Quest selectedQuest;
+    private String selectedQuestId = "";
     private String searchQuery = "";
     private String selectedCategory = "all";
     private float uiScale = 1.0f;
@@ -72,8 +73,9 @@ public final class StandaloneQuestBookScreen extends Screen {
         }
 
         selectedCategory = lastSelectedCategory;
-        if (selectedQuest != null) {
-            selectedQuest = QuestData.byId(selectedQuest.id).orElse(null);
+        if (selectedQuestId.isBlank() && selectedQuest != null) selectedQuestId = selectedQuest.id;
+        if (!selectedQuestId.isBlank()) {
+            selectedQuest = QuestData.byId(selectedQuestId).orElse(null);
             showingDetails = selectedQuest != null;
         }
         if (!Config.expandTreeToggle()) expanded = false;
@@ -106,6 +108,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             refreshTree();
             showingDetails = false;
             selectedQuest = null;
+            selectedQuestId = "";
             if (expanded && !usesTreeView()) {
                 expanded = false;
                 resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
@@ -138,6 +141,7 @@ public final class StandaloneQuestBookScreen extends Screen {
         list = new QuestListWidget(pxLeft, py, leftWidth, ph, q -> {
             details.setQuest(q);
             selectedQuest = q;
+            selectedQuestId = q.id;
             showingDetails = true;
             updateVisibility();
         });
@@ -150,14 +154,17 @@ public final class StandaloneQuestBookScreen extends Screen {
         tree = new QuestTreeWidget(leftX + 8, topY + 8, panelWidth - 17, panelHeight - 17, q -> {
             details.setQuest(q);
             selectedQuest = q;
+            selectedQuestId = q.id;
             showingDetails = true;
             updateVisibility();
         });
         refreshTree();
+        tree.selectQuest(selectedQuestId);
 
         details = new QuestDetailsPanel(pxRight, py, detailsWidth, ph, () -> {
             showingDetails = false;
             selectedQuest = null;
+            selectedQuestId = "";
             updateVisibility();
         });
         details.setBounds(pxRight, py, detailsWidth, ph);
@@ -262,8 +269,6 @@ public final class StandaloneQuestBookScreen extends Screen {
             return;
         }
 
-        String selectedQuestId = selectedQuest == null ? null : selectedQuest.id;
-
         if (list != null) {
             list.setTopInset(Config.enableQuestSearchBox() ? 18 : 0);
             list.setQuests(QuestData.all());
@@ -291,15 +296,25 @@ public final class StandaloneQuestBookScreen extends Screen {
             }
         }
 
-        selectedQuest = selectedQuestId == null ? null : QuestData.byId(selectedQuestId).orElse(null);
+        selectedQuest = selectedQuestId.isBlank() ? null : QuestData.byId(selectedQuestId).orElse(null);
         showingDetails = selectedQuest != null;
         if (showingDetails && details != null) details.setQuest(selectedQuest);
+        if (tree != null) tree.selectQuest(selectedQuestId);
         if (expanded && !usesTreeView()) {
             expanded = false;
             resize(minecraft, Math.round(width * uiScale), Math.round(height * uiScale));
             return;
         }
         updateVisibility();
+    }
+
+    public void returnToQuest(String questId) {
+        selectedQuestId = questId == null ? "" : questId;
+        selectedQuest = selectedQuestId.isBlank() ? null : QuestData.byId(selectedQuestId).orElse(null);
+        showingDetails = selectedQuest != null;
+        if (showingDetails && details != null) details.setQuest(selectedQuest);
+        if (tree != null) tree.selectQuest(selectedQuestId);
+        if (details != null) updateVisibility();
     }
 
     private String sectionTitle() {

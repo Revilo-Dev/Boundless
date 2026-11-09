@@ -25,10 +25,16 @@ public final class QuestEditorRowControls {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab.png");
     private static final ResourceLocation TAB_SELECTED_TEX =
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/tab_selected.png");
+    private static final ResourceLocation REMOVE_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject.png");
+    private static final ResourceLocation REMOVE_HOVER_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject_hovered.png");
+    private static final ResourceLocation REMOVE_DISABLED_TEX =
+            ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject_disabled.png");
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
     private static final int ENTRY_ROW_H = 14;
-    private static final int ENTRY_REMOVE_BTN_W = 10;
+    private static final int ENTRY_REMOVE_BTN_W = 14;
     private static final int ENTRY_TYPE_BTN_W = 24;
     private static final int ENTRY_ITEM_PICK_BTN_W = 12;
     private static final int ENTRY_COUNT_BTN_W = 12;
@@ -46,6 +52,11 @@ public final class QuestEditorRowControls {
 
     @FunctionalInterface
     public interface OpenTypeMenuHandler {
+        void open(EntryRowKind kind, int row, int x, int y, int width);
+    }
+
+    @FunctionalInterface
+    public interface OpenValueMenuHandler {
         void open(EntryRowKind kind, int row, int x, int y, int width);
     }
 
@@ -121,7 +132,8 @@ public final class QuestEditorRowControls {
         private final RemoveEntryHandler onRemove;
 
         public EntryRemoveButton(EntryRowKind kind, RemoveEntryHandler onRemove) {
-            super(0, 0, ENTRY_REMOVE_BTN_W, ENTRY_ROW_H, Component.literal("X"));
+            super(0, 0, ENTRY_REMOVE_BTN_W, ENTRY_ROW_H,
+                    Component.translatable("ui.boundless.editor.tooltip.delete"));
             this.kind = kind;
             this.onRemove = onRemove;
         }
@@ -133,16 +145,10 @@ public final class QuestEditorRowControls {
 
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
-            int bg = this.active ? (this.isMouseOver(mouseX, mouseY) ? 0xAA5A1A1A : 0xAA3A1212) : 0x553A1212;
-            int fg = this.active ? 0xFFFF5555 : 0xFF804040;
-            gg.fill(getX(), getY(), getX() + this.width, getY() + this.height, bg);
-            gg.fill(getX(), getY(), getX() + this.width, getY() + 1, 0xFFC0C0C0);
-            gg.fill(getX(), getY() + this.height - 1, getX() + this.width, getY() + this.height, 0xFFC0C0C0);
-            gg.fill(getX(), getY(), getX() + 1, getY() + this.height, 0xFFC0C0C0);
-            gg.fill(getX() + this.width - 1, getY(), getX() + this.width, getY() + this.height, 0xFFC0C0C0);
-            Font font = Minecraft.getInstance().font;
-            gg.drawString(font, "X", getX() + (width - font.width("X")) / 2,
-                    getY() + (height - font.lineHeight) / 2, fg, false);
+            ResourceLocation texture = !active
+                    ? REMOVE_DISABLED_TEX
+                    : isMouseOver(mouseX, mouseY) ? REMOVE_HOVER_TEX : REMOVE_TEX;
+            gg.blit(texture, getX(), getY(), 0, 0, width, height, 20, 20);
         }
 
         @Override
@@ -177,31 +183,76 @@ public final class QuestEditorRowControls {
         @Override
         protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
             String text = labelProvider == null ? "" : labelProvider.apply(kind, row);
-            boolean hovered = this.isMouseOver(mouseX, mouseY);
-            boolean focused = this.isFocused();
-            int bg = hovered || focused ? 0xFF101010 : 0xFF000000;
-            int border = hovered || focused ? 0xFFFFFFFF : 0xFF8A8A8A;
-            gg.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), bg);
-            gg.fill(getX(), getY(), getX() + getWidth(), getY() + 1, border);
-            gg.fill(getX(), getY() + getHeight() - 1, getX() + getWidth(), getY() + getHeight(), border);
-            gg.fill(getX(), getY(), getX() + 1, getY() + getHeight(), border);
-            gg.fill(getX() + getWidth() - 1, getY(), getX() + getWidth(), getY() + getHeight(), border);
-            Font font = Minecraft.getInstance().font;
-            float availableWidth = Math.max(1, getWidth() - 3);
-            float textScale = Math.max(ENTRY_TYPE_MIN_TEXT_SCALE,
-                    Math.min(ENTRY_TYPE_TEXT_SCALE, availableWidth / Math.max(1, font.width(text))));
-            int textW = Math.round(font.width(text) * textScale);
-            int tx = getX() + (getWidth() - textW) / 2;
-            gg.pose().pushPose();
-            gg.pose().translate(tx, getY() + 3, 0f);
-            gg.pose().scale(textScale, textScale, 1f);
-            gg.drawString(font, text, 0, 0, 0xFFFFFF00, false);
-            gg.pose().popPose();
+            renderCompactButton(gg, this, text, mouseX, mouseY);
         }
 
         @Override
         protected void updateWidgetNarration(NarrationElementOutput narration) {
         }
+    }
+
+    // entry value dropdown button
+    public static final class EntryValueButton extends AbstractButton {
+        private final EntryRowKind kind;
+        private final OpenValueMenuHandler openValueMenu;
+        private final BiFunction<EntryRowKind, Integer, String> labelProvider;
+        private int row;
+
+        public EntryValueButton(EntryRowKind kind, int row, OpenValueMenuHandler openValueMenu,
+                                BiFunction<EntryRowKind, Integer, String> labelProvider) {
+            super(0, 0, ENTRY_TYPE_BTN_W, ENTRY_ROW_H, Component.empty());
+            this.kind = kind;
+            this.row = row;
+            this.openValueMenu = openValueMenu;
+            this.labelProvider = labelProvider;
+        }
+
+        public void setRow(int row) {
+            this.row = row;
+        }
+
+        @Override
+        public void onPress() {
+            if (openValueMenu != null) openValueMenu.open(kind, row, getX(), getY(), getWidth());
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics gg, int mouseX, int mouseY, float partialTick) {
+            String text = labelProvider == null ? "" : labelProvider.apply(kind, row);
+            renderCompactButton(gg, this, text, mouseX, mouseY);
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput narration) {
+        }
+    }
+
+    private static void renderCompactButton(GuiGraphics gg, AbstractButton button, String text,
+                                            int mouseX, int mouseY) {
+        boolean hovered = button.isMouseOver(mouseX, mouseY);
+        boolean focused = button.isFocused();
+        int bg = hovered || focused ? 0xFF101010 : 0xFF000000;
+        int border = hovered || focused ? 0xFFFFFFFF : 0xFF8A8A8A;
+        int x = button.getX();
+        int y = button.getY();
+        int width = button.getWidth();
+        int height = button.getHeight();
+        gg.fill(x, y, x + width, y + height, bg);
+        gg.fill(x, y, x + width, y + 1, border);
+        gg.fill(x, y + height - 1, x + width, y + height, border);
+        gg.fill(x, y, x + 1, y + height, border);
+        gg.fill(x + width - 1, y, x + width, y + height, border);
+        Font font = Minecraft.getInstance().font;
+        float availableWidth = Math.max(1, width - 3);
+        float textScale = Math.max(ENTRY_TYPE_MIN_TEXT_SCALE,
+                Math.min(ENTRY_TYPE_TEXT_SCALE, availableWidth / Math.max(1, font.width(text))));
+        int textW = Math.round(font.width(text) * textScale);
+        int textX = x + (width - textW) / 2;
+        gg.pose().pushPose();
+        gg.pose().translate(textX, y + 3, 0f);
+        gg.pose().scale(textScale, textScale, 1f);
+        gg.drawString(font, text, 0, 0, 0xFFFFFF00, false);
+        gg.pose().popPose();
     }
 
     // entry item picker button

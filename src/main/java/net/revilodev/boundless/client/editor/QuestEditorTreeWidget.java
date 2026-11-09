@@ -80,6 +80,8 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     private QuestEntryData draggedQuest;
     private int questDragOffsetX;
     private int questDragOffsetY;
+    private int questDragStartX;
+    private int questDragStartY;
     private QuestEntryData connectorSource;
     private QuestEntryData selectedQuest;
     private boolean draggedQuestMoved;
@@ -192,6 +194,11 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     public boolean hasNodeAt(double mouseX, double mouseY) {
         return questAt(mouseX, mouseY) != null;
+    }
+
+    public void clearSelection() {
+        selectedQuest = null;
+        selectedStickerIndex = -1;
     }
 
     public void centreView() {
@@ -354,7 +361,10 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         for (String warning : quest.importWarnings) {
             lines.addAll(minecraft.font.split(Component.literal(warning), lineWidth));
         }
+        gg.pose().pushPose();
+        gg.pose().translate(0, 0, 10000);
         QuestEditorTooltips.renderFormatted(gg, minecraft.font, lines, mouseX, mouseY);
+        gg.pose().popPose();
     }
 
     private void applyCanvasTransform(GuiGraphics gg) {
@@ -382,7 +392,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     private void renderTreeTooltip(GuiGraphics gg, Component text, int mouseX, int mouseY) {
         gg.pose().pushPose();
-        gg.pose().translate(0, 0, 900);
+        gg.pose().translate(0, 0, 10000);
         QuestEditorTooltips.render(gg, minecraft.font, text, mouseX, mouseY);
         gg.pose().popPose();
     }
@@ -552,8 +562,10 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
                 selectedQuest = quest;
                 selectedStickerIndex = -1;
                 draggedQuest = quest;
-                questDragOffsetX = canvasNodeX(mouseX) - parse(quest.treeX, 0);
-                questDragOffsetY = canvasNodeY(mouseY) - parse(quest.treeY, 0);
+                questDragStartX = parse(quest.treeX, 0);
+                questDragStartY = parse(quest.treeY, 0);
+                questDragOffsetX = canvasNodeX(mouseX) - questDragStartX;
+                questDragOffsetY = canvasNodeY(mouseY) - questDragStartY;
                 draggedQuestMoved = false;
             } else {
                 selectedQuest = null;
@@ -575,6 +587,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             if (onPlace != null) onPlace.accept(position[0], position[1]);
             return true;
         }
+        clearSelection();
         draggingCanvas = true;
         setFocused(true);
         return true;
@@ -610,8 +623,11 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         }
         if (tool != Tool.MOVE) return false;
         if (draggedQuest != null) {
-            int[] position = snapPosition(canvasNodeX(mouseX) - questDragOffsetX,
-                    canvasNodeY(mouseY) - questDragOffsetY, draggedQuest);
+            int rawX = canvasNodeX(mouseX) - questDragOffsetX;
+            int rawY = canvasNodeY(mouseY) - questDragOffsetY;
+            int[] position = Screen.hasShiftDown()
+                    ? snapDragPosition(rawX, rawY, draggedQuest)
+                    : snapPosition(rawX, rawY, draggedQuest);
             int nextX = position[0];
             int nextY = position[1];
             if (nextX != parse(draggedQuest.treeX, 0) || nextY != parse(draggedQuest.treeY, 0)) {
@@ -887,6 +903,10 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             Point end = connector.connector.points.get(index);
             QuestTreeConnectorRenderer.drawSegment(gg, start.x, start.y, end.x, end.y, color);
         }
+        for (int index = 1; index + 1 < connector.connector.points.size(); index++) {
+            Point point = connector.connector.points.get(index);
+            QuestTreeConnectorRenderer.drawJoint(gg, point.x, point.y, color);
+        }
     }
 
     private void rebuildCaches() {
@@ -1048,6 +1068,19 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
     }
 
     private int[] snapPosition(int rawX, int rawY, QuestEntryData moving) {
+        List<QuestTreeSnap.Position> anchors = snapAnchors(rawX, rawY, moving);
+        QuestTreeSnap.Position snapped = QuestTreeSnap.snap(rawX, rawY, anchors);
+        return new int[]{snapped.x(), snapped.y()};
+    }
+
+    private int[] snapDragPosition(int rawX, int rawY, QuestEntryData moving) {
+        List<QuestTreeSnap.Position> anchors = snapAnchors(rawX, rawY, moving);
+        QuestTreeSnap.Position snapped = QuestTreeSnap.snapDrag(rawX, rawY,
+                questDragStartX, questDragStartY, anchors);
+        return new int[]{snapped.x(), snapped.y()};
+    }
+
+    private List<QuestTreeSnap.Position> snapAnchors(int rawX, int rawY, QuestEntryData moving) {
         List<QuestEntryData> snapCandidates = quests.size() <= DETAILED_ROUTING_MAX_QUESTS
                 ? quests : questsInBounds(new CanvasBounds(rawX - 128, rawY - 128, rawX + 128, rawY + 128));
         List<QuestTreeSnap.Position> anchors = new ArrayList<>(snapCandidates.size());
@@ -1057,8 +1090,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
             int otherY = nodeY(quest) + NODE_SIZE / 2;
             anchors.add(new QuestTreeSnap.Position(otherX, otherY));
         }
-        QuestTreeSnap.Position snapped = QuestTreeSnap.snap(rawX, rawY, anchors);
-        return new int[]{snapped.x(), snapped.y()};
+        return anchors;
     }
 
     private static List<String> dependencies(QuestEntryData quest) {

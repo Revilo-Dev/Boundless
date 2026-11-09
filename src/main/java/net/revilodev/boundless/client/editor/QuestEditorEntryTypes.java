@@ -92,6 +92,12 @@ public final class QuestEditorEntryTypes {
         return "collect".equals(type) || "submit".equals(type) || "kill".equals(type) || "xp".equals(type) || "levelup".equals(type);
     }
 
+    public static List<String> valueOptions(EntryRowKind kind, String type) {
+        if ("xp".equals(type)) return List.of("points", "levels");
+        if (!"levelup".equals(type)) return List.of();
+        return kind == EntryRowKind.REWARD ? List.of("xp", "levels") : List.of("levels");
+    }
+
     // entry type options
     public static List<String> entryTypeOptions(EntryRowKind kind) {
         if (kind == EntryRowKind.COMPLETION) {

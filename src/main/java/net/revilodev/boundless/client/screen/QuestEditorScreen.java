@@ -110,6 +110,7 @@ import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryCountBo
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryItemPickerButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryRemoveButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryTypeButton;
+import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryValueButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.IconPickerBox;
 import net.revilodev.boundless.client.editor.QuestEditorStateSignatures.SignatureFields;
 import net.revilodev.boundless.client.editor.QuestEditorStateSignatures;
@@ -370,6 +371,7 @@ public final class QuestEditorScreen extends QuestEditor {
         private static final int ROW_HEIGHT = 28;
         private static final int ROW_GAP = 2;
         private static final int EDITOR_HEIGHT = 70;
+        private static final int CREATE_SIZE = 20;
         private static final int MOVE_SIZE = 14;
         private static final ResourceLocation MOVE_UP = ResourceLocation.fromNamespaceAndPath(
                 "boundless", "textures/gui/sprites/editor/move_up.png");
@@ -429,10 +431,12 @@ public final class QuestEditorScreen extends QuestEditor {
                 if (mouseY >= y && mouseY <= y + ROW_HEIGHT) {
                     int moveX = getX() + getWidth() - MOVE_SIZE - 3;
                     if (mouseX >= moveX && mouseX <= moveX + MOVE_SIZE) {
+                        nameBox.setFocused(false);
                         if (mouseY < y + ROW_HEIGHT / 2.0) onMove.accept(entry, MoveDirection.UP);
                         else onMove.accept(entry, MoveDirection.DOWN);
                         return true;
                     }
+                    nameBox.setFocused(false);
                     if (editing != null && value(editing.id).equals(value(entry.id))) editing = null;
                     else loadEditor(entry);
                     updateHeight();
@@ -448,7 +452,8 @@ public final class QuestEditorScreen extends QuestEditor {
                 if (handleEditorClick(mouseX, mouseY, y)) return true;
                 y += EDITOR_HEIGHT + ROW_GAP;
             }
-            if (mouseY < y || mouseY > y + ROW_HEIGHT) return false;
+            if (mouseY < y || mouseY > y + CREATE_SIZE
+                    || mouseX < getX() || mouseX > getX() + CREATE_SIZE) return false;
             SubCategoryData created = new SubCategoryData();
             created.defaultOpen = "true";
             loadEditor(created);
@@ -471,8 +476,14 @@ public final class QuestEditorScreen extends QuestEditor {
                 renderEditor(graphics, mouseX, mouseY, y);
                 y += EDITOR_HEIGHT + ROW_GAP;
             }
-            renderButton(graphics, mouseX, mouseY, y,
-                    Component.translatable("ui.boundless.editor.create_new_subcategory").getString());
+            renderCreateButton(graphics, mouseX, mouseY, y);
+        }
+
+        private void renderCreateButton(GuiGraphics graphics, int mouseX, int mouseY, int y) {
+            boolean hovered = mouseX >= getX() && mouseX <= getX() + CREATE_SIZE
+                    && mouseY >= y && mouseY <= y + CREATE_SIZE;
+            graphics.blit(hovered ? PLUS_BUTTON_HOVER_TEX : PLUS_BUTTON_TEX,
+                    getX(), y, 0, 0, CREATE_SIZE, CREATE_SIZE, CREATE_SIZE, CREATE_SIZE);
         }
 
         private void renderButton(GuiGraphics graphics, int mouseX, int mouseY, int y, String label) {
@@ -483,17 +494,15 @@ public final class QuestEditorScreen extends QuestEditor {
             Component clipped = QuestTextFormatting.componentByWidth(label, 0xFFFFFF, font,
                     Math.max(1, getWidth() - MOVE_SIZE - 10));
             graphics.drawString(font, clipped, getX() + 4, y + 10, 0xFFFFFFFF, false);
-            if (!Component.translatable("ui.boundless.editor.create_new_subcategory").getString().equals(label)) {
-                int moveX = getX() + getWidth() - MOVE_SIZE - 3;
-                boolean hoverUp = mouseX >= moveX && mouseX <= moveX + MOVE_SIZE
-                        && mouseY >= y && mouseY <= y + MOVE_SIZE;
-                boolean hoverDown = mouseX >= moveX && mouseX <= moveX + MOVE_SIZE
-                        && mouseY >= y + ROW_HEIGHT / 2 && mouseY <= y + ROW_HEIGHT;
-                graphics.blit(hoverUp ? MOVE_UP_HOVER : MOVE_UP, moveX, y, 0, 0,
-                        MOVE_SIZE, MOVE_SIZE, MOVE_SIZE, MOVE_SIZE);
-                graphics.blit(hoverDown ? MOVE_DOWN_HOVER : MOVE_DOWN, moveX, y + ROW_HEIGHT / 2, 0, 0,
-                        MOVE_SIZE, MOVE_SIZE, MOVE_SIZE, MOVE_SIZE);
-            }
+            int moveX = getX() + getWidth() - MOVE_SIZE - 3;
+            boolean hoverUp = mouseX >= moveX && mouseX <= moveX + MOVE_SIZE
+                    && mouseY >= y && mouseY <= y + MOVE_SIZE;
+            boolean hoverDown = mouseX >= moveX && mouseX <= moveX + MOVE_SIZE
+                    && mouseY >= y + ROW_HEIGHT / 2 && mouseY <= y + ROW_HEIGHT;
+            graphics.blit(hoverUp ? MOVE_UP_HOVER : MOVE_UP, moveX, y, 0, 0,
+                    MOVE_SIZE, MOVE_SIZE, MOVE_SIZE, MOVE_SIZE);
+            graphics.blit(hoverDown ? MOVE_DOWN_HOVER : MOVE_DOWN, moveX, y + ROW_HEIGHT / 2, 0, 0,
+                    MOVE_SIZE, MOVE_SIZE, MOVE_SIZE, MOVE_SIZE);
         }
 
         private void renderEditor(GuiGraphics graphics, int mouseX, int mouseY, int y) {
@@ -538,16 +547,23 @@ public final class QuestEditorScreen extends QuestEditor {
             if (mouseY < y || mouseY > y + EDITOR_HEIGHT) return false;
             if (mouseX >= iconBox.getX() && mouseX <= iconBox.getX() + iconBox.getWidth()
                     && mouseY >= iconBox.getY() && mouseY <= iconBox.getY() + iconBox.getHeight()) {
+                nameBox.setFocused(false);
                 if (onIconBrowse != null) onIconBrowse.accept(iconBox);
                 return true;
             }
-            if (nameBox.mouseClicked(mouseX, mouseY, 0)) return true;
+            if (nameBox.mouseClicked(mouseX, mouseY, 0)) {
+                setFocused(true);
+                nameBox.setFocused(true);
+                return true;
+            }
             if (defaultOpenToggle.isMouseOver(mouseX, mouseY)) {
+                nameBox.setFocused(false);
                 defaultOpenToggle.onPress();
                 return true;
             }
             int buttonY = y + 51;
             if (mouseY >= buttonY && mouseY <= buttonY + 18) {
+                nameBox.setFocused(false);
                 int buttonWidth = Math.max(1, (getWidth() - 2) / 2);
                 editing.name = nameBox.getValue();
                 editing.icon = iconBox.getValue();
@@ -578,7 +594,17 @@ public final class QuestEditorScreen extends QuestEditor {
         private void updateHeight() {
             int rowsHeight = entries.size() * (ROW_HEIGHT + ROW_GAP);
             int editorHeight = editing == null ? 0 : EDITOR_HEIGHT + ROW_GAP;
-            setHeight(rowsHeight + editorHeight + ROW_HEIGHT);
+            setHeight(rowsHeight + editorHeight + CREATE_SIZE);
+        }
+
+        boolean hasFocusedName() {
+            return editing != null && nameBox.isFocused();
+        }
+
+        @Override
+        public void setFocused(boolean focused) {
+            super.setFocused(focused);
+            if (!focused) nameBox.setFocused(false);
         }
 
         @Override
@@ -622,12 +648,15 @@ public final class QuestEditorScreen extends QuestEditor {
         private static final String[] VALUES = {"circle", "diamond", "rounded_square", "square"};
         private final BooleanSupplier hasUnsavedChanges;
         private final BiConsumer<String, Boolean> onChange;
+        private final Runnable onSelect;
         private String background = "square";
 
-        TreeBackgroundSelector(BooleanSupplier hasUnsavedChanges, BiConsumer<String, Boolean> onChange) {
+        TreeBackgroundSelector(BooleanSupplier hasUnsavedChanges, BiConsumer<String, Boolean> onChange,
+                               Runnable onSelect) {
             super(0, 0, 1, 34, Component.empty());
             this.hasUnsavedChanges = hasUnsavedChanges;
             this.onChange = onChange;
+            this.onSelect = onSelect;
         }
 
         void setBackground(String background) {
@@ -646,6 +675,7 @@ public final class QuestEditorScreen extends QuestEditor {
             int buttonX = getX() + index * (buttonWidth + 2);
             if (index < 0 || index >= VALUES.length || mouseX > buttonX + buttonWidth
                     || mouseY < getY() + 1 || mouseY > getY() + 33) return false;
+            if (onSelect != null) onSelect.run();
             if (background.equals(VALUES[index])) return true;
             boolean alreadyUnsaved = hasUnsavedChanges.getAsBoolean();
             background = VALUES[index];
@@ -1002,6 +1032,7 @@ public final class QuestEditorScreen extends QuestEditor {
         gg.pose().popPose();
         renderIconOverlays(gg);
         renderTypeMenu(gg, mouseX, mouseY);
+        renderValueMenu(gg, mouseX, mouseY);
         renderDropdownMenu(gg, mouseX, mouseY);
         renderItemPicker(gg, mouseX, mouseY);
         renderEmojiButtonIcon(gg);
@@ -2062,7 +2093,7 @@ public final class QuestEditorScreen extends QuestEditor {
                 for (LockToggleButton lockButton : dependencyEntryLockButtons) {
                     if (lockButton == null || !lockButton.visible) continue;
                     if (!lockButton.isMouseOver(mouseX, mouseY)) continue;
-                    if (!isItemPickerOpen()) queueEditorTooltip(tr(dependencyLockState()
+                    if (!isItemPickerOpen()) queueEditorTooltip(tr(lockButton.isOn()
                             ? "tooltip.dependency_lock_after" : "tooltip.dependency_lock_until"), mouseX, mouseY);
                     break;
                 }
@@ -2211,6 +2242,9 @@ public final class QuestEditorScreen extends QuestEditor {
             }
         }
         if (scrollTypeMenu(mouseX, mouseY, scrollY)) {
+            return true;
+        }
+        if (scrollValueMenu(mouseX, mouseY)) {
             return true;
         }
         if (scrollDropdownMenu(mouseX, mouseY, scrollY)) {
@@ -2912,6 +2946,12 @@ public final class QuestEditorScreen extends QuestEditor {
         closingEditor = true;
         clearPendingInitState();
         applyStagedChangesOnClose();
+        if (!quickEditQuestId.isBlank()) {
+            QuestPanelClient.rememberQuickEditReturn(parent, quickEditQuestId);
+            if (parent instanceof StandaloneQuestBookScreen questBook) {
+                questBook.returnToQuest(quickEditQuestId);
+            }
+        }
         Minecraft.getInstance().setScreen(parent);
     }
 
@@ -2968,7 +3008,9 @@ public final class QuestEditorScreen extends QuestEditor {
         }
         if (popupMenus.hasOpenMenu()) {
             if (button == 0) {
-                if (!clickTypeMenu(mouseX, mouseY)) clickDropdownMenu(mouseX, mouseY);
+                if (!clickTypeMenu(mouseX, mouseY) && !clickValueMenu(mouseX, mouseY)) {
+                    clickDropdownMenu(mouseX, mouseY);
+                }
             }
             return true;
         }
@@ -3252,7 +3294,8 @@ public final class QuestEditorScreen extends QuestEditor {
             if (lockButton == null || !lockButton.visible || !lockButton.active) continue;
             if (!lockButton.isMouseOver(mouseX, mouseY)) continue;
             if (!lockButton.mouseClicked(mouseX, mouseY, button)) return false;
-            setDependencyLockState(lockButton.isOn());
+            syncDependencyLockBackingValue();
+            entryRowsDirty = true;
             return true;
         }
         for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
@@ -3289,6 +3332,13 @@ public final class QuestEditorScreen extends QuestEditor {
             if (typeButton != null && typeButton.visible && typeButton.active && typeButton.isMouseOver(mouseX, mouseY)) {
                 clearEntryTextFocus();
                 typeButton.onPress();
+                return true;
+            }
+        }
+        for (EntryValueButton valueButton : entryValueButtons(kind)) {
+            if (valueButton != null && valueButton.visible && valueButton.active && valueButton.isMouseOver(mouseX, mouseY)) {
+                clearEntryTextFocus();
+                valueButton.onPress();
                 return true;
             }
         }
@@ -3397,6 +3447,8 @@ public final class QuestEditorScreen extends QuestEditor {
         // foreground menus handle keys before focused editor fields
         if (!ensureEditorAccess()) return true;
         if (popupMenus.keyPressed(keyCode, this::dropdownOptions)) return true;
+        if (categorySubCategorySection != null && categorySubCategorySection.hasFocusedName()
+                && categorySubCategorySection.keyPressed(keyCode, scanCode, modifiers)) return true;
         if (questTree != null && questTree.visible && questTree.keyPressed(keyCode, scanCode, modifiers)) {
             if (treeTool != questTree.tool()) setTreeTool(questTree.tool());
             return true;
@@ -3468,6 +3520,8 @@ public final class QuestEditorScreen extends QuestEditor {
         // send text only to the active field or picker search
         if (!ensureEditorAccess()) return true;
         if (popupMenus.charTyped(codePoint, this::dropdownOptions)) return true;
+        if (categorySubCategorySection != null && categorySubCategorySection.hasFocusedName()
+                && categorySubCategorySection.charTyped(codePoint, modifiers)) return true;
         if (itemPickerSearchBox != null && itemPickerSearchBox.active && itemPickerSearchBox.isFocused()
                 && itemPickerSearchBox.charTyped(codePoint, modifiers)) {
             itemPickerPage = 0;
@@ -3501,16 +3555,34 @@ public final class QuestEditorScreen extends QuestEditor {
         popupMenus.openTypeMenu(kind, row, x, y, w);
     }
 
+    @Override
+    protected void openValueMenu(EntryRowKind kind, int row, int x, int y, int width) {
+        popupMenus.openValueMenu(kind, row, x, y, width, entryValueOptions(kind, row));
+    }
+
     protected boolean clickTypeMenu(double mouseX, double mouseY) {
         return popupMenus.clickTypeMenu(mouseX, mouseY, (kind, selection) -> setRowType(kind, selection.row(), selection.type()));
+    }
+
+    protected boolean clickValueMenu(double mouseX, double mouseY) {
+        return popupMenus.clickValueMenu(mouseX, mouseY,
+                (kind, selection) -> setRowValue(kind, selection.row(), selection.type()));
     }
 
     protected void renderTypeMenu(GuiGraphics gg, int mouseX, int mouseY) {
         popupMenus.renderTypeMenu(gg, font, mouseX, mouseY);
     }
 
+    protected void renderValueMenu(GuiGraphics gg, int mouseX, int mouseY) {
+        popupMenus.renderValueMenu(gg, font, mouseX, mouseY, value -> trs("entry_value." + value));
+    }
+
     protected boolean scrollTypeMenu(double mouseX, double mouseY, double delta) {
         return popupMenus.scrollTypeMenu(mouseX, mouseY, delta);
+    }
+
+    protected boolean scrollValueMenu(double mouseX, double mouseY) {
+        return popupMenus.scrollValueMenu(mouseX, mouseY);
     }
 
     protected void openDropdownMenu(DropdownMenuTarget target, AbstractWidget box) {
@@ -3612,6 +3684,7 @@ public final class QuestEditorScreen extends QuestEditor {
         List<ScaledMultiLineEditBox> rows = entryRows(kind);
         if (row < 0 || row >= rows.size()) return;
         ScaledMultiLineEditBox box = rows.get(row);
+        String previousType = effectiveRowType(kind, box);
         String normalized = QuestEditorEntryTypes.normalize(kind, type);
         String current = safe(box.getValue());
         ParsedEntry parsed = rowParsedBody(kind, box, current);
@@ -3622,13 +3695,31 @@ public final class QuestEditorScreen extends QuestEditor {
             selectedItemComponentsByBox.remove(box);
         }
         entryCountByBox.putIfAbsent(box, 1);
-        if (usesCompactEntryBody(kind, normalized)) {
+        List<String> valueOptions = QuestEditorEntryTypes.valueOptions(kind, normalized);
+        if (!previousType.equals(normalized) && !valueOptions.isEmpty()) {
+            String display = valueOptions.getFirst();
+            box.setValue(display);
+            box.setCursorPosition(display.length());
+        } else if (usesCompactEntryBody(kind, normalized)) {
             String display = entryRowDisplayValue(kind, normalized, parsed, current);
             if (!current.equals(display)) {
                 box.setValue(display);
                 box.setCursorPosition(Math.min(box.getCursorPosition(), display.length()));
             }
         }
+        entryRowsDirty = true;
+        syncEntryBackingValues();
+    }
+
+    protected void setRowValue(EntryRowKind kind, int row, String value) {
+        List<ScaledMultiLineEditBox> rows = entryRows(kind);
+        if (row < 0 || row >= rows.size()) return;
+        ScaledMultiLineEditBox box = rows.get(row);
+        List<String> options = QuestEditorEntryTypes.valueOptions(kind, effectiveRowType(kind, box));
+        String normalized = safe(value).trim().toLowerCase(Locale.ROOT);
+        if (!options.contains(normalized)) return;
+        box.setValue(normalized);
+        box.setCursorPosition(normalized.length());
         entryRowsDirty = true;
         syncEntryBackingValues();
     }

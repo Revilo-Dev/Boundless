@@ -20,17 +20,37 @@ public final class QuestTreeConnectorRenderer {
         drawSegment(graphics, startX, startY, endX, endY, INNER_WIDTH, color);
     }
 
+    public static void drawJoint(GuiGraphics graphics, int x, int y, int color) {
+        drawJoint(graphics, x, y, OUTER_WIDTH, 0xFF000000);
+        drawJoint(graphics, x, y, INNER_WIDTH, color);
+    }
+
     private static void drawSegment(GuiGraphics graphics, int startX, int startY, int endX, int endY,
                                     int thickness, int color) {
         int dx = endX - startX;
         int dy = endY - startY;
+        int half = thickness / 2;
+        if (dy == 0) {
+            graphics.fill(Math.min(startX, endX), startY - half,
+                    Math.max(startX, endX) + 1, startY + thickness - half, color);
+            return;
+        }
+        if (dx == 0) {
+            graphics.fill(startX - half, Math.min(startY, endY),
+                    startX + thickness - half, Math.max(startY, endY) + 1, color);
+            return;
+        }
         int length = Math.max(1, (int) Math.ceil(Math.hypot(dx, dy)));
         float angle = (float) Math.toDegrees(Math.atan2(dy, dx));
-        int half = thickness / 2;
         graphics.pose().pushPose();
         graphics.pose().translate(startX, startY, 0);
         graphics.pose().mulPose(Axis.ZP.rotationDegrees(angle));
         graphics.fill(0, -half, length + 1, thickness - half, color);
         graphics.pose().popPose();
+    }
+
+    private static void drawJoint(GuiGraphics graphics, int x, int y, int thickness, int color) {
+        int half = thickness / 2;
+        graphics.fill(x - half, y - half, x + thickness - half, y + thickness - half, color);
     }
 }

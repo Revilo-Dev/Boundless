@@ -27,4 +27,14 @@ final class QuestEditorEntryTypeChecks {
                 reward.getAsJsonArray("advancements").get(0).getAsJsonObject().get("advancement").getAsString());
         assertTrue(QuestEditorEntryCodec.rewardJsonToEntries(reward.toString()).contains("advance: minecraft:story/root"));
     }
+
+    @Test
+    void providesCompactExperienceValueOptions() {
+        assertEquals(java.util.List.of("points", "levels"),
+                QuestEditorEntryTypes.valueOptions(EntryRowKind.COMPLETION, "xp"));
+        assertEquals(java.util.List.of("levels"),
+                QuestEditorEntryTypes.valueOptions(EntryRowKind.COMPLETION, "levelup"));
+        assertEquals(java.util.List.of("xp", "levels"),
+                QuestEditorEntryTypes.valueOptions(EntryRowKind.REWARD, "levelup"));
+    }
 }

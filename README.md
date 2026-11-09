@@ -138,7 +138,7 @@ Colours use six-digit RGB hex values without `#`.
 
 | Config | Default | Purpose |
 |---|---:|---|
-| `Gameplay.disableQuestBook` | `false` | Disable opening and obtaining the quest book. |
+| `Gameplay.disableQuestBook` | `false` | Disable the quest book item and keybind while keeping the inventory panel available. |
 | `Gameplay.spawnWithQuestBook` | `false` | Give new players a quest book. |
 | `Development.devMode` | `false` | Enable development diagnostics. Leave off for normal play. |
 | `Development.debugQuestLoading` | `true` | Log quest loading timings while dev mode is on. |

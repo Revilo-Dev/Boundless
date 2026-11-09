@@ -157,6 +157,10 @@ public final class QuestTreeWidget extends AbstractWidget {
         return dragging;
     }
 
+    public void selectQuest(String questId) {
+        selectedQuestId = questId == null ? "" : questId;
+    }
+
     // reset view to the canvas centre
     public void centreView() {
         zoom = 1f;
@@ -178,7 +182,7 @@ public final class QuestTreeWidget extends AbstractWidget {
         gg.pose().pushPose();
         applyCanvasTransform(gg);
         renderStickers(gg);
-        renderConnectors(gg);
+        renderConnectors(gg, hovered);
         renderNodes(gg, hovered);
         gg.pose().popPose();
         gg.flush();
@@ -186,17 +190,17 @@ public final class QuestTreeWidget extends AbstractWidget {
         renderZoomButtons(gg);
         if (hovered != null) {
             gg.pose().pushPose();
-            gg.pose().translate(0, 0, 900);
+            gg.pose().translate(0, 0, 10000);
             gg.renderComponentTooltip(minecraft.font, questTooltip(hovered), mouseX, mouseY);
             gg.pose().popPose();
         }
     }
 
-    private void renderConnectors(GuiGraphics gg) {
+    private void renderConnectors(GuiGraphics gg, QuestData.Quest hovered) {
         for (RenderedConnector connector : renderedConnectors) {
             if (!isQuestShown(connector.quest) || !isQuestShown(connector.dependency)) continue;
-            boolean highlighted = selectedQuestId.equals(connector.quest.id)
-                    || selectedQuestId.equals(connector.dependency.id);
+            boolean highlighted = hovered != null && (hovered.id.equals(connector.quest.id)
+                    || hovered.id.equals(connector.dependency.id));
             QuestTracker.Status dependencyStatus = questState(connector.dependency).status;
             boolean completed = dependencyStatus == QuestTracker.Status.REDEEMED;
             drawConnector(gg, connector.connector, connector.incompatible, completed, highlighted);
@@ -339,6 +343,10 @@ public final class QuestTreeWidget extends AbstractWidget {
             Point end = connector.points.get(index);
             QuestTreeConnectorRenderer.drawSegment(gg, start.x, start.y, end.x, end.y, color);
         }
+        for (int index = 1; index + 1 < connector.points.size(); index++) {
+            Point point = connector.points.get(index);
+            QuestTreeConnectorRenderer.drawJoint(gg, point.x, point.y, color);
+        }
     }
 
     @Override
@@ -359,6 +367,7 @@ public final class QuestTreeWidget extends AbstractWidget {
             if (onQuestSelected != null) onQuestSelected.accept(quest);
             return true;
         }
+        selectedQuestId = "";
         dragging = true;
         setFocused(true);
         return true;

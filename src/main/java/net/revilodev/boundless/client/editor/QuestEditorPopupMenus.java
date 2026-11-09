@@ -35,6 +35,13 @@ public final class QuestEditorPopupMenus {
     private int openTypeMenuW;
     private int openTypeMenuH;
     private int openTypeMenuScroll = 0;
+    private EntryRowKind openValueMenuKind;
+    private int openValueMenuRow = -1;
+    private int openValueMenuX;
+    private int openValueMenuY;
+    private int openValueMenuW;
+    private int openValueMenuH;
+    private List<String> openValueMenuOptions = List.of();
     private DropdownMenuTarget openDropdownTarget;
     private int openDropdownX;
     private int openDropdownY;
@@ -48,16 +55,24 @@ public final class QuestEditorPopupMenus {
         openTypeMenuKind = null;
         openTypeMenuRow = -1;
         openTypeMenuScroll = 0;
+        openValueMenuKind = null;
+        openValueMenuRow = -1;
+        openValueMenuOptions = List.of();
         openDropdownTarget = null;
         openDropdownScroll = 0;
         openDropdownQuery = "";
     }
 
     public boolean hasOpenMenu() {
-        return (openTypeMenuKind != null && openTypeMenuRow >= 0) || openDropdownTarget != null;
+        return (openTypeMenuKind != null && openTypeMenuRow >= 0)
+                || (openValueMenuKind != null && openValueMenuRow >= 0)
+                || openDropdownTarget != null;
     }
 
     public void openTypeMenu(EntryRowKind kind, int row, int x, int y, int width) {
+        openValueMenuKind = null;
+        openValueMenuRow = -1;
+        openValueMenuOptions = List.of();
         openTypeMenuKind = kind;
         openTypeMenuRow = row;
         openTypeMenuX = x;
@@ -101,10 +116,61 @@ public final class QuestEditorPopupMenus {
         return true;
     }
 
+    public void openValueMenu(EntryRowKind kind, int row, int x, int y, int width, List<String> options) {
+        if (kind == null || row < 0 || options == null || options.isEmpty()) return;
+        openTypeMenuKind = null;
+        openTypeMenuRow = -1;
+        openValueMenuKind = kind;
+        openValueMenuRow = row;
+        openValueMenuX = x;
+        openValueMenuY = y + ENTRY_ROW_H;
+        openValueMenuW = Math.max(56, width + 10);
+        openValueMenuOptions = List.copyOf(options);
+        openValueMenuH = menuHeight(openValueMenuOptions.size());
+    }
+
+    public boolean clickValueMenu(double mouseX, double mouseY,
+                                  BiConsumer<EntryRowKind, TypeSelection> selectionHandler) {
+        if (openValueMenuKind == null || openValueMenuRow < 0) return false;
+        if (mouseX < openValueMenuX + 1 || mouseX >= openValueMenuX + openValueMenuW - 1
+                || mouseY < openValueMenuY + 1 || mouseY >= openValueMenuY + openValueMenuH - 1) {
+            openValueMenuKind = null;
+            openValueMenuRow = -1;
+            openValueMenuOptions = List.of();
+            return false;
+        }
+        int index = rowAt(mouseY, openValueMenuY);
+        if (index >= 0 && index < openValueMenuOptions.size() && selectionHandler != null) {
+            selectionHandler.accept(openValueMenuKind,
+                    new TypeSelection(openValueMenuRow, openValueMenuOptions.get(index)));
+        }
+        openValueMenuKind = null;
+        openValueMenuRow = -1;
+        openValueMenuOptions = List.of();
+        return true;
+    }
+
+    public void renderValueMenu(GuiGraphics gg, Font font, int mouseX, int mouseY,
+                                Function<String, String> labelProvider) {
+        if (openValueMenuKind == null || openValueMenuRow < 0) return;
+        renderMenu(gg, font, mouseX, mouseY, openValueMenuX, openValueMenuY,
+                openValueMenuW, openValueMenuH, 0, openValueMenuOptions, labelProvider);
+    }
+
+    public boolean scrollValueMenu(double mouseX, double mouseY) {
+        if (openValueMenuKind == null || openValueMenuRow < 0) return false;
+        return true;
+    }
+
     public void openDropdownMenu(DropdownMenuTarget target, AbstractWidget box, int panelY, int panelHeight, Function<DropdownMenuTarget, List<String>> optionsProvider) {
         if (target == null || box == null || optionsProvider == null) return;
         List<String> options = optionsProvider.apply(target);
         if (options.isEmpty()) return;
+        openTypeMenuKind = null;
+        openTypeMenuRow = -1;
+        openValueMenuKind = null;
+        openValueMenuRow = -1;
+        openValueMenuOptions = List.of();
         openDropdownTarget = target;
         openDropdownQuery = "";
         openDropdownX = box.getX();
@@ -188,6 +254,12 @@ public final class QuestEditorPopupMenus {
     }
 
     private void renderMenu(GuiGraphics gg, Font font, int mouseX, int mouseY, int x, int y, int width, int height, int scroll, List<String> options) {
+        renderMenu(gg, font, mouseX, mouseY, x, y, width, height, scroll, options, Function.identity());
+    }
+
+    private void renderMenu(GuiGraphics gg, Font font, int mouseX, int mouseY, int x, int y,
+                            int width, int height, int scroll, List<String> options,
+                            Function<String, String> labelProvider) {
         gg.pose().pushPose();
         gg.pose().translate(0.0f, 0.0f, 650.0f);
         gg.fill(x, y, x + width, y + height, ID_SUGGESTION_BG_COLOR);
@@ -204,7 +276,8 @@ public final class QuestEditorPopupMenus {
             boolean hovered = mouseX >= x + 1 && mouseX < x + width - 1
                     && mouseY >= rowY && mouseY < rowY + ENTRY_ROW_H;
             if (hovered) gg.fill(x + 1, rowY, x + width - 1, rowY + ENTRY_ROW_H, 0xFF2D2D2D);
-            gg.drawString(font, options.get(i), x + 3, rowY + 2, ID_SUGGESTION_TEXT_COLOR, false);
+            String label = labelProvider == null ? options.get(i) : labelProvider.apply(options.get(i));
+            gg.drawString(font, label, x + 3, rowY + 2, ID_SUGGESTION_TEXT_COLOR, false);
         }
         if (options.size() > visible) renderScrollThumb(gg, x, y, width, height, scroll, visible, options.size());
         gg.pose().popPose();

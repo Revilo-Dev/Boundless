@@ -44,7 +44,7 @@ public final class QuestEditorStateSignatures {
                     + "|" + safe(fields.questCategory)
                     + "|" + safe(fields.questSubCategory)
                     + "|" + safe(fields.questDependencies)
-                    + "|" + fields.questDependencyLock
+                    + "|" + safe(fields.questIncompatibleDependencies)
                     + "|" + fields.questOptional
                     + "|" + fields.questRepeatable
                     + "|" + fields.questAutoComplete
@@ -94,7 +94,7 @@ public final class QuestEditorStateSignatures {
         public String questCategory = "";
         public String questSubCategory = "";
         public String questDependencies = "";
-        public boolean questDependencyLock;
+        public String questIncompatibleDependencies = "";
         public boolean questOptional;
         public boolean questRepeatable;
         public boolean questAutoComplete;

@@ -180,7 +180,7 @@ public final class QuestPanelClient {
         st.disabledCategoriesSignature = Config.disabledCategories().hashCode();
         reposition(inv, st);
 
-        if (lastQuestOpen && isQuestBookEnabled()) {
+        if (lastQuestOpen && isInventoryQuestBookEnabled()) {
             st.open = true;
             if (requiresResponsiveCenter(inv, st)) {
                 st.originalLeft = getLeft(inv);
@@ -188,22 +188,27 @@ public final class QuestPanelClient {
             }
             updateVisibility(st);
         }
-        if (pendingQuickEditSource == s && !pendingQuickEditQuestId.isBlank()) {
-            String questId = pendingQuickEditQuestId;
-            pendingQuickEditSource = null;
-            pendingQuickEditQuestId = "";
-            QuestData.byId(questId).ifPresent(quest -> {
-                st.open = true;
-                lastQuestOpen = true;
-                openDetails(st, quest);
-            });
-        }
+        restorePendingQuickEdit(s, st);
     }
 
     public static void rememberQuickEditReturn(Screen source, String questId) {
-        if (source == null || questId == null || questId.isBlank() || !STATES.containsKey(source)) return;
+        if (!(source instanceof InventoryScreen) || questId == null || questId.isBlank()) return;
         pendingQuickEditSource = source;
         pendingQuickEditQuestId = questId;
+    }
+
+    private static boolean restorePendingQuickEdit(Screen source, State state) {
+        if (source == null || state == null || pendingQuickEditSource != source || pendingQuickEditQuestId.isBlank()) {
+            return false;
+        }
+        QuestData.Quest quest = QuestData.byId(pendingQuickEditQuestId).orElse(null);
+        if (quest == null) return false;
+        pendingQuickEditSource = null;
+        pendingQuickEditQuestId = "";
+        state.open = true;
+        lastQuestOpen = true;
+        openDetails(state, quest);
+        return true;
     }
 
     // restore saved panel state when inventory closes
@@ -224,7 +229,7 @@ public final class QuestPanelClient {
         Screen s = e.getScreen();
         State st = STATES.get(s);
         if (st == null || !(s instanceof InventoryScreen inv)) return;
-        if (!isQuestBookEnabled() && st.open) {
+        if (!isInventoryQuestBookEnabled() && st.open) {
             st.open = false;
             if (st.originalLeft != null) setLeft(inv, st.originalLeft);
         }
@@ -393,6 +398,7 @@ public final class QuestPanelClient {
                 st.btn.active = show;
             }
             startCategoryLoad(st);
+            restorePendingQuickEdit(st.inv, st);
             if (collapseExpandedTree) relayoutPanel(st.inv, st);
             else {
                 reposition(st.inv, st);
@@ -403,7 +409,7 @@ public final class QuestPanelClient {
 
     // open or close the inventory quest panel
     private static void toggle(State st) {
-        if (!isQuestBookEnabled()) return;
+        if (!isInventoryQuestBookEnabled()) return;
         st.open = !st.open;
         lastQuestOpen = st.open;
         if (st.open) {
@@ -634,6 +640,7 @@ public final class QuestPanelClient {
         if (st.details == null) return;
         st.details.setQuest(quest);
         st.selectedQuestId = quest == null ? "" : quest.id;
+        if (st.tree != null) st.tree.selectQuest(st.selectedQuestId);
         st.showingDetails = true;
         if (!usesTreeView(st)) st.expanded = false;
         relayoutPanel(st.inv, st);
@@ -819,14 +826,14 @@ public final class QuestPanelClient {
         }
     }
 
-    // block panel access when the quest book is disabled
-    private static boolean isQuestBookEnabled() {
-        return !Config.disableQuestBook();
+    // keep the inventory panel as the fallback when the item and key are disabled
+    private static boolean isInventoryQuestBookEnabled() {
+        return Config.disableQuestBook() || !Config.hideQuestBookInInventory();
     }
 
     // hide the inventory quest button when config disables it
     private static boolean shouldShowInventoryQuestButton() {
-        return isQuestBookEnabled() && !Config.hideQuestBookInInventory();
+        return isInventoryQuestBookEnabled();
     }
 
     // pick the quest button x offset from config

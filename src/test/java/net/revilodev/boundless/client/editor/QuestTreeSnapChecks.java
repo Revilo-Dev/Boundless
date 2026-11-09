@@ -27,4 +27,23 @@ final class QuestTreeSnapChecks {
         assertEquals(new QuestTreeSnap.Position(32, 32), QuestTreeSnap.snap(30, 33, List.of(anchor)));
         assertEquals(new QuestTreeSnap.Position(33, -33), QuestTreeSnap.snap(31, -34, List.of(anchor)));
     }
+
+    @Test
+    void shiftDragLocksToPerfectAngles() {
+        assertEquals(new QuestTreeSnap.Position(40, 0),
+                QuestTreeSnap.snapDrag(40, 5, 0, 0, List.of()));
+        assertEquals(new QuestTreeSnap.Position(0, 40),
+                QuestTreeSnap.snapDrag(5, 40, 0, 0, List.of()));
+        assertEquals(new QuestTreeSnap.Position(36, 36),
+                QuestTreeSnap.snapDrag(40, 31, 0, 0, List.of()));
+        assertEquals(new QuestTreeSnap.Position(-36, 36),
+                QuestTreeSnap.snapDrag(-40, 31, 0, 0, List.of()));
+    }
+
+    @Test
+    void nodeAlignmentTakesPriorityDuringShiftDrag() {
+        QuestTreeSnap.Position anchor = new QuestTreeSnap.Position(100, 70);
+        assertEquals(new QuestTreeSnap.Position(100, 61),
+                QuestTreeSnap.snapDrag(97, 61, 0, 0, List.of(anchor)));
+    }
 }

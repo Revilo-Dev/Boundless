@@ -72,6 +72,7 @@ import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryCountBo
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryItemPickerButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryRemoveButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryTypeButton;
+import net.revilodev.boundless.client.editor.QuestEditorRowControls.EntryValueButton;
 import net.revilodev.boundless.client.editor.QuestEditorRowControls.IconPickerBox;
 import net.revilodev.boundless.client.editor.QuestEditorSuggestionCaches;
 import net.revilodev.boundless.client.editor.QuestEditorStateSignatures;
@@ -245,7 +246,7 @@ public abstract class QuestEditor extends Screen {
     protected static final int ENTRY_ROW_H = 14;
     protected static final int ENTRY_ROW_GAP = 2;
     protected static final float ENTRY_INPUT_TEXT_SCALE = 0.5f;
-    protected static final int ENTRY_REMOVE_BTN_W = 10;
+    protected static final int ENTRY_REMOVE_BTN_W = 14;
     protected static final int ENTRY_TYPE_BTN_W = 24;
     protected static final int ENTRY_ITEM_PICK_BTN_W = 12;
     protected static final int ENTRY_COUNT_BTN_W = 12;
@@ -280,6 +281,7 @@ public abstract class QuestEditor extends Screen {
     protected final Screen parent;
     protected boolean returnToParentOnBack;
     protected String initialQuestId = "";
+    protected String quickEditQuestId = "";
     protected final Gson gson = new GsonBuilder().setPrettyPrinting().create();
     protected final QuestEditorSuggestionCaches suggestionCaches = new QuestEditorSuggestionCaches();
 
@@ -398,7 +400,6 @@ public abstract class QuestEditor extends Screen {
     protected EditBox questCategoryBox;
     protected EditBox questSubCategoryBox;
     protected ScaledMultiLineEditBox questDependenciesBox;
-    protected LockToggleButton questDependencyLockToggle;
     protected ToggleButton questOptionalToggle;
     protected ToggleButton questRepeatableToggle;
     protected ToggleButton questAutoCompleteToggle;
@@ -420,6 +421,8 @@ public abstract class QuestEditor extends Screen {
     protected final List<EntryRemoveButton> rewardEntryRemoveButtons = new ArrayList<>();
     protected final List<EntryTypeButton> completionEntryTypeButtons = new ArrayList<>();
     protected final List<EntryTypeButton> rewardEntryTypeButtons = new ArrayList<>();
+    protected final List<EntryValueButton> completionEntryValueButtons = new ArrayList<>();
+    protected final List<EntryValueButton> rewardEntryValueButtons = new ArrayList<>();
     protected final List<EntryItemPickerButton> completionEntryItemPickerButtons = new ArrayList<>();
     protected final List<EntryItemPickerButton> rewardEntryItemPickerButtons = new ArrayList<>();
     protected final List<EntryCountBox> completionEntryCountBoxes = new ArrayList<>();
@@ -538,6 +541,7 @@ public abstract class QuestEditor extends Screen {
     protected QuestEditor(Screen parent, QuestData.Quest quest) {
         this(parent);
         this.initialQuestId = quest == null ? "" : safe(quest.id);
+        this.quickEditQuestId = this.initialQuestId;
         this.returnToParentOnBack = true;
     }
 
@@ -759,13 +763,15 @@ public abstract class QuestEditor extends Screen {
         questCategoryBox = createBox(trs("field.quest_category"), BOX_H);
         questSubCategoryBox = createBox(trs("field.quest_subcategory"), BOX_H);
         questDependenciesBox = makeMultiBox(trs("field.dependencies"), BOX_H_TALL, false);
-        questDependencyLockToggle = makeDepLock(false);
         questOptionalToggle = createToggle(false);
         questRepeatableToggle = createToggle(false);
         questAutoCompleteToggle = createToggle(false);
         questHiddenUnderDependencyToggle = createToggle(false);
         questTreeBackgroundSelector = new QuestEditorScreen.TreeBackgroundSelector(
-                this::hasUnsavedEditorChanges, this::autosaveTreeBackground);
+                this::hasUnsavedEditorChanges, this::autosaveTreeBackground,
+                () -> {
+                    if (questTree != null) questTree.clearSelection();
+                });
         addRenderableWidget(questTreeBackgroundSelector);
         questCompletionBox = makeMultiBox(trs("field.completion_entries"), BOX_H_TALL, false);
         questRewardBox = makeMultiBox(trs("field.reward_entries"), BOX_H_TALL, false);
@@ -1094,6 +1100,7 @@ public abstract class QuestEditor extends Screen {
         }
         CategoryData category = categoryData(treeCategoryId);
         if (category == null) return;
+        if (questTree != null) questTree.clearSelection();
         selectedEntryId = "";
         if (leftList != null) leftList.setSelectedId("");
         showCategoryEditor(category, category.path);
@@ -1134,6 +1141,7 @@ public abstract class QuestEditor extends Screen {
             subCategory.path = target;
             stageCurrentPackChange(trs("status.saved_to_staging"));
             QuestEditorPackFiles.queueBackupPack(currentPack, "saved");
+            invalidateQuestListIndex();
             categorySubCategorySection.setEntries(categorySubCategories(categoryId));
             refreshLeftList(true, false);
         } catch (IOException exception) {
@@ -1146,6 +1154,7 @@ public abstract class QuestEditor extends Screen {
         try {
             if (Files.deleteIfExists(subCategory.path)) {
                 stageCurrentPackChange(trs("status.deletion_staged"));
+                invalidateQuestListIndex();
                 categorySubCategorySection.setEntries(categorySubCategories(catIdBox.getValue()));
                 refreshLeftList(true, false);
             }
@@ -1803,6 +1812,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void autosaveTreeBackground(String background, boolean alreadyUnsaved) {
+        if (questTree != null) questTree.clearSelection();
         if (!ensureEditorAccess()) return;
         if (editorType != EditorType.QUEST || editingPath == null || currentPack == null) {
             markCurrentEditorUnsaved();
@@ -2384,9 +2394,9 @@ public abstract class QuestEditor extends Screen {
                 ? LAST_QUEST_CATEGORY_SELECTIONS.get(currentPack.name) : null;
         setDropdownBoxValue(questCategoryBox, previousSelection == null ? safe(data.category) : previousSelection.category());
         setDropdownBoxValue(questSubCategoryBox, previousSelection == null ? safe(data.subCategory) : previousSelection.subCategory());
+        String incompatibleDependencies = safe(data.incompatibleDependencies);
         setEntryRowsFromRaw(EntryRowKind.DEPENDENCY, safe(data.dependencies));
-        questIncompatibleDependencies = safe(data.incompatibleDependencies);
-        setDependencyLockState(parseBool(data.lockAfterDependency, false));
+        setDependencyLockStates(incompatibleDependencies, parseBool(data.lockAfterDependency, false));
         questOptionalToggle.setState(parseBool(data.optional, false));
         questRepeatableToggle.setState(parseBool(data.repeatable, false));
         questAutoCompleteToggle.setState(parseBool(data.autoComplete, false));
@@ -2829,10 +2839,10 @@ public abstract class QuestEditor extends Screen {
         fields.repeatable = questRepeatableToggle.isOn();
         fields.autoComplete = questAutoCompleteToggle.isOn();
         fields.hiddenUnderDependency = questHiddenUnderDependencyToggle.isOn();
-        fields.lockAfterDependency = dependencyLockState();
+        fields.lockAfterDependency = false;
         fields.loadedQuestType = loadedQuestType;
         fields.dependencies = collectDependencyEntries();
-        fields.incompatibleDependencies = QuestEditorEntryCodec.extractEntryLines(questIncompatibleDependencies);
+        fields.incompatibleDependencies = lockedDependencyEntries();
         fields.completionRaw = questCompletionBox.getValue();
         fields.rewardRaw = questRewardBox.getValue();
         fields.treeX = questTreeX;
@@ -3500,10 +3510,6 @@ public abstract class QuestEditor extends Screen {
             questHiddenUnderDependencyToggle.visible = false;
             questHiddenUnderDependencyToggle.active = false;
         }
-        if (questDependencyLockToggle != null) {
-            questDependencyLockToggle.visible = false;
-            questDependencyLockToggle.active = false;
-        }
         if (packIconPathBox != null) {
             packIconPathBox.visible = false;
             packIconPathBox.active = false;
@@ -3553,6 +3559,14 @@ public abstract class QuestEditor extends Screen {
             button.active = false;
         }
         for (EntryTypeButton button : rewardEntryTypeButtons) {
+            button.visible = false;
+            button.active = false;
+        }
+        for (EntryValueButton button : completionEntryValueButtons) {
+            button.visible = false;
+            button.active = false;
+        }
+        for (EntryValueButton button : rewardEntryValueButtons) {
             button.visible = false;
             button.active = false;
         }
@@ -3795,6 +3809,14 @@ public abstract class QuestEditor extends Screen {
         };
     }
 
+    protected List<EntryValueButton> entryValueButtons(EntryRowKind kind) {
+        return switch (kind) {
+            case DEPENDENCY -> List.of();
+            case COMPLETION -> completionEntryValueButtons;
+            case REWARD -> rewardEntryValueButtons;
+        };
+    }
+
     protected List<EntryCountBox> entryCountBoxes(EntryRowKind kind) {
         return switch (kind) {
             case DEPENDENCY -> List.of();
@@ -3830,6 +3852,8 @@ public abstract class QuestEditor extends Screen {
             } else {
                 for (EntryTypeButton button : entryTypeButtons(kind)) removeWidget(button);
                 entryTypeButtons(kind).clear();
+                for (EntryValueButton button : entryValueButtons(kind)) removeWidget(button);
+                entryValueButtons(kind).clear();
                 for (EntryItemPickerButton button : entryItemPickerButtons(kind)) removeWidget(button);
                 entryItemPickerButtons(kind).clear();
                 for (EntryCountBox box : entryCountBoxes(kind)) removeWidget(box);
@@ -3901,6 +3925,7 @@ public abstract class QuestEditor extends Screen {
                 if (!blank) continue;
                 boolean isLast = i == rows.size() - 1;
                 if (!isLast && !box.isFocused()) {
+                    if (kind == EntryRowKind.DEPENDENCY) removeDependencyLockButton(i);
                     removeWidget(box);
                     rows.remove(i);
                 }
@@ -3916,6 +3941,7 @@ public abstract class QuestEditor extends Screen {
         if (rows.isEmpty()) {
             rows.add(createEntryRowBox(kind));
             syncEntryRemoveButtons(kind);
+            if (kind == EntryRowKind.DEPENDENCY) syncDependencyEntryLockButtons();
             return;
         }
         ScaledMultiLineEditBox last = rows.get(rows.size() - 1);
@@ -3925,8 +3951,10 @@ public abstract class QuestEditor extends Screen {
         while (rows.size() > 1) {
             ScaledMultiLineEditBox prev = rows.get(rows.size() - 2);
             if (!safe(prev.getValue()).trim().isBlank() || prev.isFocused()) break;
+            int index = rows.size() - 2;
+            if (kind == EntryRowKind.DEPENDENCY) removeDependencyLockButton(index);
             removeWidget(prev);
-            rows.remove(rows.size() - 2);
+            rows.remove(index);
         }
         syncEntryRemoveButtons(kind);
         if (kind == EntryRowKind.DEPENDENCY) syncDependencyEntryLockButtons();
@@ -3965,8 +3993,21 @@ public abstract class QuestEditor extends Screen {
                 typeButtons.add(button);
                 addRenderableWidget(button);
             }
-        while (typeButtons.size() > rows.size()) removeWidget(typeButtons.remove(typeButtons.size() - 1));
+            while (typeButtons.size() > rows.size()) removeWidget(typeButtons.remove(typeButtons.size() - 1));
             for (int i = 0; i < typeButtons.size(); i++) typeButtons.get(i).setRow(i);
+
+            List<EntryValueButton> valueButtons = entryValueButtons(kind);
+            while (valueButtons.size() < rows.size()) {
+                int rowIndex = valueButtons.size();
+                EntryValueButton button = new EntryValueButton(kind, rowIndex, this::openValueMenu,
+                        this::entryValueButtonLabel);
+                button.visible = false;
+                button.active = false;
+                valueButtons.add(button);
+                addRenderableWidget(button);
+            }
+            while (valueButtons.size() > rows.size()) removeWidget(valueButtons.remove(valueButtons.size() - 1));
+            for (int i = 0; i < valueButtons.size(); i++) valueButtons.get(i).setRow(i);
 
             List<EntryItemPickerButton> pickerButtons = entryItemPickerButtons(kind);
             for (EntryItemPickerButton button : pickerButtons) removeWidget(button);
@@ -4006,6 +4047,26 @@ public abstract class QuestEditor extends Screen {
         return row >= 0 && row < rows.size() ? effectiveRowType(kind, rows.get(row)) : "";
     }
 
+    protected String entryValueButtonLabel(EntryRowKind kind, int row) {
+        List<ScaledMultiLineEditBox> rows = entryRows(kind);
+        if (row < 0 || row >= rows.size()) return "";
+        ScaledMultiLineEditBox box = rows.get(row);
+        String type = effectiveRowType(kind, box);
+        List<String> options = QuestEditorEntryTypes.valueOptions(kind, type);
+        if (options.isEmpty()) return "";
+        ParsedEntry parsed = rowParsedBody(kind, box, safe(box.getValue()));
+        String value = parsed == null ? "" : safe(parsed.id).trim().toLowerCase(Locale.ROOT);
+        if ("level".equals(value)) value = "levels";
+        String selected = options.contains(value) ? value : options.getFirst();
+        return trs("entry_value." + selected);
+    }
+
+    protected List<String> entryValueOptions(EntryRowKind kind, int row) {
+        List<ScaledMultiLineEditBox> rows = entryRows(kind);
+        if (row < 0 || row >= rows.size()) return List.of();
+        return QuestEditorEntryTypes.valueOptions(kind, effectiveRowType(kind, rows.get(row)));
+    }
+
     protected void handleEntryCountChanged(EntryRowKind kind, int row, int count) {
         List<ScaledMultiLineEditBox> rows = entryRows(kind);
         if (row >= 0 && row < rows.size()) {
@@ -4035,29 +4096,42 @@ public abstract class QuestEditor extends Screen {
 
     protected void syncDependencyEntryLockButtons() {
         while (dependencyEntryLockButtons.size() < dependencyEntryBoxes.size()) {
-            LockToggleButton button = makeDepLock(dependencyLockState());
+            LockToggleButton button = makeDepLock(false);
             dependencyEntryLockButtons.add(button);
         }
         while (dependencyEntryLockButtons.size() > dependencyEntryBoxes.size()) {
             LockToggleButton last = dependencyEntryLockButtons.remove(dependencyEntryLockButtons.size() - 1);
             removeWidget(last);
         }
-        boolean state = dependencyLockState();
-        for (LockToggleButton button : dependencyEntryLockButtons) {
-            button.setState(state);
-        }
     }
 
-    protected boolean dependencyLockState() {
-        if (!dependencyEntryLockButtons.isEmpty()) return dependencyEntryLockButtons.get(0).isOn();
-        return questDependencyLockToggle != null && questDependencyLockToggle.isOn();
+    protected void setDependencyLockStates(String incompatibleRaw, boolean legacyLockAll) {
+        Set<String> locked = new LinkedHashSet<>(QuestEditorEntryCodec.extractEntryLines(incompatibleRaw));
+        for (int index = 0; index < dependencyEntryBoxes.size() && index < dependencyEntryLockButtons.size(); index++) {
+            String dependency = safe(dependencyEntryBoxes.get(index).getValue()).trim();
+            boolean lock = !dependency.isBlank() && (locked.contains(dependency) || locked.isEmpty() && legacyLockAll);
+            dependencyEntryLockButtons.get(index).setState(lock);
+        }
+        syncDependencyLockBackingValue();
     }
 
-    protected void setDependencyLockState(boolean state) {
-        if (questDependencyLockToggle != null) questDependencyLockToggle.setState(state);
-        for (LockToggleButton button : dependencyEntryLockButtons) {
-            button.setState(state);
+    protected void removeDependencyLockButton(int index) {
+        if (index < 0 || index >= dependencyEntryLockButtons.size()) return;
+        removeWidget(dependencyEntryLockButtons.remove(index));
+    }
+
+    protected List<String> lockedDependencyEntries() {
+        List<String> locked = new ArrayList<>();
+        int limit = Math.min(dependencyEntryBoxes.size(), dependencyEntryLockButtons.size());
+        for (int index = 0; index < limit; index++) {
+            String dependency = safe(dependencyEntryBoxes.get(index).getValue()).trim();
+            if (!dependency.isBlank() && dependencyEntryLockButtons.get(index).isOn()) locked.add(dependency);
         }
+        return locked;
+    }
+
+    protected void syncDependencyLockBackingValue() {
+        questIncompatibleDependencies = String.join("\n", lockedDependencyEntries());
     }
 
     protected void removeEntryRow(EntryRowKind kind, EntryRemoveButton button) {
@@ -4071,6 +4145,9 @@ public abstract class QuestEditor extends Screen {
             rows.get(0).setValue("");
             rows.get(0).setCursorPosition(0);
             rows.get(0).setFocused(true);
+            if (kind == EntryRowKind.DEPENDENCY && !dependencyEntryLockButtons.isEmpty()) {
+                dependencyEntryLockButtons.getFirst().setState(false);
+            }
             entryRowsDirty = true;
             syncEntryBackingValues();
             return;
@@ -4085,9 +4162,13 @@ public abstract class QuestEditor extends Screen {
         removeWidget(removed);
         EntryRemoveButton removedButton = buttons.remove(idx);
         removeWidget(removedButton);
-        if (kind != EntryRowKind.DEPENDENCY) {
+        if (kind == EntryRowKind.DEPENDENCY) {
+            removeDependencyLockButton(idx);
+        } else {
             List<EntryTypeButton> typeButtons = entryTypeButtons(kind);
             if (idx < typeButtons.size()) removeWidget(typeButtons.remove(idx));
+            List<EntryValueButton> valueButtons = entryValueButtons(kind);
+            if (idx < valueButtons.size()) removeWidget(valueButtons.remove(idx));
             List<EntryItemPickerButton> pickerButtons = entryItemPickerButtons(kind);
             if (idx < pickerButtons.size()) removeWidget(pickerButtons.remove(idx));
             List<EntryCountBox> countBoxes = entryCountBoxes(kind);
@@ -4232,6 +4313,7 @@ public abstract class QuestEditor extends Screen {
         int cursorY = y;
         List<LockToggleButton> lockButtons = dependency ? dependencyEntryLockButtons : List.of();
         List<EntryTypeButton> typeButtons = typed ? entryTypeButtons(kind) : List.of();
+        List<EntryValueButton> valueButtons = typed ? entryValueButtons(kind) : List.of();
         List<EntryItemPickerButton> pickerButtons = typed ? entryItemPickerButtons(kind) : List.of();
         List<EntryCountBox> countBoxes = typed ? entryCountBoxes(kind) : List.of();
         for (int i = 0; i < rows.size(); i++) {
@@ -4239,27 +4321,32 @@ public abstract class QuestEditor extends Screen {
             EntryRemoveButton removeButton = i < removeButtons.size() ? removeButtons.get(i) : null;
             LockToggleButton lockButton = dependency && i < lockButtons.size() ? lockButtons.get(i) : null;
             EntryTypeButton typeButton = typed && i < typeButtons.size() ? typeButtons.get(i) : null;
+            EntryValueButton valueButton = typed && i < valueButtons.size() ? valueButtons.get(i) : null;
             EntryItemPickerButton pickerButton = typed && i < pickerButtons.size() ? pickerButtons.get(i) : null;
             EntryCountBox countBox = typed && i < countBoxes.size() ? countBoxes.get(i) : null;
             String rowType = effectiveRowType(kind, box);
             box.setPlaceholder(Component.literal(QuestEditorEntryTypes.placeholder(kind, rowType)));
             boolean canPickItem = typed && QuestEditorEntryTypes.hasRowBrowser(kind, rowType);
+            boolean hasValueDropdown = typed && !QuestEditorEntryTypes.valueOptions(kind, rowType).isEmpty();
             boolean hasCount = typed && QuestEditorEntryTypes.rowHasCount(kind, rowType);
             boolean expanded = shouldExpandFocusedEntryRow(kind, box);
             int pickerSpace = canPickItem ? (ENTRY_ITEM_PICK_BTN_W + 2) : 0;
+            int valueSpace = hasValueDropdown ? (ENTRY_TYPE_BTN_W + 2) : 0;
             int countSpace = hasCount ? (ENTRY_COUNT_BTN_W + 2) : 0;
             int effectiveTypeSpace = expanded ? 0 : typeSpace;
+            int effectiveValueSpace = expanded ? 0 : valueSpace;
             int effectivePickerSpace = expanded ? 0 : pickerSpace;
             int effectiveCountSpace = expanded ? 0 : countSpace;
             int effectiveRemoveSpace = expanded ? 0 : ENTRY_REMOVE_BTN_W;
-            box.setX(x + iconSpace + effectiveTypeSpace + effectivePickerSpace);
+            box.setX(x + iconSpace + effectiveTypeSpace + effectiveValueSpace + effectivePickerSpace);
             box.setY(cursorY);
-            box.setWidth(Math.max(10, width - effectiveRemoveSpace - 2 - lockSpace - iconSpace - effectiveTypeSpace - effectivePickerSpace - effectiveCountSpace));
+            box.setWidth(Math.max(10, width - effectiveRemoveSpace - 2 - lockSpace - iconSpace
+                    - effectiveTypeSpace - effectiveValueSpace - effectivePickerSpace - effectiveCountSpace));
             int rowHeight = entryRowHeight(kind, box);
             box.setHeight(rowHeight);
             boolean inside = cursorY + rowHeight > clipTop && cursorY < clipBottom;
-            box.visible = inside;
-            box.active = inside;
+            box.visible = inside && !hasValueDropdown;
+            box.active = inside && !hasValueDropdown;
             if (typeButton != null) {
                 typeButton.setPosition(x + iconSpace, cursorY);
                 typeButton.setWidth(ENTRY_TYPE_BTN_W);
@@ -4267,9 +4354,17 @@ public abstract class QuestEditor extends Screen {
                 typeButton.visible = inside && !expanded;
                 typeButton.active = inside && !expanded;
             }
+            if (valueButton != null) {
+                valueButton.setRow(i);
+                valueButton.setPosition(x + iconSpace + typeSpace, cursorY);
+                valueButton.setWidth(ENTRY_TYPE_BTN_W);
+                valueButton.setHeight(ENTRY_ROW_H);
+                valueButton.visible = inside && hasValueDropdown && !expanded;
+                valueButton.active = inside && hasValueDropdown && !expanded;
+            }
             if (pickerButton != null) {
                 pickerButton.setRow(i);
-                int pickerX = x + iconSpace + typeSpace;
+                int pickerX = x + iconSpace + typeSpace + valueSpace;
                 pickerButton.setPosition(pickerX, cursorY);
                 pickerButton.setWidth(ENTRY_ITEM_PICK_BTN_W);
                 pickerButton.setHeight(ENTRY_ROW_H);
@@ -4362,6 +4457,7 @@ public abstract class QuestEditor extends Screen {
         // keep hidden backing fields in sync before validation and save
         normalizeCommandRewardRows();
         if (questDependenciesBox != null) questDependenciesBox.setValue(entryRowsToRaw(EntryRowKind.DEPENDENCY));
+        syncDependencyLockBackingValue();
         if (questCompletionBox != null) questCompletionBox.setValue(entryRowsToRaw(EntryRowKind.COMPLETION));
         if (questRewardBox != null) questRewardBox.setValue(entryRowsToRaw(EntryRowKind.REWARD));
         validationSnapshot = null;
@@ -4566,7 +4662,7 @@ public abstract class QuestEditor extends Screen {
         fields.questCategory = safe(questCategoryBox == null ? "" : questCategoryBox.getValue());
         fields.questSubCategory = safe(questSubCategoryBox == null ? "" : questSubCategoryBox.getValue());
         fields.questDependencies = safe(questDependenciesBox == null ? "" : questDependenciesBox.getValue());
-        fields.questDependencyLock = dependencyLockState();
+        fields.questIncompatibleDependencies = safe(questIncompatibleDependencies);
         fields.questOptional = questOptionalToggle != null && questOptionalToggle.isOn();
         fields.questRepeatable = questRepeatableToggle != null && questRepeatableToggle.isOn();
         fields.questAutoComplete = questAutoCompleteToggle != null && questAutoCompleteToggle.isOn();
@@ -4716,7 +4812,7 @@ public abstract class QuestEditor extends Screen {
         state.questCategory = safe(questCategoryBox == null ? "" : questCategoryBox.getValue());
         state.questSubCategory = safe(questSubCategoryBox == null ? "" : questSubCategoryBox.getValue());
         state.questDependencies = safe(questDependenciesBox == null ? "" : questDependenciesBox.getValue());
-        state.questLockAfterDependency = dependencyLockState();
+        state.questLockAfterDependency = false;
         state.questIncompatibleDependencies = questIncompatibleDependencies;
         state.questTreeOrigin = questTreeOrigin;
         state.questOptional = questOptionalToggle != null && questOptionalToggle.isOn();
@@ -4914,6 +5010,8 @@ public abstract class QuestEditor extends Screen {
     protected abstract void closeItemPicker();
 
     protected abstract void openTypeMenu(EntryRowKind kind, int row, int x, int y, int width);
+
+    protected abstract void openValueMenu(EntryRowKind kind, int row, int x, int y, int width);
 
     protected abstract void openItemPicker(EntryRowKind kind, int row);
 

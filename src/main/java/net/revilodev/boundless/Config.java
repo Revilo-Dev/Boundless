@@ -218,7 +218,7 @@ public final class Config {
     }
     // disableQuestBook blocks the quest book item and keybind
     public static final ModConfigSpec.ConfigValue<Boolean> DISABLE_QUEST_BOOK =
-            BUILDER.comment("If true, quest book opening is disabled.")
+            BUILDER.comment("If true, disables the quest book item and keybind while keeping the inventory panel available.")
                     .define("disableQuestBook", false);
     // spawnWithQuestBook gives new players the quest book
     public static final ModConfigSpec.ConfigValue<Boolean> SPAWN_WITH_QUEST_BOOK =

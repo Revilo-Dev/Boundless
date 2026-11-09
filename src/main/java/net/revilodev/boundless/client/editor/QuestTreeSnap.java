@@ -45,6 +45,28 @@ final class QuestTreeSnap {
         return best;
     }
 
+    static Position snapDrag(int rawX, int rawY, int startX, int startY, List<Position> anchors) {
+        Position aligned = snap(rawX, rawY, anchors);
+        if (aligned.x != rawX || aligned.y != rawY) return aligned;
+
+        int xDistance = rawX - startX;
+        int yDistance = rawY - startY;
+        int absoluteX = Math.abs(xDistance);
+        int absoluteY = Math.abs(yDistance);
+        if (absoluteX == 0 && absoluteY == 0) return new Position(rawX, rawY);
+
+        if (absoluteX > absoluteY * (1f + (float) Math.sqrt(2))) {
+            return new Position(rawX, startY);
+        }
+        if (absoluteY > absoluteX * (1f + (float) Math.sqrt(2))) {
+            return new Position(startX, rawY);
+        }
+
+        int diagonalDistance = Math.round((absoluteX + absoluteY) / 2f);
+        return new Position(startX + Integer.signum(xDistance) * diagonalDistance,
+                startY + Integer.signum(yDistance) * diagonalDistance);
+    }
+
     private static Position closer(Position current, int rawX, int rawY, Position candidate, int bestDistance) {
         int xDistance = Math.abs(candidate.x - rawX);
         int yDistance = Math.abs(candidate.y - rawY);
