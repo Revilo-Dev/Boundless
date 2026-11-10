@@ -203,8 +203,7 @@ public final class QuestEditorEntryRows {
 
     // should expand focused
     public static boolean shouldExpandFocused(EntryRowKind kind, ScaledMultiLineEditBox box) {
-        if (kind == EntryRowKind.DEPENDENCY || box == null || !box.isFocused()) return false;
-        return box.getLineCount() > 1;
+        return kind != EntryRowKind.DEPENDENCY && box != null && box.isFocused();
     }
 
     private static String safe(String value) {
