@@ -41,6 +41,7 @@ public final class QuestEditorRowControls {
     private static final float ENTRY_COUNT_TEXT_SCALE = 0.55f;
     private static final float ENTRY_TYPE_TEXT_SCALE = 0.45f;
     private static final float ENTRY_TYPE_MIN_TEXT_SCALE = 0.3f;
+    private static final float ENTRY_ARROW_SCALE = 0.5f;
 
     private QuestEditorRowControls() {
     }
@@ -148,7 +149,7 @@ public final class QuestEditorRowControls {
             ResourceLocation texture = !active
                     ? REMOVE_DISABLED_TEX
                     : isMouseOver(mouseX, mouseY) ? REMOVE_HOVER_TEX : REMOVE_TEX;
-            gg.blit(texture, getX(), getY(), 0, 0, width, height, 20, 20);
+            gg.blit(texture, getX(), getY(), width, height, 0, 0, 20, 20, 20, 20);
         }
 
         @Override
@@ -244,7 +245,7 @@ public final class QuestEditorRowControls {
         gg.fill(x + width - 1, y, x + width, y + height, border);
         Font font = Minecraft.getInstance().font;
         String arrow = "\u25BC";
-        int arrowWidth = font.width(arrow);
+        int arrowWidth = Math.round(font.width(arrow) * ENTRY_ARROW_SCALE);
         float availableWidth = Math.max(1, width - arrowWidth - 5);
         float textScale = Math.max(ENTRY_TYPE_MIN_TEXT_SCALE,
                 Math.min(ENTRY_TYPE_TEXT_SCALE, availableWidth / Math.max(1, font.width(text))));
@@ -255,8 +256,12 @@ public final class QuestEditorRowControls {
         gg.pose().scale(textScale, textScale, 1f);
         gg.drawString(font, text, 0, 0, 0xFFFFFF00, false);
         gg.pose().popPose();
-        gg.drawString(font, arrow, x + width - arrowWidth - 2,
-                y + (height - font.lineHeight) / 2 + 1, 0xFFFFFF00, false);
+        gg.pose().pushPose();
+        gg.pose().translate(x + width - arrowWidth - 2,
+                y + (height - Math.round(font.lineHeight * ENTRY_ARROW_SCALE)) / 2f + 1, 0f);
+        gg.pose().scale(ENTRY_ARROW_SCALE, ENTRY_ARROW_SCALE, 1f);
+        gg.drawString(font, arrow, 0, 0, 0xFFFFFF00, false);
+        gg.pose().popPose();
     }
 
     // entry item picker button
@@ -326,13 +331,14 @@ public final class QuestEditorRowControls {
         private boolean settingValue;
 
         public EntryCountBox(Font font, EntryRowKind kind, int row, EntryCountHandler countHandler) {
-            super(font, 0, 0, ENTRY_COUNT_BTN_W, ENTRY_ROW_H, Component.literal("count"));
+            super(font, 0, 0, ENTRY_COUNT_BTN_W, ENTRY_ROW_H,
+                    Component.translatable("ui.boundless.editor.field.count"));
             this.kind = kind;
             this.row = row;
             this.countHandler = countHandler;
             setMaxLength(3);
             setBordered(true);
-            setTooltip(Tooltip.create(Component.literal("count")));
+            setTooltip(Tooltip.create(Component.translatable("ui.boundless.editor.field.count")));
             setValue("1");
             setResponder(this::handleValueChanged);
         }

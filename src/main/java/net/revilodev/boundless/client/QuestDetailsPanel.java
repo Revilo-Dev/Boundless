@@ -218,7 +218,9 @@ public final class QuestDetailsPanel extends AbstractWidget {
         for (QuestData.Target target : quest.completion.targets) {
             if (target == null || !target.isCheck()) continue;
             String label = target.id == null ? "" : target.id.trim();
-            return label.isBlank() ? Component.translatable("ui.boundless.questbook.understand").getString() : label;
+            return label.isBlank() || "Understand".equals(label)
+                    ? Component.translatable("ui.boundless.questbook.understand").getString()
+                    : label;
         }
         return Component.translatable("ui.boundless.questbook.understand").getString();
     }
@@ -562,7 +564,7 @@ public final class QuestDetailsPanel extends AbstractWidget {
         if (quickEditEnabled) {
             edit.render(gg, mouseX, mouseY, partialTick);
             if (edit.isMouseOver(mouseX, mouseY)) {
-                hoveredTooltips.add(Component.literal("Edit quest"));
+                hoveredTooltips.add(Component.translatable("ui.boundless.questbook.edit_quest"));
             }
         }
         }

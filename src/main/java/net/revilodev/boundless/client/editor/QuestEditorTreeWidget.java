@@ -242,8 +242,8 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         if (hoveredWarning != null) renderImportWarningTooltip(gg, hoveredWarning, mouseX, mouseY);
         else if (hovered != null) renderTreeTooltip(gg, Component.literal(displayName(hovered)), mouseX, mouseY);
         else if (tool == Tool.CONNECT && connectorSource != null && isMouseOver(mouseX, mouseY)) {
-            renderTreeTooltip(gg, Component.literal("Select the quest that should depend on "
-                    + displayName(connectorSource)), mouseX, mouseY - 14);
+            renderTreeTooltip(gg, Component.translatable("ui.boundless.editor.tree.select_dependent",
+                    displayName(connectorSource)), mouseX, mouseY - 14);
         }
     }
 
@@ -307,15 +307,19 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         if (editingStickerText) {
             gg.fill(x, y, x + 116, y + 22, 0xFFFFFFFF);
             gg.fill(x + 2, y + 2, x + 114, y + 20, 0xFF303030);
-            String shown = stickerText.isEmpty() ? "Type text, press Enter" : stickerText;
+        String shown = stickerText.isEmpty()
+                ? Component.translatable("ui.boundless.editor.tree.type_text").getString()
+                : stickerText;
             gg.drawString(minecraft.font, minecraft.font.plainSubstrByWidth(shown, 108), x + 5, y + 7, 0xFFFFFFFF, false);
         } else {
             drawOutlinedMenuRow(gg, x, y, 78, 18,
                     mouseX >= x && mouseX <= x + 78 && mouseY >= y && mouseY < y + 18);
             drawOutlinedMenuRow(gg, x, y + 20, 78, 18,
                     mouseX >= x && mouseX <= x + 78 && mouseY >= y + 20 && mouseY < y + 38);
-            gg.drawString(minecraft.font, "Add text", x + 7, y + 6, 0xFFFFFFFF, false);
-            gg.drawString(minecraft.font, "Add icon", x + 7, y + 24, 0xFFFFFFFF, false);
+        gg.drawString(minecraft.font, Component.translatable("ui.boundless.editor.tree.add_text"),
+                x + 7, y + 6, 0xFFFFFFFF, false);
+        gg.drawString(minecraft.font, Component.translatable("ui.boundless.editor.tree.add_icon"),
+                x + 7, y + 24, 0xFFFFFFFF, false);
         }
         gg.pose().popPose();
     }
@@ -356,7 +360,7 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
 
     private void renderImportWarningTooltip(GuiGraphics gg, QuestEntryData quest, int mouseX, int mouseY) {
         List<FormattedCharSequence> lines = new ArrayList<>();
-        lines.add(Component.literal("FTB import warning").getVisualOrderText());
+        lines.add(Component.translatable("ui.boundless.editor.tree.ftb_import_warning").getVisualOrderText());
         int lineWidth = Math.max(80, Math.min(240, width - 24));
         for (String warning : quest.importWarnings) {
             lines.addAll(minecraft.font.split(Component.literal(warning), lineWidth));

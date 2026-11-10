@@ -384,7 +384,7 @@ public final class QuestEditorControls {
             } else {
                 tex = on ? LOCK_TEX_ENABLED : LOCK_TEX_DISABLED;
             }
-            gg.blit(tex, getX(), getY(), 0, 0, this.width, this.height, this.width, this.height);
+            gg.blit(tex, getX(), getY(), this.width, this.height, 0, 0, 20, 20, 20, 20);
         }
 
         @Override

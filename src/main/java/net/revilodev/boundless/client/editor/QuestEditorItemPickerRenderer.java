@@ -157,7 +157,8 @@ public final class QuestEditorItemPickerRenderer {
 
         renderGrid(request, x, y);
         if (request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM) {
-            renderVanillaFooterButton(gg, font, x + 24, y + ITEM_PICKER_H + 4, ITEM_PICKER_W - 48, 16, "Open assets folder", true, false);
+            renderVanillaFooterButton(gg, font, x + 24, y + ITEM_PICKER_H + 4, ITEM_PICKER_W - 48, 16,
+                    text("ui.boundless.editor.picker.open_assets_folder"), true, false);
         }
 
         if (request.searchBox != null && !(request.iconPicker && request.itemPickerTab == ItemPickerTab.CUSTOM)) {

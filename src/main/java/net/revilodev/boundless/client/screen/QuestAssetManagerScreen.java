@@ -67,7 +67,7 @@ public final class QuestAssetManagerScreen extends Screen {
     private int loadGeneration;
 
     public QuestAssetManagerScreen(Screen parent) {
-        super(Component.literal("Asset Manager"));
+        super(Component.translatable("ui.boundless.assets.title"));
         this.parent = parent;
     }
 
@@ -85,11 +85,11 @@ public final class QuestAssetManagerScreen extends Screen {
         addRenderableWidget(new AssetTabButton(panelX + 182, tabY, 80, AssetType.EMOJI));
         addRenderableWidget(new QuestEditorControls.BackButton(
                 panelX - 24, panelY + PANEL_HEIGHT - 23, () -> minecraft.setScreen(parent)));
-        renameButton = addRenderableWidget(Button.builder(Component.literal("Rename"), button -> renameSelected())
+        renameButton = addRenderableWidget(Button.builder(Component.translatable("ui.boundless.assets.rename"), button -> renameSelected())
                 .bounds(panelX + 8, panelY + PANEL_HEIGHT - 35, 52, 20).build());
         uploadButton = addRenderableWidget(Button.builder(uploadLabel(), button -> upload())
                 .bounds(panelX + 66, panelY + PANEL_HEIGHT - 35, 92, 20).build());
-        deleteButton = addRenderableWidget(Button.builder(Component.literal("Delete"), button -> deleteSelected())
+        deleteButton = addRenderableWidget(Button.builder(Component.translatable("ui.boundless.assets.delete"), button -> deleteSelected())
                 .bounds(panelX + 164, panelY + PANEL_HEIGHT - 35, 98, 20).build());
         renameButton.active = false;
         deleteButton.active = false;
@@ -106,7 +106,7 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private Component uploadLabel() {
-        return Component.literal("Upload");
+        return Component.translatable("ui.boundless.assets.upload");
     }
 
     private void reloadEntries() {
@@ -117,7 +117,7 @@ public final class QuestAssetManagerScreen extends Screen {
         // discard stale scans when the asset type changes mid-load
         int generation = ++loadGeneration;
         loading = true;
-        status = "Loading " + type.label.toLowerCase(Locale.ROOT) + "...";
+        status = tr("loading", type.label());
         statusColor = 0xFFAAAAAA;
         AssetType requestedType = type;
         CompletableFuture.supplyAsync(() -> scanEntries(requestedType), Util.backgroundExecutor())
@@ -247,8 +247,8 @@ public final class QuestAssetManagerScreen extends Screen {
                 for (String pattern : patterns) filters.put(stack.UTF8(pattern));
                 filters.flip();
                 selectedFile = TinyFileDialogs.tinyfd_openFileDialog(
-                        "Upload " + type.label.toLowerCase(Locale.ROOT), root.toString(), filters,
-                        type.description, false);
+                        tr("dialog.upload", type.label()), root.toString(), filters,
+                        type.description(), false);
             }
             if (selectedFile == null || selectedFile.isBlank()) return;
             if (!BoundlessPermissions.canManageQuests()) return;
@@ -259,7 +259,7 @@ public final class QuestAssetManagerScreen extends Screen {
             int[] size = dimensions(source);
             if (size[0] <= 0 || size[1] <= 0) throw new IOException("Unreadable image");
             if (type == AssetType.EMOJI && size[0] != size[1]) {
-                status = "Emoji images must use a 1:1 aspect ratio";
+                status = tr("emoji_square_required");
                 statusColor = 0xFFFF7070;
                 return;
             }
@@ -272,11 +272,11 @@ public final class QuestAssetManagerScreen extends Screen {
             clearAssetCaches();
             reloadEntries(() -> {
                 selected = entries.stream().filter(entry -> entry.path.equals(target)).findFirst().orElse(null);
-                status = uploadedFileName + " uploaded";
+                status = tr("uploaded", uploadedFileName);
                 statusColor = 0xFFA0FFA0;
             });
         } catch (Exception exception) {
-            status = "Could not upload " + type.label.toLowerCase(Locale.ROOT);
+            status = tr("upload_failed", type.label());
             statusColor = 0xFFFF7070;
         }
     }
@@ -294,10 +294,10 @@ public final class QuestAssetManagerScreen extends Screen {
             selected = null;
             clearAssetCaches();
             reloadEntries();
-            status = name + " deleted";
+            status = tr("deleted", name);
             statusColor = 0xFFA0FFA0;
         } catch (IOException exception) {
-            status = "Could not delete " + name;
+            status = tr("delete_failed", name);
             statusColor = 0xFFFF7070;
         }
     }
@@ -308,12 +308,12 @@ public final class QuestAssetManagerScreen extends Screen {
         if (selected == null) return;
         AssetEntry entry = selected;
         String requested = TinyFileDialogs.tinyfd_inputBox(
-                "Rename " + type.label.toLowerCase(Locale.ROOT), "New file name", entry.path.getFileName().toString());
+                tr("dialog.rename", type.label()), tr("new_file_name"), entry.path.getFileName().toString());
         if (requested == null) return;
         if (!BoundlessPermissions.canManageQuests()) return;
         requested = requested.trim();
         if (requested.isBlank() || requested.contains("/") || requested.contains("\\")) {
-            status = "Enter a valid file name";
+            status = tr("invalid_file_name");
             statusColor = 0xFFFF7070;
             return;
         }
@@ -322,7 +322,7 @@ public final class QuestAssetManagerScreen extends Screen {
         String extension = extensionIndex >= 0 ? oldName.substring(extensionIndex).toLowerCase(Locale.ROOT) : "";
         if (requested.lastIndexOf('.') < 1) requested += extension;
         if (!type.accepts(requested)) {
-            status = "Unsupported file extension";
+            status = tr("unsupported_extension");
             statusColor = 0xFFFF7070;
             return;
         }
@@ -335,7 +335,7 @@ public final class QuestAssetManagerScreen extends Screen {
             Path target = source.resolveSibling(fileName).normalize();
             if (!source.startsWith(root) || !target.startsWith(root)) throw new IOException("Invalid asset path");
             if (Files.exists(target) && !source.equals(target)) {
-                status = fileName + " already exists";
+                status = tr("already_exists", fileName);
                 statusColor = 0xFFFF7070;
                 return;
             }
@@ -349,11 +349,11 @@ public final class QuestAssetManagerScreen extends Screen {
             clearAssetCaches();
             reloadEntries(() -> {
                 selected = entries.stream().filter(found -> found.path.equals(target)).findFirst().orElse(null);
-                status = oldName + " renamed to " + fileName;
+                status = tr("renamed", oldName, fileName);
                 statusColor = 0xFFA0FFA0;
             });
         } catch (IOException exception) {
-            status = "Could not rename " + oldName;
+            status = tr("rename_failed", oldName);
             statusColor = 0xFFFF7070;
         }
     }
@@ -398,25 +398,27 @@ public final class QuestAssetManagerScreen extends Screen {
                 renderPreview(graphics, entry, x + 5, y + 4);
                 graphics.drawString(font, font.plainSubstrByWidth(entry.relative, columnWidth - 36), x + 31, y + 5,
                         0xFFFFFFFF, false);
-                String details = entry.width + "×" + entry.height + "  " + (entry.used ? "Used" : "Unused");
+                String details = tr("entry_details", entry.width, entry.height,
+                        Component.translatable(entry.used ? "ui.boundless.assets.used" : "ui.boundless.assets.unused"));
                 graphics.drawString(font, font.plainSubstrByWidth(details, columnWidth - 36), x + 31, y + 16,
                         entry.used ? 0xFF80FF80 : 0xFFAAAAAA, false);
                 if (over) hovered = entry;
             }
         }
-        if (!loading && entries.isEmpty()) graphics.drawCenteredString(font, "No " + type.label.toLowerCase(Locale.ROOT) + " found",
+        if (!loading && entries.isEmpty()) graphics.drawCenteredString(font, tr("none_found", type.label()),
                 width / 2, listY + 62, 0xFFAAAAAA);
         if (!status.isBlank()) graphics.drawCenteredString(font, status, width / 2, panelY + PANEL_HEIGHT - 48, statusColor);
         renameButton.active = selected != null;
         deleteButton.active = selected != null;
-        deleteButton.setMessage(Component.literal("Delete"));
+        deleteButton.setMessage(Component.translatable("ui.boundless.assets.delete"));
         super.render(graphics, mouseX, mouseY, partialTick);
         if (hovered != null) {
             List<Component> tooltip = List.of(
                     Component.literal(hovered.relative),
-                    Component.literal(type.label),
-                    Component.literal("Dimensions: " + hovered.width + " × " + hovered.height).withStyle(ChatFormatting.GRAY),
-                    Component.literal(hovered.used ? "Used" : "Unused")
+                    type.label(),
+                    Component.translatable("ui.boundless.assets.dimensions", hovered.width, hovered.height)
+                            .withStyle(ChatFormatting.GRAY),
+                    Component.translatable(hovered.used ? "ui.boundless.assets.used" : "ui.boundless.assets.unused")
                             .withStyle(hovered.used ? ChatFormatting.GREEN : ChatFormatting.GRAY));
             graphics.renderComponentTooltip(font, tooltip, mouseX, mouseY);
         }
@@ -466,6 +468,10 @@ public final class QuestAssetManagerScreen extends Screen {
         return Math.max(0, rows - LIST_HEIGHT / ROW_HEIGHT);
     }
 
+    private static String tr(String key, Object... args) {
+        return Component.translatable("ui.boundless.assets." + key, args).getString();
+    }
+
     @Override
     public boolean isPauseScreen() {
         return false;
@@ -483,18 +489,24 @@ public final class QuestAssetManagerScreen extends Screen {
     }
 
     private enum AssetType {
-        ASSET("Assets", List.of("*.png"), "PNG images"),
-        MEDIA("Media", List.of("*.png", "*.jpg", "*.jpeg", "*.gif"), "Images and looping GIFs"),
-        EMOJI("Emojis", List.of("*.png"), "Square PNG images");
+        ASSET("assets", List.of("*.png")),
+        MEDIA("media", List.of("*.png", "*.jpg", "*.jpeg", "*.gif")),
+        EMOJI("emojis", List.of("*.png"));
 
-        private final String label;
+        private final String key;
         private final List<String> patterns;
-        private final String description;
 
-        AssetType(String label, List<String> patterns, String description) {
-            this.label = label;
+        AssetType(String key, List<String> patterns) {
+            this.key = key;
             this.patterns = patterns;
-            this.description = description;
+        }
+
+        private Component label() {
+            return Component.translatable("ui.boundless.assets.type." + key);
+        }
+
+        private String description() {
+            return Component.translatable("ui.boundless.assets.filter." + key).getString();
         }
 
         private Path root() {
@@ -522,7 +534,7 @@ public final class QuestAssetManagerScreen extends Screen {
         private final AssetType assetType;
 
         private AssetTabButton(int x, int y, int width, AssetType assetType) {
-            super(x, y, width, 20, Component.literal(assetType.label));
+            super(x, y, width, 20, assetType.label());
             this.assetType = assetType;
         }
 

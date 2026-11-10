@@ -22,16 +22,19 @@ public final class QuestSearchBox extends EditBox {
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (!visible) return;
         int x = getX();
+        int y = getY();
         int width = getWidth();
-        graphics.blitSprite(isFocused() ? FIELD_FOCUSED : FIELD, x, getY(), width, getHeight());
-        graphics.blit(SEARCH_ICON, x + 2, getY(), 0, 0, 16, 16, 16, 16);
+        graphics.blitSprite(isFocused() ? FIELD_FOCUSED : FIELD, x, y, width, getHeight());
+        graphics.blit(SEARCH_ICON, x + 2, y, 0, 0, 16, 16, 16, 16);
 
         setX(x + TEXT_INSET);
+        setY(y + 4);
         setWidth(Math.max(1, width - TEXT_INSET - 4));
         setBordered(false);
         super.renderWidget(graphics, mouseX, mouseY, partialTick);
         setBordered(true);
         setWidth(width);
+        setY(y);
         setX(x);
     }
 

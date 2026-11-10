@@ -36,6 +36,9 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     private final float textScale;
     private final double lineHeight;
     private final boolean allowColorFormatting;
+    private int leftContentInset;
+    private boolean leftContentClickThrough;
+    private boolean singleLine;
     private long focusedTime = Util.getMillis();
     private int textColor = TEXT_COLOR;
 
@@ -60,8 +63,18 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         // Reflow the backing field whenever the visible widget changes width.
         super.setWidth(width);
         float safeScale = this.textScale <= 0f ? 1f : this.textScale;
-        this.textField.setWidth(Math.max(20, Math.round((width - this.totalInnerPadding()) / safeScale)));
+        this.textField.setWidth(Math.max(20, Math.round((width - this.totalInnerPadding() - this.leftContentInset) / safeScale)));
         this.setScrollAmount(Mth.clamp(this.scrollAmount(), 0.0, Math.max(0.0, this.getInnerHeight() - (this.height - this.totalInnerPadding()))));
+    }
+
+    public void setLeftContentInset(int leftContentInset) {
+        setLeftContentInset(leftContentInset, false);
+    }
+
+    public void setLeftContentInset(int leftContentInset, boolean clickThrough) {
+        this.leftContentInset = Math.max(0, leftContentInset);
+        this.leftContentClickThrough = clickThrough;
+        setWidth(getWidth());
     }
 
     public void setValueListener(Consumer<String> valueListener) {
@@ -69,7 +82,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     public void setValue(String fullText) {
-        this.textField.setValue(fullText);
+        this.textField.setValue(singleLine ? singleLineText(fullText) : fullText);
     }
 
     public void setPlaceholder(Component placeholder) {
@@ -77,7 +90,12 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     }
 
     public void insertText(String text) {
-        this.textField.insertText(text);
+        this.textField.insertText(singleLine ? singleLineText(text) : text);
+    }
+
+    public void setSingleLine(boolean singleLine) {
+        this.singleLine = singleLine;
+        if (singleLine) setValue(getValue());
     }
 
     /** Inserts formatting around the selected text, leaving the cursor inside empty markers. */
@@ -142,6 +160,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // Cursor placement and selection belong to the backing text field.
         if (!this.visible || !this.active) return false;
+        if (this.leftContentClickThrough && mouseX < this.getX() + this.leftContentInset) return false;
         if (this.withinContentAreaPoint(mouseX, mouseY) && button == 0) {
             this.setFocused(true);
             this.textField.setSelecting(Screen.hasShiftDown());
@@ -177,6 +196,11 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (singleLine && (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)) return true;
+        if (singleLine && Screen.isPaste(keyCode)) {
+            insertText(Minecraft.getInstance().keyboardHandler.getClipboard());
+            return true;
+        }
         return this.textField.keyPressed(keyCode);
     }
 
@@ -187,6 +211,10 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
             return true;
         }
         return false;
+    }
+
+    private static String singleLineText(String text) {
+        return text == null ? "" : text.replace('\r', ' ').replace('\n', ' ');
     }
 
     @Override
@@ -228,9 +256,10 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         String text = this.textField.value();
         float safeScale = this.textScale <= 0f ? 1f : this.textScale;
         float invScale = 1.0f / safeScale;
-        int baseX = Math.round((this.getX() + this.innerPadding()) * invScale);
-        int baseY = Math.round((this.getY() + this.innerPadding()) * invScale);
-        int wrapWidth = Math.max(1, Math.round((this.width - this.totalInnerPadding()) * invScale));
+        int baseX = Math.round((this.getX() + this.innerPadding() + this.leftContentInset) * invScale);
+        double contentY = textContentY();
+        int baseY = Math.round((float) (contentY * invScale));
+        int wrapWidth = Math.max(1, Math.round((this.width - this.totalInnerPadding() - this.leftContentInset) * invScale));
 
         if (text.isEmpty() && !this.isFocused()) {
             guiGraphics.drawWordWrap(this.font, this.placeholder, baseX, baseY, wrapWidth, PLACEHOLDER_TEXT_COLOR);
@@ -242,7 +271,7 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         boolean cursorInText = cursor < text.length();
         int drawX = baseX;
         int activeColor = this.textColor;
-        double lineScreenY = this.getY() + this.innerPadding();
+        double lineScreenY = contentY;
         double lastLineScreenY = lineScreenY;
         int cursorRenderX = -1;
         int cursorRenderY = -1;
@@ -278,8 +307,8 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
         if (this.textField.hasSelection()) {
             ScaledTextField.StringView selected = this.textField.getSelected();
             int startX = baseX;
-            int maxLineWidth = Math.max(1, Math.round((this.width - this.innerPadding()) * invScale));
-            double selScreenY = this.getY() + this.innerPadding();
+            int maxLineWidth = Math.max(1, Math.round((this.width - this.innerPadding() - this.leftContentInset) * invScale));
+            double selScreenY = contentY;
 
             for (ScaledTextField.StringView line : this.textField.iterateLines()) {
                 if (selected.beginIndex() > line.endIndex()) {
@@ -552,9 +581,14 @@ public final class ScaledMultiLineEditBox extends AbstractScrollWidget {
     private void seekCursorScreen(double mouseX, double mouseY) {
         // Convert screen coordinates back into the scaled text field's coordinate space.
         double safeScale = this.textScale <= 0f ? 1.0 : this.textScale;
-        double d0 = (mouseX - (double) this.getX() - (double) this.innerPadding()) / safeScale;
-        double d1 = (mouseY - (double) this.getY() - (double) this.innerPadding() + this.scrollAmount()) / safeScale;
+        double d0 = (mouseX - (double) this.getX() - (double) this.innerPadding() - this.leftContentInset) / safeScale;
+        double d1 = (mouseY - textContentY() + this.scrollAmount()) / safeScale;
         this.textField.seekCursorToPoint(d0, d1);
+    }
+
+    private double textContentY() {
+        if (!singleLine) return this.getY() + this.innerPadding();
+        return this.getY() + Math.max(1.0, (this.height - this.lineHeight) / 2.0);
     }
 
     @Override

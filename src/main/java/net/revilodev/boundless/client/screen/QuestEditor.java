@@ -214,10 +214,11 @@ public abstract class QuestEditor extends Screen {
     protected static final int BOX_H = 20;
     protected static final int BOX_H_TALL = 30;
     protected static final float INPUT_TEXT_SCALE = 0.5f;
+    protected static final float TITLE_TEXT_SCALE = 0.75f;
     protected static final int FORMAT_BAR_GAP = 3;
     protected static final int FORMAT_BAR_H = 9;
     protected static final int FORMAT_BTN_GAP = 1;
-    protected static final int DEP_LOCK_SIZE = 13;
+    protected static final int DEP_LOCK_SIZE = 16;
     protected static final int DEP_LOCK_GAP = 2;
     protected static final int DEP_ENTRY_ICON_SPACE = 12;
     protected static final float DEP_ENTRY_ICON_SCALE = 0.625f;
@@ -357,11 +358,10 @@ public abstract class QuestEditor extends Screen {
 
     // category fields
     protected EditBox catIdBox;
-    protected EditBox catNameBox;
+    protected ScaledMultiLineEditBox catNameBox;
     protected EditBox catIconBox;
     protected EditBox catBackgroundBox;
     protected Button catBackgroundModeButton;
-    protected Button catBackgroundAssetButton;
     protected QuestEditorScreen.CategoryBackgroundMode catBackgroundMode = QuestEditorScreen.CategoryBackgroundMode.TILEABLE;
     protected ToggleButton catBackgroundDarkeningToggle;
     protected QuestEditorScreen.BackgroundScaleSlider catBackgroundScaleSlider;
@@ -377,13 +377,13 @@ public abstract class QuestEditor extends Screen {
     // sub category fields
     protected EditBox subIdBox;
     protected EditBox subCategoryBox;
-    protected EditBox subNameBox;
+    protected ScaledMultiLineEditBox subNameBox;
     protected EditBox subIconBox;
     protected ToggleButton subDefaultOpenToggle;
 
     // quest fields
     protected EditBox questIdBox;
-    protected EditBox questNameBox;
+    protected ScaledMultiLineEditBox questNameBox;
     protected QuestEditorScreen.LanguageToggleButton questNameLanguageButton;
     protected EditBox questIconBox;
     protected ScaledMultiLineEditBox questDescriptionBox;
@@ -436,6 +436,7 @@ public abstract class QuestEditor extends Screen {
     protected boolean syncingEntryRows = false;
     protected boolean entryRowsDirty = false;
     protected final List<TextInsertButton> descriptionFormatButtons = new ArrayList<>();
+    protected final List<TextInsertButton> titleFormatButtons = new ArrayList<>();
     protected String questOrderToken = "";
 
     // loaded file state
@@ -710,8 +711,9 @@ public abstract class QuestEditor extends Screen {
         addRenderableWidget(ftbImportSection);
 
         catIdBox = createBox(trs("field.category_id"), BOX_H);
-        catNameBox = createBox(trs("field.category_name"), BOX_H);
-        catNameBox.setMaxLength(128);
+        catNameBox = makeTitleBox(trs("field.category_name"));
+        catNameBox.setSingleLine(true);
+        catNameBox.setCharacterLimit(128);
         catIconBox = createIconPickerBox(trs("field.category_icon"));
         catBackgroundBox = createIconPickerBox(trs("field.category_background"));
         catBackgroundModeButton = Button.builder(Component.empty(), button -> cycleCategoryBackgroundMode())
@@ -719,11 +721,6 @@ public abstract class QuestEditor extends Screen {
         catBackgroundModeButton.visible = false;
         catBackgroundModeButton.active = false;
         addRenderableWidget(catBackgroundModeButton);
-        catBackgroundAssetButton = Button.builder(tr("browse"), button -> openCategoryBackgroundPicker())
-                .bounds(0, 0, 38, BOX_H).build();
-        catBackgroundAssetButton.visible = false;
-        catBackgroundAssetButton.active = false;
-        addRenderableWidget(catBackgroundAssetButton);
         catBackgroundDarkeningToggle = createToggle(false);
         catBackgroundScaleSlider = new QuestEditorScreen.BackgroundScaleSlider(
                 0, 0, 100, BOX_H, 0.5f, () -> queueCategoryBackgroundAutosave(false));
@@ -739,20 +736,24 @@ public abstract class QuestEditor extends Screen {
         addRenderableWidget(catLayoutSelector);
         categorySubCategorySection = new QuestEditorScreen.CategorySubCategorySection(
                 font, this::saveCategorySubCategory, this::deleteCategorySubCategory,
-                this::moveCategorySubCategory, this::openIconItemPicker);
+                this::moveCategorySubCategory, this::openIconItemPicker,
+                this::openCategorySubCategoryTranslations);
         categorySubCategorySection.visible = false;
         categorySubCategorySection.active = false;
         addRenderableWidget(categorySubCategorySection);
 
         subIdBox = createBox(trs("field.subcategory_id"), BOX_H);
         subCategoryBox = createBox(trs("field.parent_category_id"), BOX_H);
-        subNameBox = createBox(trs("field.subcategory_name"), BOX_H);
-        subNameBox.setMaxLength(128);
+        subNameBox = makeTitleBox(trs("field.subcategory_name"));
+        subNameBox.setSingleLine(true);
+        subNameBox.setCharacterLimit(128);
         subIconBox = createIconPickerBox(trs("field.subcategory_icon"));
         subDefaultOpenToggle = createToggle(false);
 
         questIdBox = createBox(trs("field.quest_id"), BOX_H);
-        questNameBox = createBox(trs("field.quest_name"), BOX_H);
+        questNameBox = makeTitleBox(trs("field.quest_name"));
+        questNameBox.setSingleLine(true);
+        questNameBox.setCharacterLimit(128);
         questNameLanguageButton = addRenderableWidget(createLanguageToggleButton(false));
         questIconBox = createIconPickerBox(trs("field.quest_icon"));
         questDescriptionBox = makeMultiBox(trs("field.quest_description"), BOX_H_TALL, true);
@@ -812,6 +813,20 @@ public abstract class QuestEditor extends Screen {
         descriptionFormatButtons.add(createDescriptionInsertButton("I", "/i", 0xFF555555, 9, 0.75f));
         descriptionFormatButtons.add(createDescriptionInsertButton("E", "/e", 0xFF555555, 9, 0.75f));
         descriptionFormatButtons.add(createDescriptionInsertButton("H", "/h", 0xFF777733, 9, 0.75f));
+        titleFormatButtons.clear();
+        titleFormatButtons.add(createTitleInsertButton("X", "/x", 0xFF4A4A4A, 9, 0.75f));
+        titleFormatButtons.add(createTitleInsertButton("", "/r", 0xFFFF5555, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("", "/g", 0xFF55FF55, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("", "/b", 0xFF5555FF, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("", "/w", 0xFF55FFFF, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("", "/y", 0xFFFFFF55, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("", "/o", 0xFFFFAA00, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("", "/a", 0xFFAAAAAA, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("", "/p", 0xFFAA55FF, 8, 1.0f));
+        titleFormatButtons.add(createTitleInsertButton("B", "/l", 0xFF555555, 9, 0.75f));
+        titleFormatButtons.add(createTitleInsertButton("I", "/i", 0xFF555555, 9, 0.75f));
+        titleFormatButtons.add(createTitleInsertButton("E", "/e", 0xFF555555, 9, 0.75f));
+        titleFormatButtons.add(createTitleInsertButton("H", "/h", 0xFF777733, 9, 0.75f));
     }
 
     protected TextInsertButton createDescriptionInsertButton(String label, String insertText, int fillColor, int width) {
@@ -819,6 +834,14 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected TextInsertButton createDescriptionInsertButton(String label, String insertText, int fillColor, int width, float textScale) {
+        TextInsertButton button = new TextInsertButton(0, 0, width, label, insertText, fillColor, textScale, this::applyDescriptionFormat);
+        button.visible = false;
+        button.active = false;
+        addRenderableWidget(button);
+        return button;
+    }
+
+    protected TextInsertButton createTitleInsertButton(String label, String insertText, int fillColor, int width, float textScale) {
         TextInsertButton button = new TextInsertButton(0, 0, width, label, insertText, fillColor, textScale, this::applyDescriptionFormat);
         button.visible = false;
         button.active = false;
@@ -853,6 +876,17 @@ public abstract class QuestEditor extends Screen {
     protected ScaledMultiLineEditBox makeMultiBox(String hint, int height, boolean allowColorFormatting) {
         ScaledMultiLineEditBox box = new ScaledMultiLineEditBox(font, 0, 0, pw - 4, height, Component.literal(hint), Component.empty(), INPUT_TEXT_SCALE, allowColorFormatting);
         box.setCharacterLimit(4096);
+        box.visible = false;
+        box.active = false;
+        addRenderableWidget(box);
+        return box;
+    }
+
+    protected ScaledMultiLineEditBox makeTitleBox(String hint) {
+        ScaledMultiLineEditBox box = new ScaledMultiLineEditBox(font, 0, 0, pw - 4, BOX_H,
+                Component.literal(hint), Component.empty(), TITLE_TEXT_SCALE, true);
+        box.setSingleLine(true);
+        box.setCharacterLimit(128);
         box.visible = false;
         box.active = false;
         addRenderableWidget(box);
@@ -1111,6 +1145,16 @@ public abstract class QuestEditor extends Screen {
         return questListIndex().subCategoriesByCategory.getOrDefault(safe(categoryId).trim(), List.of());
     }
 
+    protected void openCategorySubCategoryTranslations(SubCategoryData data) {
+        if (data == null) return;
+        if (hasUnsavedEditorChanges()) {
+            setError(trs("error.save_before_navigation"));
+            return;
+        }
+        if (safe(data.category).isBlank()) data.category = safe(catIdBox.getValue()).trim();
+        showSubCategoryEditor(data, data.path);
+    }
+
     protected void saveCategorySubCategory(SubCategoryData subCategory) {
         if (!ensureEditorAccess() || currentPack == null || subCategory == null) return;
         String categoryId = safe(catIdBox.getValue()).trim();
@@ -1125,7 +1169,10 @@ public abstract class QuestEditor extends Screen {
                 setError(trs("error.subcategory_name_required"));
                 return;
             }
-            id = nextAvailableSubCategoryId(id);
+            if (Files.exists(currentPack.subCategoriesDir.resolve(id + ".json"))) {
+                setError(trs("error.subcategory_id_exists"));
+                return;
+            }
         }
         int order = subCategory.path == null
                 ? nextSubCategoryOrder(categoryId)
@@ -1595,8 +1642,7 @@ public abstract class QuestEditor extends Screen {
     // choose the create action for the current list
     protected Component createEntryTooltip() {
         if (mode == Mode.QUEST_LIST && isTreePack()) {
-            return Component.literal("Create nodes: click empty space to place a blank quest. "
-                    + "Creation stays active until you select a node or toggle this button.");
+            return tr("tooltip.create_tree_nodes");
         }
         return switch (mode) {
             case CATEGORY_LIST -> tr("tooltip.create_category");
@@ -1622,7 +1668,7 @@ public abstract class QuestEditor extends Screen {
         if (!ensureEditorAccess()) return;
         if (questTree == null || currentPack == null || treeCategoryId.isBlank()) return;
         int number = nextTreeQuestNumber();
-        String name = String.format(Locale.ROOT, "New Quest %02d", number);
+        String name = trs("tree.new_quest", String.format(Locale.ROOT, "%02d", number));
         String id = questIdFromName(name);
         QuestBuildFields fields = new QuestBuildFields();
         fields.id = id;
@@ -2338,20 +2384,6 @@ public abstract class QuestEditor extends Screen {
         queueCategoryBackgroundAutosave(true);
     }
 
-    protected void openCategoryBackgroundPicker() {
-        if (catBackgroundMode != CategoryBackgroundMode.TILEABLE) QuestEditorCustomIcons.reload();
-        openIconItemPicker(catBackgroundBox);
-        itemPickerTab = catBackgroundMode == CategoryBackgroundMode.TILEABLE
-                ? ItemPickerTab.CREATIVE : ItemPickerTab.CUSTOM;
-        if (catBackgroundMode == CategoryBackgroundMode.FULL_IMAGE) {
-            statusMessage = trs("status.full_image_background_help");
-            statusColor = 0xFFFFFFFF;
-        } else if (catBackgroundMode == CategoryBackgroundMode.CUSTOM_TILEABLE) {
-            statusMessage = trs("status.tile_background_help");
-            statusColor = 0xFFFFFFFF;
-        }
-    }
-
     protected void showSubCategoryEditor(SubCategoryData data, Path sourcePath) {
         editorType = EditorType.SUBCATEGORY;
         editingPath = sourcePath;
@@ -2506,7 +2538,7 @@ public abstract class QuestEditor extends Screen {
             Files.createDirectories(root.getParent());
             Files.createDirectories(root);
             String iconPath = QuestEditorPackFiles.cleanIconId(packIconPathBox.getValue());
-            QuestEditorPackFiles.writePackMeta(root, name, "Boundless Quest Pack: " + name, iconPath, true);
+            QuestEditorPackFiles.writePackMeta(root, name, trs("pack.description", name), iconPath, true);
             QuestPack pack = new QuestPack(name, namespace, root, false, true);
             pack.ensureDirs();
             currentPack = pack;
@@ -2532,10 +2564,10 @@ public abstract class QuestEditor extends Screen {
             filters.put(stack.UTF8("*.json"));
             filters.flip();
             selected = TinyFileDialogs.tinyfd_openFileDialog(
-                    "Select any FTB Quests data or chapter file",
+                    trs("dialog.select_ftb_data"),
                     defaultFolder.toAbsolutePath().toString(),
                     filters,
-                    "FTB Quests data",
+                    trs("dialog.ftb_data"),
                     false);
         }
         if (selected == null || selected.isBlank()) return;
@@ -2590,7 +2622,7 @@ public abstract class QuestEditor extends Screen {
                     && (cause instanceof CompletionException || cause.getMessage() == null)) {
                 cause = cause.getCause();
             }
-            String message = cause == null || cause.getMessage() == null ? "Unknown error" : cause.getMessage();
+            String message = cause == null || cause.getMessage() == null ? trs("error.unknown") : cause.getMessage();
             BoundlessMod.LOGGER.error("Failed to import FTB Quests: {}", message, cause);
             setError(trs("error.ftb_import_failed", message));
             return;
@@ -2599,9 +2631,10 @@ public abstract class QuestEditor extends Screen {
             currentPack = result.pack();
             currentPack.ensureDirs();
             selectedEntryId = currentPack.name;
-            String importStatus = "Imported " + result.quests() + " quests from " + result.chapters()
-                    + " chapters (" + result.warnings().size() + " warning"
-                    + (result.warnings().size() == 1 ? "" : "s") + ")";
+            String importStatus = trs(result.warnings().size() == 1
+                            ? "status.ftb_import_complete_single_warning"
+                            : "status.ftb_import_complete",
+                    result.quests(), result.chapters(), result.warnings().size());
             stagePackChange(currentPack, importStatus);
             questListIndexCache = result.questIndex();
             questListIndexPackRoot = currentPack.root;
@@ -2662,7 +2695,7 @@ public abstract class QuestEditor extends Screen {
                     Files.move(oldNamespaceDir, newNamespaceDir);
                 }
             }
-            String description = "Boundless Quest Pack: " + requestedName;
+            String description = trs("pack.description", requestedName);
             String iconPath = QuestEditorPackFiles.cleanIconId(packIconPathBox.getValue());
             PackMeta meta = QuestEditorPackFiles.readPackMeta(newRoot, requestedName);
             QuestEditorPackFiles.writePackMeta(newRoot, requestedName, description, iconPath, currentPack.enabled);
@@ -2714,11 +2747,15 @@ public abstract class QuestEditor extends Screen {
         // keep subcategory placement stable across edits
         if (!ensureEditorAccess()) return;
         String id = editingPath == null
-                ? nextAvailableSubCategoryId(QuestEditorNaming.idFromDisplayName(subNameBox.getValue()))
+                ? QuestEditorNaming.idFromDisplayName(subNameBox.getValue())
                 : safe(subIdBox.getValue()).trim();
         subIdBox.setValue(id);
         if (id.isBlank()) {
             setError(trs("error.subcategory_id_required"));
+            return;
+        }
+        if (editingPath == null && Files.exists(currentPack.subCategoriesDir.resolve(id + ".json"))) {
+            setError(trs("error.subcategory_id_exists"));
             return;
         }
         selectedEntryId = id;
@@ -2810,7 +2847,7 @@ public abstract class QuestEditor extends Screen {
         return QuestEditorNaming.idFromDisplayName(name);
     }
 
-    protected static String savedEntryId(Path existingPath, EditBox idBox, EditBox nameBox) {
+    protected static String savedEntryId(Path existingPath, EditBox idBox, ScaledMultiLineEditBox nameBox) {
         String currentValue = idBox == null ? "" : idBox.getValue();
         String currentId = currentValue == null ? "" : currentValue.trim();
         if (existingPath != null || Config.showIdField()) return currentId;
@@ -3609,6 +3646,10 @@ public abstract class QuestEditor extends Screen {
             button.visible = false;
             button.active = false;
         }
+        for (TextInsertButton button : titleFormatButtons) {
+            button.visible = false;
+            button.active = false;
+        }
     }
 
     protected void initEntryRowBoxes() {
@@ -3767,6 +3808,7 @@ public abstract class QuestEditor extends Screen {
         };
         ScaledMultiLineEditBox box = new ScaledMultiLineEditBox(font, 0, 0, pw - 4, ENTRY_ROW_H,
                 Component.literal(hint), Component.empty(), ENTRY_INPUT_TEXT_SCALE, false);
+        box.setSingleLine(kind == EntryRowKind.DEPENDENCY);
         box.setCharacterLimit(4096);
         box.setValueListener(v -> {
             if (syncingEntryRows) return;
@@ -4041,7 +4083,7 @@ public abstract class QuestEditor extends Screen {
     protected String entryTypeButtonLabel(EntryRowKind kind, int row) {
         List<ScaledMultiLineEditBox> rows = entryRows(kind);
         if (row < 0 || row >= rows.size()) return "";
-        return QuestEditorEntryTypes.label(effectiveRowType(kind, rows.get(row)));
+        return trs("entry_type." + QuestEditorEntryTypes.label(effectiveRowType(kind, rows.get(row))));
     }
 
     protected String entryPickerButtonType(EntryRowKind kind, int row) {
@@ -4251,7 +4293,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected int entryRowHeight(EntryRowKind kind, ScaledMultiLineEditBox box) {
-        if (kind == EntryRowKind.DEPENDENCY || box == null) return ENTRY_ROW_H;
+        if (kind == EntryRowKind.DEPENDENCY || box == null || !box.isFocused()) return ENTRY_ROW_H;
         int content = (int) Math.ceil(Math.max(1, box.getLineCount()) * Math.max(1.0, box.getLineHeight())) + 4;
         int maxHeight = Math.max(ENTRY_ROW_H, ph - (font.lineHeight + FIELD_LABEL_GAP + FIELD_ROW_GAP + 6));
         return Math.max(ENTRY_ROW_H, Math.min(maxHeight, content));
@@ -4309,7 +4351,7 @@ public abstract class QuestEditor extends Screen {
         List<EntryRemoveButton> removeButtons = entryRemoveButtons(kind);
         boolean dependency = kind == EntryRowKind.DEPENDENCY;
         boolean typed = kind == EntryRowKind.COMPLETION || kind == EntryRowKind.REWARD;
-        int iconSpace = dependency ? DEP_ENTRY_ICON_SPACE : 0;
+        int iconSpace = 0;
         int typeSpace = typed ? (ENTRY_TYPE_BTN_W + 2) : 0;
         int lockSpace = dependency ? (DEP_LOCK_SIZE + DEP_LOCK_GAP) : 0;
         int cursorY = y;
@@ -4320,6 +4362,7 @@ public abstract class QuestEditor extends Screen {
         List<EntryCountBox> countBoxes = typed ? entryCountBoxes(kind) : List.of();
         for (int i = 0; i < rows.size(); i++) {
             ScaledMultiLineEditBox box = rows.get(i);
+            box.setLeftContentInset(dependency ? DEP_ENTRY_ICON_SPACE : 0);
             EntryRemoveButton removeButton = i < removeButtons.size() ? removeButtons.get(i) : null;
             LockToggleButton lockButton = dependency && i < lockButtons.size() ? lockButtons.get(i) : null;
             EntryTypeButton typeButton = typed && i < typeButtons.size() ? typeButtons.get(i) : null;
@@ -4327,7 +4370,8 @@ public abstract class QuestEditor extends Screen {
             EntryItemPickerButton pickerButton = typed && i < pickerButtons.size() ? pickerButtons.get(i) : null;
             EntryCountBox countBox = typed && i < countBoxes.size() ? countBoxes.get(i) : null;
             String rowType = effectiveRowType(kind, box);
-            box.setPlaceholder(Component.literal(QuestEditorEntryTypes.placeholder(kind, rowType)));
+            String placeholderKey = QuestEditorEntryTypes.placeholderKey(kind, rowType);
+            box.setPlaceholder(placeholderKey.isBlank() ? Component.empty() : Component.translatable(placeholderKey));
             boolean canPickItem = typed && QuestEditorEntryTypes.hasRowBrowser(kind, rowType);
             boolean hasValueDropdown = typed && !QuestEditorEntryTypes.valueOptions(kind, rowType).isEmpty();
             boolean hasCount = typed && QuestEditorEntryTypes.rowHasCount(kind, rowType);
@@ -4398,7 +4442,7 @@ public abstract class QuestEditor extends Screen {
                 int lockY = cursorY;
                 lockButton.setX(lockX);
                 lockButton.setY(lockY);
-                lockButton.setSize(DEP_LOCK_SIZE, rowHeight);
+                lockButton.setSize(DEP_LOCK_SIZE, DEP_LOCK_SIZE);
                 lockButton.visible = inside;
                 lockButton.active = inside;
             }
@@ -4423,23 +4467,11 @@ public abstract class QuestEditor extends Screen {
         gg.enableScissor(clipLeft, clipTop, clipRight, clipBottom);
         for (ScaledMultiLineEditBox box : dependencyEntryBoxes) {
             if (box == null || !box.visible) continue;
-            int backgroundX = box.getX() - DEP_ENTRY_ICON_SPACE;
-            int backgroundY = box.getY();
-            int backgroundWidth = DEP_ENTRY_ICON_SPACE - 2;
-            int backgroundHeight = Math.min(ENTRY_ROW_H, box.getHeight());
-            gg.fill(backgroundX, backgroundY, backgroundX + backgroundWidth,
-                    backgroundY + backgroundHeight, 0xFF000000);
-            gg.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + 1, 0xFF8A8A8A);
-            gg.fill(backgroundX, backgroundY + backgroundHeight - 1, backgroundX + backgroundWidth,
-                    backgroundY + backgroundHeight, 0xFF8A8A8A);
-            gg.fill(backgroundX, backgroundY, backgroundX + 1, backgroundY + backgroundHeight, 0xFF8A8A8A);
-            gg.fill(backgroundX + backgroundWidth - 1, backgroundY, backgroundX + backgroundWidth,
-                    backgroundY + backgroundHeight, 0xFF8A8A8A);
             String dependencyId = safe(box.getValue()).trim();
             if (dependencyId.isBlank()) continue;
             ItemStack icon = dependencyIconStack(dependencyId);
             if (icon.isEmpty()) continue;
-            int iconX = box.getX() - DEP_ENTRY_ICON_SPACE + 1;
+            int iconX = box.getX() + 2;
             int iconY = box.getY() + Math.max(0, (box.getHeight() - Math.round(16f * DEP_ENTRY_ICON_SCALE)) / 2);
             gg.pose().pushPose();
             gg.pose().translate(iconX, iconY, 0.0f);
@@ -4539,7 +4571,7 @@ public abstract class QuestEditor extends Screen {
     }
 
     protected void applyDescriptionFormat(String formatCode) {
-        EditBox titleBox = focusedTitleFormatBox();
+        ScaledMultiLineEditBox titleBox = focusedTitleFormatBox();
         if (titleBox != null) {
             if (!formatCode.startsWith("__")) wrapTitleSelection(titleBox, formatCode);
             return;
@@ -4568,18 +4600,18 @@ public abstract class QuestEditor extends Screen {
         markCurrentEditorUnsaved();
     }
 
-    protected EditBox focusedTitleFormatBox() {
+    protected ScaledMultiLineEditBox focusedTitleFormatBox() {
+        if (categorySubCategorySection != null && categorySubCategorySection.focusedNameBox() != null) {
+            return categorySubCategorySection.focusedNameBox();
+        }
+        if (editorType == EditorType.QUEST && questNameBox != null && questNameBox.isFocused()) return questNameBox;
         if (editorType == EditorType.CATEGORY && catNameBox != null && catNameBox.isFocused()) return catNameBox;
         if (editorType == EditorType.SUBCATEGORY && subNameBox != null && subNameBox.isFocused()) return subNameBox;
         return null;
     }
 
-    protected void wrapTitleSelection(EditBox box, String formatCode) {
-        String selected = box.getHighlighted();
-        int cursor = box.getCursorPosition();
-        box.insertText(formatCode + selected + "/x");
-        if (selected.isEmpty()) box.setCursorPosition(cursor + formatCode.length());
-        box.setHighlightPos(box.getCursorPosition());
+    protected void wrapTitleSelection(ScaledMultiLineEditBox box, String formatCode) {
+        box.wrapSelection(formatCode, "/x");
         setFocused(box);
         markCurrentEditorUnsaved();
     }

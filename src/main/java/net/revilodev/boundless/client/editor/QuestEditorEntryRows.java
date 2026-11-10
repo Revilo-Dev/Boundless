@@ -1,5 +1,6 @@
 package net.revilodev.boundless.client.editor;
 
+import net.minecraft.network.chat.Component;
 import net.revilodev.boundless.client.editor.QuestEditorModels.EntryRowKind;
 import net.revilodev.boundless.client.editor.QuestEditorModels.ParsedEntry;
 import net.revilodev.boundless.quest.QuestItemSpec;
@@ -20,7 +21,9 @@ public final class QuestEditorEntryRows {
         if (parsed == null) return bodyWithoutType(rawLine);
         if ("check".equals(normalizedType)) {
             String value = safe(parsed.id).trim();
-            return value.isBlank() ? "Understand" : value;
+            return value.isBlank() || "Understand".equals(value)
+                    ? Component.translatable("ui.boundless.questbook.understand").getString()
+                    : value;
         }
         return safe(parsed.id).trim();
     }
@@ -201,8 +204,7 @@ public final class QuestEditorEntryRows {
     // should expand focused
     public static boolean shouldExpandFocused(EntryRowKind kind, ScaledMultiLineEditBox box) {
         if (kind == EntryRowKind.DEPENDENCY || box == null || !box.isFocused()) return false;
-        String value = safe(box.getValue());
-        return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+        return box.getLineCount() > 1;
     }
 
     private static String safe(String value) {

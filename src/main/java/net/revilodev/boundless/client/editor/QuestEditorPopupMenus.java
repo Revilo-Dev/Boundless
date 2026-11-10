@@ -100,10 +100,12 @@ public final class QuestEditorPopupMenus {
         return true;
     }
 
-    public void renderTypeMenu(GuiGraphics gg, Font font, int mouseX, int mouseY) {
+    public void renderTypeMenu(GuiGraphics gg, Font font, int mouseX, int mouseY,
+                               Function<String, String> labelProvider) {
         if (openTypeMenuKind == null || openTypeMenuRow < 0) return;
         List<String> options = QuestEditorEntryTypes.entryTypeOptions(openTypeMenuKind);
-        renderMenu(gg, font, mouseX, mouseY, openTypeMenuX, openTypeMenuY, openTypeMenuW, openTypeMenuH, openTypeMenuScroll, options);
+        renderMenu(gg, font, mouseX, mouseY, openTypeMenuX, openTypeMenuY, openTypeMenuW, openTypeMenuH,
+                openTypeMenuScroll, options, labelProvider);
     }
 
     public boolean scrollTypeMenu(double mouseX, double mouseY, double delta) {

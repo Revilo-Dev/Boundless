@@ -42,6 +42,17 @@ public final class QuestEditorEntryTypes {
         };
     }
 
+    public static String placeholderKey(EntryRowKind kind, String type) {
+        String key = kind == EntryRowKind.DEPENDENCY ? "dependency" : switch (safe(type)) {
+            case "collect", "submit", "item" -> "item";
+            case "achieve", "advance", "advancement" -> "advance";
+            case "kill", "check", "xp", "levelup", "command", "loot", "toast", "effect", "observe",
+                    "field", "biome", "dimension" -> safe(type);
+            default -> "";
+        };
+        return key.isBlank() ? "" : "ui.boundless.editor.placeholder." + key;
+    }
+
     // normalize
     public static String normalize(EntryRowKind kind, String rawType) {
         String type = safe(rawType).trim().toLowerCase(Locale.ROOT);

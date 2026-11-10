@@ -251,6 +251,15 @@ public final class QuestListWidget extends AbstractWidget {
         gg.pose().popPose();
     }
 
+    private void drawScaledString(GuiGraphics gg, Component text, float scale, int x, int y, int color) {
+        if (text == null || text.getString().isEmpty()) return;
+        gg.pose().pushPose();
+        gg.pose().scale(scale, scale, 1f);
+        float inv = 1f / scale;
+        gg.drawString(mc.font, text.getVisualOrderText(), Mth.floor(x * inv), Mth.floor(y * inv), color, false);
+        gg.pose().popPose();
+    }
+
     // check whether the selected category is unlocked
     private boolean categoryUnlocked(String catId) {
         var c = QuestData.categoryById(catId).orElse(null);
@@ -533,13 +542,12 @@ public final class QuestListWidget extends AbstractWidget {
                 String name = q.name == null ? "" : q.name;
                 int maxW = getX() + width - textX - 4;
                 int maxWUnscaled = maxW > 0 ? (int) (maxW / textScale) : 0;
-                if (mc.font.width(name) > maxWUnscaled) {
-                    name = mc.font.plainSubstrByWidth(name, Math.max(0, maxWUnscaled - mc.font.width("..."))) + "...";
-                }
+                int textColor = deps ? widgetTextColor : 0xA0A0A0;
+                Component formattedName = QuestTextFormatting.componentByWidth(
+                        name, textColor, mc.font, maxWUnscaled);
                 int textH = Math.round(mc.font.lineHeight * textScale);
                 int textY = top + (h - textH) / 2 + 1;
-                drawScaledString(gg, name, textScale, textX, textY,
-                        deps ? widgetTextColor : 0xA0A0A0);
+                drawScaledString(gg, formattedName, textScale, textX, textY, textColor);
             }
 
             yCursor += rowHeight(row);

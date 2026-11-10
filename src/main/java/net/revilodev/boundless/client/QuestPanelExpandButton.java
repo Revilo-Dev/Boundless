@@ -35,7 +35,9 @@ public final class QuestPanelExpandButton extends AbstractButton {
         graphics.pose().popPose();
         if (isMouseOver(mouseX, mouseY)) {
             graphics.renderTooltip(Minecraft.getInstance().font,
-                    Component.literal(expanded.getAsBoolean() ? "Collapse tree panel" : "Expand tree panel"),
+                    Component.translatable(expanded.getAsBoolean()
+                            ? "ui.boundless.questbook.collapse_tree_panel"
+                            : "ui.boundless.questbook.expand_tree_panel"),
                     mouseX, mouseY - 12);
         }
     }

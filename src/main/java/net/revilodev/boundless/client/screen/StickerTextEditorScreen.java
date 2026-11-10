@@ -39,7 +39,7 @@ public final class StickerTextEditorScreen extends Screen {
     private int emojiPage;
 
     public StickerTextEditorScreen(Screen parent, String initialText, Consumer<String> onSave) {
-        super(Component.literal("Edit tree text"));
+        super(Component.translatable("ui.boundless.sticker.title"));
         this.parent = parent;
         this.initialText = initialText == null ? "" : initialText;
         this.onSave = onSave;
@@ -53,7 +53,7 @@ public final class StickerTextEditorScreen extends Screen {
         int textX = panelX + 7;
         int textWidth = 181;
         textBox = new ScaledMultiLineEditBox(font, textX, panelY + 17, textWidth, 48,
-                Component.literal("Sticker text"), Component.empty(), 0.85f, true);
+                Component.translatable("ui.boundless.sticker.text"), Component.empty(), 0.85f, true);
         textBox.setCharacterLimit(1024);
         textBox.setValue(initialText);
         textBox.setFocused(true);
@@ -77,9 +77,9 @@ public final class StickerTextEditorScreen extends Screen {
         x = addFormatButton(x, y, 12, "E", "/e", 0xFF555555, 0.75f);
         addFormatButton(x, y, 12, "H", "/h", 0xFF777733, 0.75f);
 
-        addRenderableWidget(Button.builder(Component.literal("Save"), button -> save())
+        addRenderableWidget(Button.builder(Component.translatable("ui.boundless.editor.save"), button -> save())
                 .bounds(textX, panelY + 99, 86, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Cancel"), button -> onClose())
+        addRenderableWidget(Button.builder(Component.translatable("ui.boundless.sticker.cancel"), button -> onClose())
                 .bounds(textX + 95, panelY + 99, 86, 20).build());
     }
 
@@ -145,7 +145,8 @@ public final class StickerTextEditorScreen extends Screen {
         int x = panelX + PANEL_WIDTH - EMOJI_WIDTH - 5;
         int y = panelY + 15;
         graphics.blit(EMOJI_GUI, x, y, 0, 0, EMOJI_WIDTH, EMOJI_HEIGHT, EMOJI_WIDTH, EMOJI_HEIGHT);
-        graphics.drawCenteredString(font, Component.literal("Emojis"), x + EMOJI_WIDTH / 2, y + 1, 0xFFFFFFFF);
+        graphics.drawCenteredString(font, Component.translatable("ui.boundless.sticker.emojis"),
+                x + EMOJI_WIDTH / 2, y + 1, 0xFFFFFFFF);
         List<String> emojis = QuestEditorEmojis.names();
         int start = emojiPage * EMOJI_COLUMNS * EMOJI_ROWS;
         for (int index = 0; index < EMOJI_COLUMNS * EMOJI_ROWS && start + index < emojis.size(); index++) {

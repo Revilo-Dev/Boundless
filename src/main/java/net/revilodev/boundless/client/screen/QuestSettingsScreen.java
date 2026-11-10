@@ -405,16 +405,16 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.expand_tree_toggle.subtitle"),
                 () -> trs(expandTreeToggle ? "state.on" : "state.off"),
                 () -> expandTreeToggle = !expandTreeToggle);
-        uiCustomBackgroundsRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Custom backgrounds",
-                "Render category backgrounds in quest lists and trees.",
+        uiCustomBackgroundsRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.custom_backgrounds"),
+                trs("row.custom_backgrounds.subtitle"),
                 () -> trs(customBackgrounds ? "state.on" : "state.off"),
                 () -> customBackgrounds = !customBackgrounds);
         uiBackgroundThemesRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw,
                 trs("row.background_themes"), trs("row.background_themes.subtitle"),
                 () -> trs(enableBackgroundThemes ? "state.on" : "state.off"),
                 () -> enableBackgroundThemes = !enableBackgroundThemes);
-        uiStickyDescriptionHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, "Sticky description headers",
-                "Keep the quest title visible above long descriptions.",
+        uiStickyDescriptionHeadersRow = new ConfigRow(px, uiEnableSearchBoxBaseY, pw, trs("row.sticky_description_headers"),
+                trs("row.sticky_description_headers.subtitle"),
                 () -> trs(stickyDescriptionHeaders ? "state.on" : "state.off"),
                 () -> stickyDescriptionHeaders = !stickyDescriptionHeaders);
         uiEnableDescriptionColorsRow = new ConfigRow(px, uiEnableDescriptionColorsBaseY, pw, trs("row.text_coloring"),
@@ -452,16 +452,16 @@ public final class QuestSettingsScreen extends Screen {
                 trs("row.auto_claim_rewards.subtitle"),
                 () -> trs(autoClaimQuestRewards ? "state.on" : "state.off"),
                 () -> autoClaimQuestRewards = !autoClaimQuestRewards);
-        functionalityQuestRejectingRow = new ConfigRow(px, functionalityQuestRejectingBaseY, pw, "Enable quest rejecting",
-                "Allow players to reject and restore optional quests.",
+        functionalityQuestRejectingRow = new ConfigRow(px, functionalityQuestRejectingBaseY, pw, trs("row.quest_rejecting"),
+                trs("row.quest_rejecting.subtitle"),
                 () -> trs(enableQuestRejecting ? "state.on" : "state.off"),
                 () -> enableQuestRejecting = !enableQuestRejecting);
         functionalityQuestScrollsRow = new ConfigRow(px, functionalityQuestScrollsBaseY, pw, trs("row.quest_scrolls"),
                 trs("row.quest_scrolls.subtitle"),
                 () -> trs(enableQuestScrolls ? "state.on" : "state.off"),
                 () -> enableQuestScrolls = !enableQuestScrolls);
-        functionalityQuickEditRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, "Quick edit",
-                "Show an operator-only edit button on quest pages.",
+        functionalityQuickEditRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, trs("row.quick_edit"),
+                trs("row.quick_edit.subtitle"),
                 () -> trs(quickEdit ? "state.on" : "state.off"),
                 () -> quickEdit = !quickEdit);
         functionalityMultiLanguageRow = new ConfigRow(px, functionalityQuickEditBaseY, pw, trs("row.multi_language"),
@@ -543,8 +543,8 @@ public final class QuestSettingsScreen extends Screen {
 
     private void initConfigSearch() {
         configSearchField = new EditBox(font, px + 2, configViewportTop() + 2, pw - 4, 16,
-                Component.literal("Search settings"));
-        configSearchField.setHint(Component.literal("Search settings"));
+                tr("search"));
+        configSearchField.setHint(tr("search"));
         configSearchField.setMaxLength(64);
         configSearchField.setValue(configSearchQuery);
         configSearchField.setResponder(value -> {
@@ -794,20 +794,20 @@ public final class QuestSettingsScreen extends Screen {
 
     private void initDetailColorControls() {
         detailColorControls.clear();
-        addDetailColorControl("Description title color", "Quest title color in the details panel.", Config.DESCRIPTION_TITLE_COLOR, "FFFFFF");
-        addDetailColorControl("Requires text color", "Requires heading color.", Config.REQUIRES_TEXT_COLOR, "FF9F0F");
-        addDetailColorControl("Submit text color", "Submit and input heading color.", Config.SUBMIT_TEXT_COLOR, "1D9633");
-        addDetailColorControl("Collect text color", "Collect heading color.", Config.COLLECT_TEXT_COLOR, "1D9633");
-        addDetailColorControl("Kill text color", "Kill heading color.", Config.KILL_TEXT_COLOR, "FF5555");
-        addDetailColorControl("Effect text color", "Effect heading color.", Config.EFFECT_TEXT_COLOR, "55FFFF");
-        addDetailColorControl("Achieve text color", "Advancement heading color.", Config.ACHIEVE_TEXT_COLOR, "55FFFF");
-        addDetailColorControl("Observe text color", "Observation heading color.", Config.OBSERVE_TEXT_COLOR, "B46CFF");
-        addDetailColorControl("Biome text color", "Biome heading color.", Config.BIOME_TEXT_COLOR, "55CC55");
-        addDetailColorControl("Dimension text color", "Dimension heading color.", Config.DIMENSION_TEXT_COLOR, "FF5555");
-        addDetailColorControl("Reward text color", "Reward heading and entry color.", Config.REWARD_TEXT_COLOR, "A8FFA8");
-        addDetailColorControl("Completed text color", "Completed objective progress color.", Config.COMPLETED_TEXT_COLOR, "55FF55");
-        addDetailColorControl("Incomplete text color", "Incomplete and invalid objective color.", Config.INCOMPLETE_TEXT_COLOR, "FF5555");
-        addDetailColorControl("Unlock text color", "Category unlock message color.", Config.UNLOCK_TEXT_COLOR, "FFD700");
+        addDetailColorControl(trs("color.description_title"), trs("color.description_title.subtitle"), Config.DESCRIPTION_TITLE_COLOR, "FFFFFF");
+        addDetailColorControl(trs("color.requires"), trs("color.requires.subtitle"), Config.REQUIRES_TEXT_COLOR, "FF9F0F");
+        addDetailColorControl(trs("color.submit"), trs("color.submit.subtitle"), Config.SUBMIT_TEXT_COLOR, "1D9633");
+        addDetailColorControl(trs("color.collect"), trs("color.collect.subtitle"), Config.COLLECT_TEXT_COLOR, "1D9633");
+        addDetailColorControl(trs("color.kill"), trs("color.kill.subtitle"), Config.KILL_TEXT_COLOR, "FF5555");
+        addDetailColorControl(trs("color.effect"), trs("color.effect.subtitle"), Config.EFFECT_TEXT_COLOR, "55FFFF");
+        addDetailColorControl(trs("color.achieve"), trs("color.achieve.subtitle"), Config.ACHIEVE_TEXT_COLOR, "55FFFF");
+        addDetailColorControl(trs("color.observe"), trs("color.observe.subtitle"), Config.OBSERVE_TEXT_COLOR, "B46CFF");
+        addDetailColorControl(trs("color.biome"), trs("color.biome.subtitle"), Config.BIOME_TEXT_COLOR, "55CC55");
+        addDetailColorControl(trs("color.dimension"), trs("color.dimension.subtitle"), Config.DIMENSION_TEXT_COLOR, "FF5555");
+        addDetailColorControl(trs("color.reward"), trs("color.reward.subtitle"), Config.REWARD_TEXT_COLOR, "A8FFA8");
+        addDetailColorControl(trs("color.completed"), trs("color.completed.subtitle"), Config.COMPLETED_TEXT_COLOR, "55FF55");
+        addDetailColorControl(trs("color.incomplete"), trs("color.incomplete.subtitle"), Config.INCOMPLETE_TEXT_COLOR, "FF5555");
+        addDetailColorControl(trs("color.unlock"), trs("color.unlock.subtitle"), Config.UNLOCK_TEXT_COLOR, "FFD700");
     }
 
     private void addDetailColorControl(String label, String subtitle,
@@ -1837,9 +1837,7 @@ public final class QuestSettingsScreen extends Screen {
             graphics.blit(texture, getX(), getY(), 0, 0, 10, 13, 10, 13);
             if (isMouseOver(mouseX, mouseY)) {
                 graphics.renderTooltip(Minecraft.getInstance().font,
-                        Component.literal(Config.devMode()
-                                ? "Disable debug diagnostics"
-                                : "Enable quest, UI, and network diagnostics"), mouseX, mouseY - 12);
+                        tr(Config.devMode() ? "debug.disable" : "debug.enable"), mouseX, mouseY - 12);
             }
         }
 
