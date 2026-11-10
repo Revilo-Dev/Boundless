@@ -370,9 +370,10 @@ public final class QuestEditorScreen extends QuestEditor {
     static final class CategorySubCategorySection extends AbstractWidget {
         private static final int ROW_HEIGHT = 28;
         private static final int ROW_GAP = 2;
-        private static final int EDITOR_HEIGHT = 70;
+        private static final int EDITOR_HEIGHT = 71;
         private static final int CREATE_SIZE = 20;
         private static final int MOVE_SIZE = 14;
+        private static final int DELETE_SIZE = 20;
         private static final ResourceLocation MOVE_UP = ResourceLocation.fromNamespaceAndPath(
                 "boundless", "textures/gui/sprites/editor/move_up.png");
         private static final ResourceLocation MOVE_UP_HOVER = ResourceLocation.fromNamespaceAndPath(
@@ -452,8 +453,9 @@ public final class QuestEditorScreen extends QuestEditor {
                 if (handleEditorClick(mouseX, mouseY, y)) return true;
                 y += EDITOR_HEIGHT + ROW_GAP;
             }
+            int createX = getX() + (getWidth() - CREATE_SIZE) / 2;
             if (mouseY < y || mouseY > y + CREATE_SIZE
-                    || mouseX < getX() || mouseX > getX() + CREATE_SIZE) return false;
+                    || mouseX < createX || mouseX > createX + CREATE_SIZE) return false;
             SubCategoryData created = new SubCategoryData();
             created.defaultOpen = "true";
             loadEditor(created);
@@ -480,10 +482,11 @@ public final class QuestEditorScreen extends QuestEditor {
         }
 
         private void renderCreateButton(GuiGraphics graphics, int mouseX, int mouseY, int y) {
-            boolean hovered = mouseX >= getX() && mouseX <= getX() + CREATE_SIZE
+            int createX = getX() + (getWidth() - CREATE_SIZE) / 2;
+            boolean hovered = mouseX >= createX && mouseX <= createX + CREATE_SIZE
                     && mouseY >= y && mouseY <= y + CREATE_SIZE;
             graphics.blit(hovered ? PLUS_BUTTON_HOVER_TEX : PLUS_BUTTON_TEX,
-                    getX(), y, 0, 0, CREATE_SIZE, CREATE_SIZE, CREATE_SIZE, CREATE_SIZE);
+                    createX, y, 0, 0, CREATE_SIZE, CREATE_SIZE, CREATE_SIZE, CREATE_SIZE);
         }
 
         private void renderButton(GuiGraphics graphics, int mouseX, int mouseY, int y, String label) {
@@ -528,11 +531,14 @@ public final class QuestEditorScreen extends QuestEditor {
             defaultOpenToggle.render(graphics, mouseX, mouseY, 0f);
 
             int buttonY = y + 51;
-            int buttonWidth = Math.max(1, (getWidth() - 2) / 2);
-            renderSmallButton(graphics, mouseX, mouseY, getX(), buttonY, buttonWidth,
+            int saveWidth = Math.max(1, getWidth() - DELETE_SIZE - 2);
+            renderSmallButton(graphics, mouseX, mouseY, getX(), buttonY, saveWidth,
                     Component.translatable("ui.boundless.editor.save").getString());
-            renderSmallButton(graphics, mouseX, mouseY, getX() + buttonWidth + 2, buttonY, buttonWidth,
-                    Component.translatable("ui.boundless.editor.tooltip.delete").getString());
+            int deleteX = getX() + getWidth() - DELETE_SIZE;
+            boolean deleteHovered = mouseX >= deleteX && mouseX <= deleteX + DELETE_SIZE
+                    && mouseY >= buttonY && mouseY <= buttonY + DELETE_SIZE;
+            graphics.blit(deleteHovered ? DELETE_ENABLED_TEX : DELETE_TEX,
+                    deleteX, buttonY, 0, 0, DELETE_SIZE, DELETE_SIZE, DELETE_SIZE, DELETE_SIZE);
         }
 
         private void renderSmallButton(GuiGraphics graphics, int mouseX, int mouseY,
@@ -551,7 +557,8 @@ public final class QuestEditorScreen extends QuestEditor {
                 if (onIconBrowse != null) onIconBrowse.accept(iconBox);
                 return true;
             }
-            if (nameBox.mouseClicked(mouseX, mouseY, 0)) {
+            if (nameBox.isMouseOver(mouseX, mouseY)) {
+                nameBox.mouseClicked(mouseX, mouseY, 0);
                 setFocused(true);
                 nameBox.setFocused(true);
                 return true;
@@ -562,13 +569,13 @@ public final class QuestEditorScreen extends QuestEditor {
                 return true;
             }
             int buttonY = y + 51;
-            if (mouseY >= buttonY && mouseY <= buttonY + 18) {
+            if (mouseY >= buttonY && mouseY <= buttonY + DELETE_SIZE) {
                 nameBox.setFocused(false);
-                int buttonWidth = Math.max(1, (getWidth() - 2) / 2);
+                int saveWidth = Math.max(1, getWidth() - DELETE_SIZE - 2);
                 editing.name = nameBox.getValue();
                 editing.icon = iconBox.getValue();
                 editing.defaultOpen = Boolean.toString(defaultOpenToggle.isOn());
-                if (mouseX <= getX() + buttonWidth) onSave.accept(editing);
+                if (mouseX <= getX() + saveWidth) onSave.accept(editing);
                 else if (editing.path == null) {
                     editing = null;
                     updateHeight();
@@ -1305,7 +1312,7 @@ public final class QuestEditorScreen extends QuestEditor {
             return;
         }
         if (treeMoveButton != null && treeMoveButton.visible && treeMoveButton.isMouseOver(mouseX, mouseY)) {
-            queueEditorTooltip(tr("tooltip.tree_move"), mouseX, mouseY);
+            queueEditorTooltip(List.of(tr("tooltip.tree_move"), tr("tooltip.tree_move_snap")), mouseX, mouseY);
             return;
         }
         if (treeDeleteButton != null && treeDeleteButton.visible && treeDeleteButton.isMouseOver(mouseX, mouseY)) {
@@ -3016,6 +3023,12 @@ public final class QuestEditorScreen extends QuestEditor {
         }
         if (button == 0 && clickPackBackup(mouseX, mouseY)) return true;
         if (button == 0 && clickTitleFormatterButton(mouseX, mouseY)) return true;
+        if (button == 0 && categorySubCategorySection != null
+                && categorySubCategorySection.visible && categorySubCategorySection.active
+                && categorySubCategorySection.isMouseOver(mouseX, mouseY)
+                && categorySubCategorySection.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
         if (button == 0 && questNameLanguageButton != null && questNameLanguageButton.visible
                 && questNameLanguageButton.active && questNameLanguageButton.isMouseOver(mouseX, mouseY)) {
             questNameLanguageButton.onPress();
@@ -3942,6 +3955,10 @@ public final class QuestEditorScreen extends QuestEditor {
     }
 
     protected boolean isItemPickerMultiToggleAvailable() {
+        if (itemPickerKind != null && itemPickerRow >= 0 && itemPickerRow < entryRows(itemPickerKind).size()) {
+            String type = effectiveRowType(itemPickerKind, entryRows(itemPickerKind).get(itemPickerRow));
+            if (!QuestEditorEntryTypes.usesRowSelection(itemPickerKind, type)) return false;
+        }
         return (pickerMode == PickerMode.ITEMS || pickerMode == PickerMode.MOBS)
                 && (itemPickerKind == EntryRowKind.COMPLETION
                 || (itemPickerKind == EntryRowKind.REWARD && pickerMode == PickerMode.ITEMS));
@@ -4154,6 +4171,7 @@ public final class QuestEditorScreen extends QuestEditor {
         List<ScaledMultiLineEditBox> rows = entryRows(itemPickerKind);
         if (itemPickerRow < 0 || itemPickerRow >= rows.size() || picked == null || picked.isEmpty()) return;
         ScaledMultiLineEditBox box = rows.get(itemPickerRow);
+        String rowType = effectiveRowType(itemPickerKind, box);
         String id;
         if (pickerMode == PickerMode.EFFECTS) {
             id = QuestEditorItemIcons.effectIdFromStack(picked, suggestionCaches.effectSuggestions());
@@ -4163,6 +4181,16 @@ public final class QuestEditorScreen extends QuestEditor {
             id = BuiltInRegistries.ITEM.getKey(picked.getItem()).toString();
         }
         if (id == null || id.isBlank()) return;
+        if (itemPickerKind == EntryRowKind.REWARD
+                && ("command".equals(rowType) || "toast".equals(rowType))) {
+            String value = QuestEditorEntryCodec.withRewardIcon(rowType, box.getValue(), id);
+            box.setValue(value);
+            box.setCursorPosition(value.length());
+            box.setFocused(true);
+            entryRowsDirty = true;
+            syncEntryBackingValues();
+            return;
+        }
         selectedItemIdByBox.put(box, id);
         if (pickerMode == PickerMode.ITEMS && itemPickerTab == ItemPickerTab.INVENTORY) {
             String components = safe(QuestItemSpec.describeStackComponents(
@@ -4277,6 +4305,9 @@ public final class QuestEditorScreen extends QuestEditor {
         ScaledMultiLineEditBox box = rows.get(row);
         String type = effectiveRowType(kind, box);
         String idPart = safe(selectedItemIdByBox.get(box)).trim();
+        if (kind == EntryRowKind.REWARD && ("command".equals(type) || "toast".equals(type))) {
+            idPart = QuestEditorEntryCodec.rewardIcon(type, box.getValue());
+        }
         if (idPart.isBlank()) {
             ParsedEntry parsed = QuestEditorEntryCodec.parseEntry(composeEntryRowLine(kind, box));
             if (parsed == null || parsed.id.isBlank()) return ItemStack.EMPTY;
@@ -4554,7 +4585,8 @@ public final class QuestEditorScreen extends QuestEditor {
         protected final TranslationRow row;
 
         protected TranslationRemoveButton(TranslationRow row) {
-            super(0, 0, 10, ENTRY_ROW_H, Component.literal("X"));
+            super(0, 0, ENTRY_REMOVE_BTN_W, ENTRY_ROW_H,
+                    Component.translatable("ui.boundless.editor.tooltip.delete"));
             this.row = row;
         }
 
@@ -4565,10 +4597,8 @@ public final class QuestEditorScreen extends QuestEditor {
 
         @Override
         protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-            graphics.fill(getX(), getY(), getX() + width, getY() + height,
-                    isMouseOver(mouseX, mouseY) ? 0xAA5A1A1A : 0xAA3A1212);
-            graphics.drawString(font, "X", getX() + 2,
-                    getY() + (height - font.lineHeight) / 2, 0xFFFF5555, false);
+            ResourceLocation texture = isMouseOver(mouseX, mouseY) ? DELETE_ENABLED_TEX : DELETE_TEX;
+            graphics.blit(texture, getX(), getY(), 0, 0, width, height, 20, 20);
         }
 
         @Override

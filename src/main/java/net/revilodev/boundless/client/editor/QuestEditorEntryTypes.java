@@ -70,7 +70,10 @@ public final class QuestEditorEntryTypes {
 
     // picker mode for type
     public static PickerMode pickerModeForType(EntryRowKind kind, String type) {
-        if (kind == EntryRowKind.REWARD && "item".equals(type)) return PickerMode.ITEMS;
+        if (kind == EntryRowKind.REWARD
+                && ("item".equals(type) || "command".equals(type) || "toast".equals(type))) {
+            return PickerMode.ITEMS;
+        }
         if (kind != EntryRowKind.COMPLETION) return PickerMode.NONE;
         return switch (type) {
             case "collect", "submit" -> PickerMode.ITEMS;
@@ -83,6 +86,11 @@ public final class QuestEditorEntryTypes {
     // has row browser
     public static boolean hasRowBrowser(EntryRowKind kind, String type) {
         return pickerModeForType(kind, type) != PickerMode.NONE;
+    }
+
+    public static boolean usesRowSelection(EntryRowKind kind, String type) {
+        return !(kind == EntryRowKind.REWARD && ("command".equals(type) || "toast".equals(type)))
+                && hasRowBrowser(kind, type);
     }
 
     // row has count

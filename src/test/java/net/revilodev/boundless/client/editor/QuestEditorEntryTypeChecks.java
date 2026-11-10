@@ -37,4 +37,18 @@ final class QuestEditorEntryTypeChecks {
         assertEquals(java.util.List.of("xp", "levels"),
                 QuestEditorEntryTypes.valueOptions(EntryRowKind.REWARD, "levelup"));
     }
+
+    @Test
+    void commandAndToastRewardsUseIconBrowsers() {
+        assertTrue(QuestEditorEntryTypes.hasRowBrowser(EntryRowKind.REWARD, "command"));
+        assertTrue(QuestEditorEntryTypes.hasRowBrowser(EntryRowKind.REWARD, "toast"));
+        assertEquals("command: say hello | icon: minecraft:diamond | title: Greeting",
+                QuestEditorEntryCodec.withRewardIcon("command",
+                        "command: say hello | icon: minecraft:stone | title: Greeting", "minecraft:diamond"));
+        assertEquals("minecraft:diamond", QuestEditorEntryCodec.rewardIcon("command",
+                "command: say hello | icon: minecraft:diamond | title: Greeting"));
+        assertEquals("toast: \"Title\" \"Description\" minecraft:emerald",
+                QuestEditorEntryCodec.withRewardIcon("toast",
+                        "toast: \"Title\" \"Description\" minecraft:stone", "minecraft:emerald"));
+    }
 }

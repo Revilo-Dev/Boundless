@@ -134,12 +134,12 @@ public final class QuestEditorItemPickerRenderer {
         if (request.blockTexturePicker) {
             renderSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, 16, 16, request.itemPickerTab, false);
         } else if (request.backgroundAssetPicker) {
-            renderSideTab(gg, x, y, ItemPickerTab.CUSTOM, ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png"), 16, 16, request.itemPickerTab, false);
+            renderSideTab(gg, x, y, ItemPickerTab.CUSTOM, ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/style-icon.png"), 16, 16, request.itemPickerTab, false);
         } else if (request.iconPicker) {
             renderIconSideTab(gg, x, y, ItemPickerTab.CREATIVE, BROWSER_TAB_SEARCH_TEX, request.itemPickerTab);
             renderIconSideTab(gg, x, y, ItemPickerTab.EFFECTS, QUEST_TAB_SCROLL_ICON_TEX, request.itemPickerTab);
             renderIconSideTab(gg, x, y, ItemPickerTab.CUSTOM,
-                    ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/editor/style-icon.png"),
+                    ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/icons/style-icon.png"),
                     request.itemPickerTab);
             renderIconSideTab(gg, x, y, ItemPickerTab.INVENTORY, BROWSER_TAB_INVENTORY_TEX, request.itemPickerTab);
         } else if (request.pickerMode == PickerMode.ITEMS) {

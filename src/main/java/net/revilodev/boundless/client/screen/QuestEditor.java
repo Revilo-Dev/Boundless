@@ -243,10 +243,10 @@ public abstract class QuestEditor extends Screen {
     protected static final int ID_SUGGESTION_VISIBLE_ROWS = 6;
     protected static final int ID_SUGGESTION_ROW_H = 8;
     protected static final long DELETE_HOLD_MS = 2000L;
-    protected static final int ENTRY_ROW_H = 14;
+    protected static final int ENTRY_ROW_H = 16;
     protected static final int ENTRY_ROW_GAP = 2;
     protected static final float ENTRY_INPUT_TEXT_SCALE = 0.5f;
-    protected static final int ENTRY_REMOVE_BTN_W = 14;
+    protected static final int ENTRY_REMOVE_BTN_W = 16;
     protected static final int ENTRY_TYPE_BTN_W = 24;
     protected static final int ENTRY_ITEM_PICK_BTN_W = 12;
     protected static final int ENTRY_COUNT_BTN_W = 12;
@@ -2432,16 +2432,18 @@ public abstract class QuestEditor extends Screen {
         fields.add(field(trs("field.description"), questDescriptionBox));
         fields.add(field(trs("field.image_or_media"), questMediaSelector));
         fields.add(field(trs("field.category_required"), questCategoryBox));
-        if (!dropdownBoxValue(questCategoryBox).isBlank()) {
-            fields.add(field(trs("field.subcategory"), questSubCategoryBox));
-        } else if (questSubCategoryBox != null) {
-            setDropdownBoxValue(questSubCategoryBox, "");
+        if (!isTreePack()) {
+            if (!dropdownBoxValue(questCategoryBox).isBlank()) {
+                fields.add(field(trs("field.subcategory"), questSubCategoryBox));
+            } else if (questSubCategoryBox != null) {
+                setDropdownBoxValue(questSubCategoryBox, "");
+            }
         }
         fields.add(field(trs("field.dependencies"), questDependenciesBox));
         if (isTreePack()) fields.add(field(trs("field.quest_node_background"), questTreeBackgroundSelector));
-        fields.add(field(trs("field.flags"), questOptionalToggle));
         fields.add(field(trs("field.completion"), questCompletionBox));
         fields.add(field(trs("field.reward"), questRewardBox));
+        fields.add(field(trs("field.flags"), questOptionalToggle));
         setActiveFields(fields);
         editorScroll = previousScroll;
     }
@@ -3874,7 +3876,7 @@ public abstract class QuestEditor extends Screen {
                     String normalizedType = QuestEditorEntryTypes.normalize(kind, parsed == null ? "" : parsed.type);
                     entryTypeByBox.put(box, normalizedType);
                     entryCountByBox.put(box, parsed == null ? 1 : Math.max(1, parsed.count));
-                    if (parsed != null && QuestEditorEntryTypes.hasRowBrowser(kind, normalizedType)) {
+                    if (parsed != null && QuestEditorEntryTypes.usesRowSelection(kind, normalizedType)) {
                         List<String> normalizedAcceptedIds = new ArrayList<>();
                         boolean itemSelection = "collect".equals(normalizedType)
                                 || "submit".equals(normalizedType)
@@ -4357,7 +4359,8 @@ public abstract class QuestEditor extends Screen {
             if (valueButton != null) {
                 valueButton.setRow(i);
                 valueButton.setPosition(x + iconSpace + typeSpace, cursorY);
-                valueButton.setWidth(ENTRY_TYPE_BTN_W);
+                valueButton.setWidth(Math.max(ENTRY_TYPE_BTN_W,
+                        width - iconSpace - typeSpace - effectiveRemoveSpace - 2 - lockSpace - effectiveCountSpace));
                 valueButton.setHeight(ENTRY_ROW_H);
                 valueButton.visible = inside && hasValueDropdown && !expanded;
                 valueButton.active = inside && hasValueDropdown && !expanded;

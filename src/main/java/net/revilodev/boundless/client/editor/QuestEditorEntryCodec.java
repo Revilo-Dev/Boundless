@@ -1225,6 +1225,50 @@ public final class QuestEditorEntryCodec {
 
     }
 
+    public static String rewardIcon(String type, String raw) {
+        String normalizedType = safe(type).trim().toLowerCase(Locale.ROOT);
+        String payload = rewardPayload(normalizedType, raw);
+        if ("command".equals(normalizedType)) return parseCommandReward(payload).icon;
+        if ("toast".equals(normalizedType)) {
+            ToastEditorReward toast = parseToastReward(payload);
+            return toast == null ? "" : toast.icon;
+        }
+        return "";
+    }
+
+    public static String withRewardIcon(String type, String raw, String icon) {
+        String normalizedType = safe(type).trim().toLowerCase(Locale.ROOT);
+        String normalizedIcon = normalizeNamespacedId(icon, false);
+        if (normalizedIcon.isBlank()) return safe(raw);
+        String payload = rewardPayload(normalizedType, raw);
+        if ("command".equals(normalizedType)) {
+            CommandReward command = parseCommandReward(payload);
+            if (command.command.isBlank()) return safe(raw);
+            StringBuilder line = new StringBuilder("command: ").append(command.command)
+                    .append(" | icon: ").append(normalizedIcon);
+            if (!command.title.isBlank()) line.append(" | title: ").append(command.title);
+            return line.toString();
+        }
+        if ("toast".equals(normalizedType)) {
+            ToastEditorReward toast = parseToastReward(payload);
+            if (toast == null) return safe(raw);
+            return "toast: \"" + escapeQuoted(toast.title) + "\" \""
+                    + escapeQuoted(toast.description) + "\" " + normalizedIcon;
+        }
+        return safe(raw);
+    }
+
+    private static String rewardPayload(String type, String raw) {
+        String value = safe(raw).trim();
+        ParsedEntry parsed = parseEntry(value);
+        return parsed != null && type.equals(safe(parsed.type).trim().toLowerCase(Locale.ROOT))
+                ? safe(parsed.id).trim() : value;
+    }
+
+    private static String escapeQuoted(String value) {
+        return safe(value).replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
     // parse quoted segments
     public static List<String> parseQuotedSegments(String text) {
 

@@ -43,7 +43,7 @@ public final class QuestEditorEntryRows {
         if (kind == EntryRowKind.COMPLETION && "levelup".equals(type)) {
             return type + ": levels " + count(box, maps);
         }
-        if (QuestEditorEntryTypes.hasRowBrowser(kind, type)) {
+        if (QuestEditorEntryTypes.usesRowSelection(kind, type)) {
             String itemId = safe(maps.selectedItemIdByBox.get(box)).trim();
             List<String> acceptedIds = selectedIds(box, maps);
             String components = safe(maps.selectedItemComponentsByBox.get(box)).trim();

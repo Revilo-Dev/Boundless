@@ -341,17 +341,25 @@ public final class QuestTreeWidget extends AbstractWidget {
         for (int index = 1; index < connector.points.size(); index++) {
             Point start = connector.points.get(index - 1);
             Point end = connector.points.get(index);
-            QuestTreeConnectorRenderer.drawSegment(gg, start.x, start.y, end.x, end.y, color);
+            QuestTreeConnectorRenderer.drawOutlineSegment(gg, start.x, start.y, end.x, end.y);
         }
-        for (int index = 1; index + 1 < connector.points.size(); index++) {
-            Point point = connector.points.get(index);
-            QuestTreeConnectorRenderer.drawJoint(gg, point.x, point.y, color);
+        for (int index = 1; index < connector.points.size(); index++) {
+            Point start = connector.points.get(index - 1);
+            Point end = connector.points.get(index);
+            QuestTreeConnectorRenderer.drawInnerSegment(gg, start.x, start.y, end.x, end.y, color);
         }
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!active || !visible || button != 0 || !isMouseOver(mouseX, mouseY)) return false;
+        if (!active || !visible || !isMouseOver(mouseX, mouseY)) return false;
+        if (button == 1) {
+            if (isOverZoomControls(mouseX, mouseY)) return false;
+            selectedQuestId = "";
+            centreOn(mouseX, mouseY);
+            return true;
+        }
+        if (button != 0) return false;
         int zoomX = getX() + width - 31;
         int zoomY = getY() + 3;
         if (mouseY >= zoomY - 1 && mouseY <= zoomY + 9) {
@@ -371,6 +379,16 @@ public final class QuestTreeWidget extends AbstractWidget {
         dragging = true;
         setFocused(true);
         return true;
+    }
+
+    private void centreOn(double mouseX, double mouseY) {
+        float centerX = getX() + width / 2f;
+        float centerY = getY() + height / 2f;
+        float canvasX = (float) ((mouseX - centerX) / zoom - panX);
+        float canvasY = (float) ((mouseY - centerY) / zoom - panY);
+        panX = -canvasX;
+        panY = -canvasY;
+        saveView();
     }
 
     @Override

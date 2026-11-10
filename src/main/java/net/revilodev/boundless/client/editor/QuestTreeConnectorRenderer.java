@@ -16,13 +16,16 @@ public final class QuestTreeConnectorRenderer {
     }
 
     public static void drawSegment(GuiGraphics graphics, int startX, int startY, int endX, int endY, int color) {
-        drawSegment(graphics, startX, startY, endX, endY, OUTER_WIDTH, 0xFF000000);
-        drawSegment(graphics, startX, startY, endX, endY, INNER_WIDTH, color);
+        drawOutlineSegment(graphics, startX, startY, endX, endY);
+        drawInnerSegment(graphics, startX, startY, endX, endY, color);
     }
 
-    public static void drawJoint(GuiGraphics graphics, int x, int y, int color) {
-        drawJoint(graphics, x, y, OUTER_WIDTH, 0xFF000000);
-        drawJoint(graphics, x, y, INNER_WIDTH, color);
+    public static void drawOutlineSegment(GuiGraphics graphics, int startX, int startY, int endX, int endY) {
+        drawSegment(graphics, startX, startY, endX, endY, OUTER_WIDTH, 0xFF000000);
+    }
+
+    public static void drawInnerSegment(GuiGraphics graphics, int startX, int startY, int endX, int endY, int color) {
+        drawSegment(graphics, startX, startY, endX, endY, INNER_WIDTH, color);
     }
 
     private static void drawSegment(GuiGraphics graphics, int startX, int startY, int endX, int endY,
@@ -49,8 +52,4 @@ public final class QuestTreeConnectorRenderer {
         graphics.pose().popPose();
     }
 
-    private static void drawJoint(GuiGraphics graphics, int x, int y, int thickness, int color) {
-        int half = thickness / 2;
-        graphics.fill(x - half, y - half, x + thickness - half, y + thickness - half, color);
-    }
 }

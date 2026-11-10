@@ -33,8 +33,8 @@ public final class QuestEditorRowControls {
             ResourceLocation.fromNamespaceAndPath("boundless", "textures/gui/sprites/button_reject_disabled.png");
     private static final int TAB_W = 35;
     private static final int TAB_H = 27;
-    private static final int ENTRY_ROW_H = 14;
-    private static final int ENTRY_REMOVE_BTN_W = 14;
+    private static final int ENTRY_ROW_H = 16;
+    private static final int ENTRY_REMOVE_BTN_W = 16;
     private static final int ENTRY_TYPE_BTN_W = 24;
     private static final int ENTRY_ITEM_PICK_BTN_W = 12;
     private static final int ENTRY_COUNT_BTN_W = 12;
@@ -243,16 +243,20 @@ public final class QuestEditorRowControls {
         gg.fill(x, y, x + 1, y + height, border);
         gg.fill(x + width - 1, y, x + width, y + height, border);
         Font font = Minecraft.getInstance().font;
-        float availableWidth = Math.max(1, width - 3);
+        String arrow = "\u25BC";
+        int arrowWidth = font.width(arrow);
+        float availableWidth = Math.max(1, width - arrowWidth - 5);
         float textScale = Math.max(ENTRY_TYPE_MIN_TEXT_SCALE,
                 Math.min(ENTRY_TYPE_TEXT_SCALE, availableWidth / Math.max(1, font.width(text))));
         int textW = Math.round(font.width(text) * textScale);
-        int textX = x + (width - textW) / 2;
+        int textX = x + (width - arrowWidth - 2 - textW) / 2;
         gg.pose().pushPose();
-        gg.pose().translate(textX, y + 3, 0f);
+        gg.pose().translate(textX, y + (height - Math.round(font.lineHeight * textScale)) / 2f, 0f);
         gg.pose().scale(textScale, textScale, 1f);
         gg.drawString(font, text, 0, 0, 0xFFFFFF00, false);
         gg.pose().popPose();
+        gg.drawString(font, arrow, x + width - arrowWidth - 2,
+                y + (height - font.lineHeight) / 2 + 1, 0xFFFFFF00, false);
     }
 
     // entry item picker button

@@ -16,6 +16,7 @@ import net.revilodev.boundless.client.QuestFilterBar;
 import net.revilodev.boundless.client.QuestListWidget;
 import net.revilodev.boundless.client.QuestPanelBackgroundRenderer;
 import net.revilodev.boundless.client.QuestPanelExpandButton;
+import net.revilodev.boundless.client.QuestSearchBox;
 import net.revilodev.boundless.client.QuestTreeWidget;
 import net.revilodev.boundless.quest.QuestData;
 
@@ -129,7 +130,7 @@ public final class StandaloneQuestBookScreen extends Screen {
             lastSelectedCategory = "all";
         }
 
-        searchBox = new EditBox(font, pxLeft, py, leftWidth, 16, Component.translatable("ui.boundless.questbook.search_quests"));
+        searchBox = new QuestSearchBox(font, pxLeft, py, leftWidth, 16, Component.translatable("ui.boundless.questbook.search_quests"));
         searchBox.setHint(Component.translatable("ui.boundless.questbook.search"));
         searchBox.setMaxLength(64);
         searchBox.setValue(searchQuery);

@@ -901,11 +901,12 @@ public final class QuestEditorTreeWidget extends AbstractWidget {
         for (int index = 1; index < connector.connector.points.size(); index++) {
             Point start = connector.connector.points.get(index - 1);
             Point end = connector.connector.points.get(index);
-            QuestTreeConnectorRenderer.drawSegment(gg, start.x, start.y, end.x, end.y, color);
+            QuestTreeConnectorRenderer.drawOutlineSegment(gg, start.x, start.y, end.x, end.y);
         }
-        for (int index = 1; index + 1 < connector.connector.points.size(); index++) {
-            Point point = connector.connector.points.get(index);
-            QuestTreeConnectorRenderer.drawJoint(gg, point.x, point.y, color);
+        for (int index = 1; index < connector.connector.points.size(); index++) {
+            Point start = connector.connector.points.get(index - 1);
+            Point end = connector.connector.points.get(index);
+            QuestTreeConnectorRenderer.drawInnerSegment(gg, start.x, start.y, end.x, end.y, color);
         }
     }
 

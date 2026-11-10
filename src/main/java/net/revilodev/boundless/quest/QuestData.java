@@ -1050,11 +1050,12 @@ public final class QuestData {
     }
 
     public static synchronized void loadClient(boolean forceReload) {
-        // a server snapshot wins while connected to multiplayer
+        // multiplayer snapshots stay authoritative; integrated quick edits may force a local refresh
         if (FMLEnvironment.dist != Dist.CLIENT) return;
 
         Minecraft mc = Minecraft.getInstance();
-        if (CLIENT_DATA.networkAuthoritative && mc.getConnection() != null) return;
+        if (CLIENT_DATA.networkAuthoritative && mc.getConnection() != null
+                && (!forceReload || mc.getSingleplayerServer() == null)) return;
         String worldId = null;
 
         try {
